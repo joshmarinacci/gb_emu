@@ -193,15 +193,15 @@ impl MMU {
             // eram: vec![u8; 8192],
             // zram: vec![u8; 127],
             // rom: vec![u8; 0],
-            data: vec![0;65000],
+            data: vec![0;66000],
         }
     }
     fn read8(&self, addr:u16) -> u8 {
-        println!("reading from bios at location {:04x}",addr);
+        // println!("reading from bios at location {:04x}",addr);
         self.bios[addr as usize]
     }
     fn read16(&self, addr:u16) -> u16 {
-        println!("reading from bios at location {:04x}",addr);
+        // println!("reading from bios at location {:04x}",addr);
         let b1 = self.read8(addr)   as u16;
         let b2 = self.read8(addr+1) as u16;
         return b1 + (b2 << 8);
@@ -221,8 +221,16 @@ const BOOT_ROM:&[u8] = &[
     0xCB, 0x7C, //0x0008  prefix - BIT 7, H
     0x20, 0xFB, // 0x000A JRNZ.+0xfb, jump back to 0x0007
     0x21, 0x26, 0xFF, //0x000C  LD HL 16
-    0x0E,
-    0x11, 0x3E, 0x80, 0x32, 0xE2, 0x0C, 0x3E, 0xF3, 0xE2, 0x32, 0x3E, 0x77, 0x77, 0x3E, 0xFC, 0xE0,
+    0x0E, 0x11, //0x000F  LD C 0x11
+    0x3E, 0x80, //0x0011  LD A 0x80
+    0x32, // 0x0013       LD(HL-),A
+    0xE2, // 0x0014       LD(C), A
+    0x0C, // 0x0015       INC C, increment the C register
+    0x3E, 0xF3,  // 0x0016  LD A, 0xF3
+    0xE2, 0x32,  // 0x0018 LD (C),A
+    0x3E,  // 0x0019 LD (HL-) A
+    0x77,  // 0x001a LD A
+    0x77, 0x3E, 0xFC, 0xE0,
     0x47, 0x11, 0x04, 0x01, 0x21, 0x10, 0x80, 0x1A, 0xCD, 0x95, 0x00, 0xCD, 0x96, 0x00, 0x13, 0x7B,
     0xFE, 0x34, 0x20, 0xF3, 0x11, 0xD8, 0x00, 0x06, 0x08, 0x1A, 0x13, 0x22, 0x23, 0x05, 0x20, 0xF9,
     0x3E, 0x19, 0xEA, 0x10, 0x99, 0x21, 0x2F, 0x99, 0x0E, 0x0C, 0x3D, 0x28, 0x08, 0x32, 0x0D, 0x20,
@@ -264,7 +272,7 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
 //     (3,12)
 // }
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
-    println!("PC{:04x}: OP{:04x}:",cpu.r.pc,code);
+    println!("PC{:04x}: OP {:04x}: {}",cpu.r.pc,code, op_to_name(code));
     match code {
         // 0x0000 => op_0000(arg,cpu,mmu),
         0x00_31 => op_0031_LD_SP(arg,cpu,mmu),
@@ -273,6 +281,11 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x00_32 => op_0032_LD_HLm_A(arg,cpu,mmu),
         0xCB_7C => op_CB76_BIT_7_H(arg,cpu,mmu),
         0x00_20 => op_0020_JR_NZ_r8(arg,cpu,mmu),
+        0x00_0e => op_000e_LD_C(arg,cpu,mmu),
+        0x00_3e => op_003e_LD_A(arg,cpu,mmu),
+        0x00_e2 => op_00e2_LD_CA(arg,cpu,mmu),
+        0x00_0c => op_000c_INC_C(arg,cpu,mmu),
+        0x00_77 => op_0077_LD_HL_A(arg,cpu,mmu),
         // 0x0021 => op_0021(arg,cpu,mmu),
         _ => {
             panic!("unknown op code {:04x}:  {:?}",code, cpu);
@@ -280,6 +293,24 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
     }
 }
 
+fn op_to_name(op: u16) -> &'static str {
+    match op {
+        0x00_31 => "LD SP",
+        0x00_AF => "XOR A",
+        0x00_21 => "LD HL",
+        0x00_32 => "LD (HL-) A",
+        0xCB_7C => "BIT 7 H",
+        0x00_20 => "JR NZ.+",
+        0x00_0e => "LD C",
+        0x00_3e => "LD A",
+        0x00_e2 => "LD (C),A",
+        0x00_0c => "INC C",
+        0x00_77 => "LD (HL) A",
+        _ => {
+            panic!("unknown op code {:04x}:",op);
+        }
+    }
+}
 
 
 fn main() {
@@ -327,9 +358,51 @@ fn main() {
     execute(&mut cpu, &mut mmu);
     assert_eq!(cpu.r.pc, 0x0007);
 
-    //loop util PC equals
+    //loop util PC equals 0x000C
+    while cpu.r.pc != 0x000C {
+        execute(&mut cpu, &mut mmu);
+    }
+    println!("done with the zeroing of vram");
+    execute(&mut cpu, &mut mmu); //0x000C  LD HL $0xFF26  # load 0xFF26 into HL
+    execute(&mut cpu, &mut mmu); //0x000F  LD C, $0x11    # load 0x11 into C
+    execute(&mut cpu, &mut mmu); //0x0011  LD A, $0x80    # load 0x80 into A
+    execute(&mut cpu, &mut mmu); //0x0013  LD (HL-), A # load A to address pointed to by HL and Dec HL
+    execute(&mut cpu, &mut mmu); //0x0014  LD ($0xFF00+C), A # load A to address 0xFF00+C (0xFF11)
+    execute(&mut cpu, &mut mmu); //0x0015 – INC C # increment C register
+    execute(&mut cpu, &mut mmu); //0x0016 – LD A, $0xF3 # load 0xF3 to A
+    execute(&mut cpu, &mut mmu); //0x0018 – LD ($0xFF00+C), A # load A to address 0xFF00+C (0xFF12)
+    execute(&mut cpu, &mut mmu); //0x0019 – LD (HL-), A # load A to address pointed to by HL and Dec HL
+    execute(&mut cpu, &mut mmu); //0x001A – LD A, $0x77 # load 0x77 to A
+    execute(&mut cpu, &mut mmu); //0x001C – LD (HL), A # load A to address pointed to by HL
+
 
 }
+// INC C
+fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    // println!("INC C");
+    cpu.r.c += 1;
+    (1,8)
+}
+
+// LD C
+fn op_000e_LD_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    // println!("LD C");
+    cpu.r.c = mmu.read8(cpu.r.pc+1);
+    (2,8)
+}
+// LD A
+fn op_003e_LD_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.a = mmu.read8(cpu.r.pc+1);
+    // println!("LD A. value is {:x}",cpu.r.a);
+    (2,8)
+}
+// LD (C),A
+fn op_00e2_LD_CA(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    let addr:u16 = ((0xFF00 as u16) + (cpu.r.c as u16)) as u16;
+    mmu.write8(addr, cpu.r.a);
+    (1,8)
+}
+
 // JUMP if not zero to the address
 fn op_0020_JR_NZ_r8(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     if !cpu.r.zero_flag {
@@ -367,6 +440,11 @@ fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.set_hl(cpu.r.get_hl()-1);
     (1,8)
 }
+// load register A into memory pointed at by HL, then decrement HL
+fn op_0077_LD_HL_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    mmu.write8(cpu.r.get_hl(),cpu.r.a);
+    (1,8)
+}
 // BIT 7,H
 fn op_CB76_BIT_7_H(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.zero_flag = !((cpu.r.h & 0b1000_0000) > 0);
@@ -374,11 +452,11 @@ fn op_CB76_BIT_7_H(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
 }
 
 fn execute(cpu: &mut Z80, mmu: &mut MMU) {
-    println!("PC at {:04x}",cpu.r.pc);
+    // println!("PC at {:04x}",cpu.r.pc);
     let (opcode, off) = fetch_opcode_from_memory(cpu, mmu);
     // println!("op {:0x} arg {:0x}", opcode, off);
     let (off,size_of_inst) = decode(opcode, off, cpu, mmu);
-    println!("off is {}",off);
+    // println!("off is {}",off);
     cpu.r.pc = cpu.r.pc.wrapping_add(off as u16);
     // println!("inst size was {}",size_of_inst);
     // cpu.r.pc = cpu.r.pc.wrapping_add(size_of_inst as u16);
