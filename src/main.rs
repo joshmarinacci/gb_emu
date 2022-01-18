@@ -208,6 +208,7 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
 
     if let Some(op) = cpu.ops.ops.get(&code) {
+        println!("PC {:04x}: OP {:04x}: {}",cpu.r.pc, code, op.name);
         let il = op.inst_len;
         let tl = op.tim_len;
         (op.fun)(cpu,mmu);
@@ -217,7 +218,7 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
     if cpu.r.pc >= 0x0007 && cpu.r.pc <= 0x00a {
         // println!("in the loop")
     } else {
-        println!("PC{:04x}: OP {:04x}: {}", cpu.r.pc, code, op_to_name(code));
+        println!("PC {:04x}: OP {:04x}: {}", cpu.r.pc, code, op_to_name(code));
     }
 
     match code {
