@@ -29,9 +29,17 @@ impl Z80_registers {
     pub(crate) fn get_hl(&self) -> u16 {
         (self.l as u16) + ((self.h as u16) << 8)
     }
+    pub(crate) fn set_bc(&mut self, val:u16) {
+        self.b = (val >> 8) as u8;
+        self.c = (0x00FF & val) as u8;
+    }
     pub(crate) fn set_hl(&mut self, val:u16) {
         self.h = (val >> 8) as u8;
         self.l = (0x00FF & val) as u8;
+    }
+    pub(crate) fn set_de(&mut self, val:u16) {
+        self.d = (val >> 8) as u8;
+        self.e = (0x00FF & val) as u8;
     }
 }
 
@@ -86,94 +94,6 @@ impl Z80 {
         self.r.t = 0;
     }
 }
-
-/*
-// Add E to A, leaving result in A (ADD A, E)
-fn add_r_e (z80:&mut Z80) {
-    z80.registers.a += z80.registers.e;   // perform addition
-    z80.registers.f = 0;                  // clear the flags
-    if (z80.registers.a & 255) == 0 {     // check for zero
-        z80.registers.f |= 0x80;
-    }
-    if z80.registers.a > 255 {            // check for carry
-        z80.registers.f |= 0x10;
-    }
-    z80.registers.a &= 255;               // mask to 8 bits
-    z80.registers.m = 1;                      // time taken
-    z80.registers.t = 4;
-}
-
-// Compare B to A, setting flags (CP A, B)
-fn cp_r_b(z80:&mut Z80) {
-    let mut i = z80.registers.a; //temp copy of a
-    i -= z80.registers.b; // subtract B
-    z80.registers.f |= 0x40;    // set the subtraction flag
-    if (i & 255) == 0 {     //check for zero
-        z80.registers.f |= 0x10;
-    }
-    if i < 0 {
-        z80.registers.f |= 0x10;  // check fo runderflow
-    }
-    z80.registers.m = 1;
-    z80.registers.t = 4;
-}
-
-
-// No-operation (NOP)
-fn nop(z80:&mut Z80) {
-    z80.registers.m = 1;
-    z80.registers.t = 4;
-}
-
-// push registers B and C to the stack
-fn push_b_c(z80:&mut Z80, mmu:&mut MMU) {
-    z80.registers.sp -= 1;                     // drop through the stack
-    mmu.wb(z80.registers.sp, z80.registers.b); // write B
-    z80.registers.sp -= 1;                     // drop through the stack
-    mmu.wb(z80.registers.sp, z80.registers.c); // write C
-    z80.registers.m = 3;                       // set timing
-    z80.registers.t = 12;
-}
-
-// Pop registers H and L off the stack (POP HL)
-fn pop_hl(z80:&mut Z80, mmu:&mut MMU) {
-    z80.registers.l = mmu.rb(z80.registers.sp); // read L
-    z80.registers.sp += 1;                      // move back up the stack
-    z80.registers.h = mmu.rb(z80.registers.sp); // read h
-    z80.registers.sp += 1;                      // move back up the stack
-    z80.registers.m = 3;                        // set timing
-    z80.registers.t = 12;
-}
-
-// Read a byte from absolute location into A (LD A, addr)
-fn lda_mm(z80:&mut Z80, mmu:&mut MMU) {
-    let addr = mmu.rw(z80.registers.pc);       // get address from instruction
-    z80.registers.pc += 2;                     // advance the program counter
-    z80.registers.a = mmu.rb(addr);            //read from the address
-    z80.registers.m = 4;                       // set timing
-    z80.registers.t = 16;
-}
-
-impl Z80 {
-    fn reset(&mut self) {
-    self.registers.a = 0;
-    self.registers.b = 0;
-    self.registers.c = 0;
-    self.registers.d = 0;
-
-    z80.registers.e = 0;
-    z80.registers.h = 0;
-    z80.registers.l = 0;
-    z80.registers.f = 0;
-
-    z80.registers.sp = 0;
-    z80.registers.pc = 0;
-
-    z80.registers.m = 0;                       // set timing
-    z80.registers.t = 0;
-}
-
-*/
 
 pub struct MMU {
     inbios:bool,
@@ -288,9 +208,13 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
     }
     match code {
         // 0x0000 => op_0000(arg,cpu,mmu),
-        0x00_31 => op_0031_LD_SP(arg,cpu,mmu),
+        0x00_01 => op_0001_LD_BC_d16(arg, cpu, mmu),
+        0x00_11 => op_0011_LD_DE_d16(arg,cpu,mmu),
+        0x00_21 => op_0021_LD_HL_d16(arg, cpu, mmu),
+        0x00_31 => op_0031_LD_SP_d16(arg, cpu, mmu),
+
         0x00_AF => op_00AF_XOR_A(arg,cpu,mmu),
-        0x00_21 => op_0021_LD_HL(arg,cpu,mmu),
+
         0x00_32 => op_0032_LD_HLm_A(arg,cpu,mmu),
         0xCB_7C => op_CB76_BIT_7_H(arg,cpu,mmu),
         0x00_20 => op_0020_JR_NZ_r8(arg,cpu,mmu),
@@ -300,7 +224,6 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x00_0c => op_000c_INC_C(arg,cpu,mmu),
         0x00_77 => op_0077_LD_HL_A(arg,cpu,mmu),
         0x00_e0 => op_00e0_LDH_a8_A(arg,cpu,mmu),
-        0x00_11 => op_0011_LD_DE_d16(arg,cpu,mmu),
         0x00_1a => op_001a_LD_A_DE(arg,cpu,mmu),
         0x00_cd => op_00cd_call_a16(arg,cpu,mmu),
         0x00_13 => op_0013_inc_de(arg,cpu,mmu),
@@ -325,7 +248,10 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x00_24 => op_0024(arg,cpu,mmu),
         0x00_7c => op_007c(arg,cpu,mmu),
         0x00_f2 => op_00f2(arg,cpu,mmu),
+
+        0x00_41 => op_0041(arg,cpu,mmu),
         0x00_42 => op_0042(arg,cpu,mmu),
+
         0x00_90 => op_0090(arg,cpu,mmu),
         0x00_15 => op_0015(arg,cpu,mmu),
         0x00_16 => op_0016(arg,cpu,mmu),
@@ -420,9 +346,22 @@ fn op_007c(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
 fn op_00f2(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (2,8)
 }
-fn op_0042(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+
+// register to register loads
+fn op_0041(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.b = cpu.r.c;
     (1,4)
 }
+fn op_0042(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.b = cpu.r.d;
+    (1,4)
+}
+fn op_0043(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.b = cpu.r.e;
+    (1,4)
+}
+
+
 fn op_0090(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (1,4)
 }
@@ -439,6 +378,10 @@ fn op_004f(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (1,4)
 }
 fn op_00c5(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.sp = cpu.r.sp -1;
+    mmu.write8(cpu.r.sp,cpu.r.b);
+    cpu.r.sp = cpu.r.sp -1;
+    mmu.write8(cpu.r.sp,cpu.r.c);
     (1,16)
 }
 fn op_cb11(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
@@ -492,7 +435,12 @@ fn op_to_name(op: u16) -> &'static str {
         0x00_24 => "INC H",
         0x00_7c => "LD A,H",
         0x00_f2 => "LD A,(C)",
+
+        0x00_40 => "LD B,B",
+        0x00_41 => "LD B,C",
         0x00_42 => "LD B,D",
+        0x00_43 => "LD B,E",
+
         0x00_90 => "SUB B",
         0x00_15 => "DEC D",
         0x00_16 => "LD D,d8",
@@ -570,6 +518,9 @@ fn main() {
     execute(&mut cpu, &mut mmu); //0x001A – LD A, $0x77 # load 0x77 to A
     execute(&mut cpu, &mut mmu); //0x001C – LD (HL), A # load A to address pointed to by HL
 
+    if true {
+        return ()
+    }
     println!("doing demanding part");
     execute(&mut cpu, &mut mmu); // 0x001D  LD A, $0xFC  # A represents the color number's mapping
     execute(&mut cpu, &mut mmu); // 0x001F  LD (0xFF00 + 0x47), A #initialize the palette
@@ -603,9 +554,6 @@ fn op_00e0_LDH_a8_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (2,8)
 }
 
-fn op_0011_LD_DE_d16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (3,8)
-}
 
 // INC C
 fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
@@ -646,24 +594,46 @@ fn op_0020_JR_NZ_r8(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
 }
 
 
-// LD SP 16 -> load next two bytes into the stack pointer
-fn op_0031_LD_SP(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.sp = mmu.read16(cpu.r.pc+1); // load word at PC
-    (3,//3 spots, instruction + next two bytes
-     12 // timing
-    )
-}
 // XOR A
 fn op_00AF_XOR_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.a.bitxor_assign(cpu.r.a);
     (1,4)
 }
 
+
+
+
+//16bit register loads
+
+// load next word into
+fn op_0001_LD_BC_d16(arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
+    cpu.r.set_bc(mmu.read16(cpu.r.pc+1));
+    (3,12)
+}
+fn op_0011_LD_DE_d16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.set_de(mmu.read16(cpu.r.pc+1));
+    (3,12)
+}
 // load next word into HL
-fn op_0021_LD_HL(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+fn op_0021_LD_HL_d16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.set_hl(mmu.read16(cpu.r.pc+1));
     (3,12)
 }
+// LD SP 16 -> load next two bytes into the stack pointer
+fn op_0031_LD_SP_d16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.sp = mmu.read16(cpu.r.pc+1); // load word at PC
+    (3,
+     12 // timing
+    )
+}
+
+
+
+
+
+
+
+
 // load register A into memory pointed at by HL, then decrement HL
 fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     mmu.write8(cpu.r.get_hl(),cpu.r.a);
