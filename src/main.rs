@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ops::BitXorAssign;
 
 #[derive(Debug)]
@@ -207,6 +208,9 @@ impl MMU {
         return b1 + (b2 << 8);
     }
     fn write8(&mut self, addr:u16, val:u8) {
+        if addr == 0xFF47 {
+            println!("writing to special LCD register")
+        }
         self.data[addr as usize] = val;
     }
 }
@@ -228,10 +232,15 @@ const BOOT_ROM:&[u8] = &[
     0x0C, // 0x0015       INC C, increment the C register
     0x3E, 0xF3,  // 0x0016  LD A, 0xF3
     0xE2, 0x32,  // 0x0018 LD (C),A
-    0x3E,  // 0x0019 LD (HL-) A
-    0x77,  // 0x001a LD A
-    0x77, 0x3E, 0xFC, 0xE0,
-    0x47, 0x11, 0x04, 0x01, 0x21, 0x10, 0x80, 0x1A, 0xCD, 0x95, 0x00, 0xCD, 0x96, 0x00, 0x13, 0x7B,
+    0x3E, //0x0019 LD (HL-) A
+    0x77, 0x77, // 0x001A  LD A
+
+    0x3E, 0xFC, // 0x001D LD A with 0xFC
+    0xE0, 0x47, // 0x001F put 0xfc at 0xFF47
+    0x11, 0x04, // 0x0021
+    0x01, 0x21, 0x10,
+    0x80,
+    0x1A, 0xCD, 0x95, 0x00, 0xCD, 0x96, 0x00, 0x13, 0x7B,
     0xFE, 0x34, 0x20, 0xF3, 0x11, 0xD8, 0x00, 0x06, 0x08, 0x1A, 0x13, 0x22, 0x23, 0x05, 0x20, 0xF9,
     0x3E, 0x19, 0xEA, 0x10, 0x99, 0x21, 0x2F, 0x99, 0x0E, 0x0C, 0x3D, 0x28, 0x08, 0x32, 0x0D, 0x20,
     0xF9, 0x2E, 0x0F, 0x18, 0xF3, 0x67, 0x3E, 0x64, 0x57, 0xE0, 0x42, 0x3E, 0x91, 0xE0, 0x40, 0x04,
@@ -272,7 +281,11 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
 //     (3,12)
 // }
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
-    println!("PC{:04x}: OP {:04x}: {}",cpu.r.pc,code, op_to_name(code));
+    if cpu.r.pc >= 0x0007 && cpu.r.pc <= 0x00a {
+        // println!("in the loop")
+    } else {
+        println!("PC{:04x}: OP {:04x}: {}", cpu.r.pc, code, op_to_name(code));
+    }
     match code {
         // 0x0000 => op_0000(arg,cpu,mmu),
         0x00_31 => op_0031_LD_SP(arg,cpu,mmu),
@@ -286,12 +299,158 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x00_e2 => op_00e2_LD_CA(arg,cpu,mmu),
         0x00_0c => op_000c_INC_C(arg,cpu,mmu),
         0x00_77 => op_0077_LD_HL_A(arg,cpu,mmu),
-        // 0x0021 => op_0021(arg,cpu,mmu),
+        0x00_e0 => op_00e0_LDH_a8_A(arg,cpu,mmu),
+        0x00_11 => op_0011_LD_DE_d16(arg,cpu,mmu),
+        0x00_1a => op_001a_LD_A_DE(arg,cpu,mmu),
+        0x00_cd => op_00cd_call_a16(arg,cpu,mmu),
+        0x00_13 => op_0013_inc_de(arg,cpu,mmu),
+        0x00_7b => op_007b_LD_A_E(arg,cpu,mmu),
+        0x00_fe => op_00fe_CP_d8(arg,cpu,mmu),
+        0x00_06 => op_0006_LD_B_d8(arg,cpu,mmu),
+        0x00_05 => op_0005(arg,cpu,mmu),
+        0x00_22 => op_0022(arg,cpu,mmu),
+        0x00_23 => op_0023(arg,cpu,mmu),
+        0x00_ea => op_00ea(arg,cpu,mmu),
+        0x00_3d => op_003d(arg,cpu,mmu),
+        0x00_28 => op_0028(arg,cpu,mmu),
+        0x00_0d => op_000d(arg,cpu,mmu),
+        0x00_2e => op_002e(arg,cpu,mmu),
+        0x00_18 => op_0018(arg,cpu,mmu),
+        0x00_67 => op_0067(arg,cpu,mmu),
+        0x00_57 => op_0057(arg,cpu,mmu),
+        0x00_04 => op_0004(arg,cpu,mmu),
+        0x00_1e => op_001e(arg,cpu,mmu),
+        0x00_1d => op_001d(arg,cpu,mmu),
+        0x00_f0 => op_00f0(arg,cpu,mmu),
+        0x00_24 => op_0024(arg,cpu,mmu),
+        0x00_7c => op_007c(arg,cpu,mmu),
+        0x00_f2 => op_00f2(arg,cpu,mmu),
+        0x00_42 => op_0042(arg,cpu,mmu),
+        0x00_90 => op_0090(arg,cpu,mmu),
+        0x00_15 => op_0015(arg,cpu,mmu),
+        0x00_16 => op_0016(arg,cpu,mmu),
+        0x00_17 => op_0017(arg,cpu,mmu),
+        0x00_4f => op_004f(arg,cpu,mmu),
+        0x00_c5 => op_00c5(arg,cpu,mmu),
+        0xcb_11 => op_cb11(arg,cpu,mmu),
+        0x00_c1 => op_00c1(arg,cpu,mmu),
+        0x00_c9 => op_00c9(arg,cpu,mmu),
+
         _ => {
             panic!("unknown op code {:04x}:  {:?}",code, cpu);
         }
     }
 }
+
+fn op_0028(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+
+fn op_000d(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+
+fn op_0023(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,8)
+}
+
+fn op_0022(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,8)
+}
+
+fn op_0013_inc_de(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,8)
+}
+
+fn op_00cd_call_a16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (3,24)
+}
+
+fn op_001a_LD_A_DE(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,8)
+}
+fn op_007b_LD_A_E(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_00fe_CP_d8(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_0006_LD_B_d8(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_0005(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_00ea(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (3,16)
+}
+fn op_003d(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_002e(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_0018(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,12)
+}
+fn op_0067(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_0057(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_0004(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_001e(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_00f0(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,12)
+}
+fn op_001d(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_0024(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_007c(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_00f2(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_0042(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_0090(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_0015(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_0016(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_0017(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_004f(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,4)
+}
+fn op_00c5(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,16)
+}
+fn op_cb11(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (2,8)
+}
+fn op_00c1(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,12)
+}
+fn op_00c9(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (1,16)
+}
+
 
 fn op_to_name(op: u16) -> &'static str {
     match op {
@@ -300,12 +459,48 @@ fn op_to_name(op: u16) -> &'static str {
         0x00_21 => "LD HL",
         0x00_32 => "LD (HL-) A",
         0xCB_7C => "BIT 7 H",
+        0xCB_11 => "RL C",
         0x00_20 => "JR NZ.+",
         0x00_0e => "LD C",
         0x00_3e => "LD A",
         0x00_e2 => "LD (C),A",
         0x00_0c => "INC C",
         0x00_77 => "LD (HL) A",
+        0x00_e0 => "LDH (a8),A",
+        0x00_11 => "LD DE,d16",
+        0x00_1a => "LD A,(DE)",
+        0x00_cd => "CALL a16",
+        0x00_13 => "INC DE",
+        0x00_7b => "LD A,E",
+        0x00_fe => "CP d8",
+        0x00_06 => "LD B,d8",
+        0x00_05 => "DEC B",
+        0x00_22 => "LD (HL+),A",
+        0x00_23 => "INC HL",
+        0x00_ea => "LD (a16), A",
+        0x00_3d => "DEC A",
+        0x00_28 => "JR Z, r8",
+        0x00_0d => "DEC C",
+        0x00_2e => "LD L,d8",
+        0x00_18 => "JR r8",
+        0x00_67 => "LD H, A",
+        0x00_57 => "LD D, A",
+        0x00_04 => "INC B",
+        0x00_1e => "LD E, d8",
+        0x00_f0 => "LDH A,(a8)",
+        0x00_1d => "DEC E",
+        0x00_24 => "INC H",
+        0x00_7c => "LD A,H",
+        0x00_f2 => "LD A,(C)",
+        0x00_42 => "LD B,D",
+        0x00_90 => "SUB B",
+        0x00_15 => "DEC D",
+        0x00_16 => "LD D,d8",
+        0x00_4f => "LD C,A",
+        0x00_c5 => "PUSH BC",
+        0x00_17 => "RLA",
+        0x00_c1 => "POP BC",
+        0x00_c9 => "RET",
         _ => {
             panic!("unknown op code {:04x}:",op);
         }
@@ -375,8 +570,43 @@ fn main() {
     execute(&mut cpu, &mut mmu); //0x001A – LD A, $0x77 # load 0x77 to A
     execute(&mut cpu, &mut mmu); //0x001C – LD (HL), A # load A to address pointed to by HL
 
+    println!("doing demanding part");
+    execute(&mut cpu, &mut mmu); // 0x001D  LD A, $0xFC  # A represents the color number's mapping
+    execute(&mut cpu, &mut mmu); // 0x001F  LD (0xFF00 + 0x47), A #initialize the palette
+    execute(&mut cpu, &mut mmu); // 0x0021  LD DE 0x0104 # pointer to Nintendo logo
+    execute(&mut cpu, &mut mmu); // 0x0024  LD HL 0x8010 # pointer to vram
+    execute(&mut cpu, &mut mmu); // 0x0027  LD A, (DE) # load next byte from Nintendo logo
+    execute(&mut cpu, &mut mmu); // 0x0028  CALL $0x0095 # decompress, scale and write pixels to VRAM (1)
+    execute(&mut cpu, &mut mmu); // 0x002B  CALL $0x0096 # decompress, scale and write pixels to VRAM (2)
+    execute(&mut cpu, &mut mmu); // 0x002E  INC DE # advance pointer
+    execute(&mut cpu, &mut mmu); // 0x002F – LD A, E # …
+    execute(&mut cpu, &mut mmu); // 0x0030 – CP $0x34 # compare accumulator to 0x34
+    execute(&mut cpu, &mut mmu); // 0x0032 – JRNZ .+0xf3 # loop if not finished comparing
+    execute(&mut cpu, &mut mmu); // 0x0034 – LD DE, $0x00D8 # …
+    execute(&mut cpu, &mut mmu); // 0x0037 – LD B, $0x8 # …
+    execute(&mut cpu, &mut mmu); // 0x0039 – LD A, (DE) # …
+    execute(&mut cpu, &mut mmu); // 0x003A – INC DE # …
+    execute(&mut cpu, &mut mmu); // 0x003B – LD (HL+), A # …
+    execute(&mut cpu, &mut mmu); // 0x003C – INC HL # …
+    execute(&mut cpu, &mut mmu); // 0x003D – DEC B # …
+    execute(&mut cpu, &mut mmu); // 0x003E – JRNZ .+0xf9 # jump if not zero to 0x0039
+
+    for n in 0..100 {
+        execute(&mut cpu, &mut mmu);
+    }
+
 
 }
+
+fn op_00e0_LDH_a8_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    cpu.r.a = mmu.read8(cpu.r.pc+1);
+    (2,8)
+}
+
+fn op_0011_LD_DE_d16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+    (3,8)
+}
+
 // INC C
 fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     // println!("INC C");
@@ -393,7 +623,7 @@ fn op_000e_LD_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
 // LD A
 fn op_003e_LD_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.a = mmu.read8(cpu.r.pc+1);
-    // println!("LD A. value is {:x}",cpu.r.a);
+    println!("LD A. value is {:x}",cpu.r.a);
     (2,8)
 }
 // LD (C),A
@@ -440,7 +670,7 @@ fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.set_hl(cpu.r.get_hl()-1);
     (1,8)
 }
-// load register A into memory pointed at by HL, then decrement HL
+// load register A into memory pointed at by HL
 fn op_0077_LD_HL_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     mmu.write8(cpu.r.get_hl(),cpu.r.a);
     (1,8)
