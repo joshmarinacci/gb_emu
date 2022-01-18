@@ -69,7 +69,9 @@ pub fn setup_op_codes() -> OpList {
     // e0 => LDH (n), A => load contents of A into address of (0xFF00 + immediate value)
     ol.add(0x00_e0, "LDH(n), A",2,12, |cpu,mmu| {
         let v = mmu.read8(cpu.r.pc+1);
+        println!("n is {:x}",v);
         let addr = (0xFF00 as u16) + (v as u16);
+        println!("calculated address {:04x}",addr);
         mmu.write8(addr,cpu.r.a);
     });
 

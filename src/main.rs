@@ -339,7 +339,8 @@ fn main() {
     println!("the LCD should be on now");
     // assert_eq!(&mut hardware.lcd.on,true);
     assert_eq!(mmu.data[0xFF42],0x64); // vertical scroll register
-    assert_eq!(mmu.data[0xFF80],0x91); // turn on the LCD display
+    assert_eq!(cpu.r.a,0x91);
+    assert_eq!(mmu.data[0xFF40],0x91); // turn on the LCD display
 }
 
 
