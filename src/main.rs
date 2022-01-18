@@ -341,6 +341,16 @@ fn main() {
     assert_eq!(mmu.data[0xFF42],0x64); // vertical scroll register
     assert_eq!(cpu.r.a,0x91);
     assert_eq!(mmu.data[0xFF40],0x91); // turn on the LCD display
+
+    execute(&mut cpu, &mut mmu);
+    assert_eq!(cpu.r.b,1);
+
+    //at 0x0076  CP $0x62 # when scroll count is 0x62, play sound 1
+    //at 0x007C  CP $0x64 # when scroll count is 0x64, play sound 2
+    //at 0x00E0  LD HL $0x0104 # should point to the nintendo logo in the cartridge
+    //at 0x00E3  LD HL $0x0104 # should point to the nintendo logo in the bootrom
+    //at 0x00FE  LD ($0xFF00+$0x50), A # disable the boot ROM. assert mmu.bootroom_enabled == false
+    //start the cartridge at 0x0100
 }
 
 
