@@ -243,20 +243,15 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x00_28 => op_0028(arg,cpu,mmu),
         0x00_0d => op_000d(arg,cpu,mmu),
         0x00_18 => op_0018(arg,cpu,mmu),
-        0x00_67 => op_0067(arg,cpu,mmu),
-        0x00_57 => op_0057(arg,cpu,mmu),
         0x00_04 => op_0004(arg,cpu,mmu),
         0x00_1d => op_001d(arg,cpu,mmu),
         0x00_f0 => op_00f0(arg,cpu,mmu),
         0x00_24 => op_0024(arg,cpu,mmu),
         0x00_7c => op_007c(arg,cpu,mmu),
         0x00_f2 => op_00f2(arg,cpu,mmu),
-        0x00_41 => op_0041(arg,cpu,mmu),
-        0x00_42 => op_0042(arg,cpu,mmu),
         0x00_90 => op_0090(arg,cpu,mmu),
         0x00_15 => op_0015(arg,cpu,mmu),
         0x00_17 => op_0017(arg,cpu,mmu),
-        0x00_4f => op_004f(arg,cpu,mmu),
         0x00_c5 => op_00c5(arg,cpu,mmu),
         0xcb_11 => op_cb11(arg,cpu,mmu),
         0x00_c1 => op_00c1(arg,cpu,mmu),
@@ -316,12 +311,6 @@ fn op_002e(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
 fn op_0018(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (2,12)
 }
-fn op_0067(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_0057(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
 fn op_0004(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (1,4)
 }
@@ -344,20 +333,6 @@ fn op_00f2(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (2,8)
 }
 
-// register to register loads
-fn op_0041(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.b = cpu.r.c;
-    (1,4)
-}
-fn op_0042(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.b = cpu.r.d;
-    (1,4)
-}
-fn op_0043(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.b = cpu.r.e;
-    (1,4)
-}
-
 
 fn op_0090(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (1,4)
@@ -368,9 +343,7 @@ fn op_0015(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
 fn op_0017(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     (1,4)
 }
-fn op_004f(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
+
 fn op_00c5(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
     cpu.r.sp = cpu.r.sp -1;
     mmu.write8(cpu.r.sp,cpu.r.b);
@@ -413,8 +386,6 @@ fn op_to_name(op: u16) -> &'static str {
         0x00_28 => "JR Z, r8",
         0x00_0d => "DEC C",
         0x00_18 => "JR r8",
-        0x00_67 => "LD H, A",
-        0x00_57 => "LD D, A",
         0x00_04 => "INC B",
         0x00_f0 => "LDH A,(a8)",
         0x00_1d => "DEC E",
@@ -422,14 +393,9 @@ fn op_to_name(op: u16) -> &'static str {
         0x00_7c => "LD A,H",
         0x00_f2 => "LD A,(C)",
 
-        0x00_40 => "LD B,B",
-        0x00_41 => "LD B,C",
-        0x00_42 => "LD B,D",
-        0x00_43 => "LD B,E",
 
         0x00_90 => "SUB B",
         0x00_15 => "DEC D",
-        0x00_4f => "LD C,A",
         0x00_c5 => "PUSH BC",
         0x00_17 => "RLA",
         0x00_c1 => "POP BC",
@@ -503,9 +469,9 @@ fn main() {
     execute(&mut cpu, &mut mmu); //0x001A – LD A, $0x77 # load 0x77 to A
     execute(&mut cpu, &mut mmu); //0x001C – LD (HL), A # load A to address pointed to by HL
 
-    if true {
-        return ()
-    }
+    // if true {
+    //     return ()
+    // }
     println!("doing demanding part");
     execute(&mut cpu, &mut mmu); // 0x001D  LD A, $0xFC  # A represents the color number's mapping
     execute(&mut cpu, &mut mmu); // 0x001F  LD (0xFF00 + 0x47), A #initialize the palette
@@ -625,6 +591,54 @@ fn setup_op_codes() -> OpList {
     ol.add(0x00_11,"LD DE d16", 3, 12, |cpu,mmu| {cpu.r.set_de(mmu.read16(cpu.r.pc+1));});
     ol.add(0x00_21,"LD HL d16", 3, 12, |cpu,mmu| {cpu.r.set_hl(mmu.read16(cpu.r.pc+1));});
     ol.add(0x00_31,"LD SP d16", 3, 12, |cpu,mmu| {cpu.r.set_sp(mmu.read16(cpu.r.pc+1));});
+
+
+    // load 8bit register to 8bit register
+    ol.add(0x00_40, "LD B, B", 1,4,|cpu,mmu| cpu.r.b = cpu.r.b);
+    ol.add(0x00_41, "LD B, C", 1,4,|cpu,mmu| cpu.r.b = cpu.r.c);
+    ol.add(0x00_42, "LD B, D", 1,4,|cpu,mmu| cpu.r.b = cpu.r.d);
+    ol.add(0x00_43, "LD B, E", 1,4,|cpu,mmu| cpu.r.b = cpu.r.e);
+    ol.add(0x00_44, "LD B, H", 1,4,|cpu,mmu| cpu.r.b = cpu.r.h);
+    ol.add(0x00_45, "LD B, L", 1,4,|cpu,mmu| cpu.r.b = cpu.r.l);
+    ol.add(0x00_47, "LD B, A", 1,4,|cpu,mmu| cpu.r.b = cpu.r.a);
+    ol.add(0x00_48, "LD C, B", 1,4,|cpu,mmu| cpu.r.c = cpu.r.b);
+    ol.add(0x00_49, "LD C, C", 1,4,|cpu,mmu| cpu.r.c = cpu.r.c);
+    ol.add(0x00_4a, "LD C, D", 1,4,|cpu,mmu| cpu.r.c = cpu.r.d);
+    ol.add(0x00_4b, "LD C, E", 1,4,|cpu,mmu| cpu.r.c = cpu.r.e);
+    ol.add(0x00_4c, "LD C, H", 1,4,|cpu,mmu| cpu.r.c = cpu.r.h);
+    ol.add(0x00_4d, "LD C, L", 1,4,|cpu,mmu| cpu.r.c = cpu.r.l);
+    ol.add(0x00_4f, "LD C, A", 1,4,|cpu,mmu| cpu.r.c = cpu.r.a);
+
+    ol.add(0x00_50, "LD D, B", 1,4,|cpu,mmu| cpu.r.d = cpu.r.b);
+    ol.add(0x00_51, "LD D, C", 1,4,|cpu,mmu| cpu.r.d = cpu.r.c);
+    ol.add(0x00_52, "LD D, D", 1,4,|cpu,mmu| cpu.r.d = cpu.r.d);
+    ol.add(0x00_53, "LD D, E", 1,4,|cpu,mmu| cpu.r.d = cpu.r.e);
+    ol.add(0x00_54, "LD D, H", 1,4,|cpu,mmu| cpu.r.d = cpu.r.h);
+    ol.add(0x00_55, "LD D, L", 1,4,|cpu,mmu| cpu.r.d = cpu.r.l);
+    ol.add(0x00_57, "LD D, A", 1,4,|cpu,mmu| cpu.r.d = cpu.r.a);
+    ol.add(0x00_58, "LD E, B", 1,4,|cpu,mmu| cpu.r.e = cpu.r.b);
+    ol.add(0x00_59, "LD E, C", 1,4,|cpu,mmu| cpu.r.e = cpu.r.c);
+    ol.add(0x00_5a, "LD E, D", 1,4,|cpu,mmu| cpu.r.e = cpu.r.d);
+    ol.add(0x00_5b, "LD E, E", 1,4,|cpu,mmu| cpu.r.e = cpu.r.e);
+    ol.add(0x00_5c, "LD E, H", 1,4,|cpu,mmu| cpu.r.e = cpu.r.h);
+    ol.add(0x00_5d, "LD E, L", 1,4,|cpu,mmu| cpu.r.e = cpu.r.l);
+    ol.add(0x00_5f, "LD E, A", 1,4,|cpu,mmu| cpu.r.e = cpu.r.a);
+
+    ol.add(0x00_60, "LD H, B", 1,4,|cpu,mmu| cpu.r.h = cpu.r.b);
+    ol.add(0x00_61, "LD H, C", 1,4,|cpu,mmu| cpu.r.h = cpu.r.c);
+    ol.add(0x00_62, "LD H, D", 1,4,|cpu,mmu| cpu.r.h = cpu.r.d);
+    ol.add(0x00_63, "LD H, E", 1,4,|cpu,mmu| cpu.r.h = cpu.r.e);
+    ol.add(0x00_64, "LD H, H", 1,4,|cpu,mmu| cpu.r.h = cpu.r.h);
+    ol.add(0x00_65, "LD H, L", 1,4,|cpu,mmu| cpu.r.h = cpu.r.l);
+    ol.add(0x00_67, "LD H, A", 1,4,|cpu,mmu| cpu.r.h = cpu.r.a);
+    ol.add(0x00_68, "LD L, B", 1,4,|cpu,mmu| cpu.r.l = cpu.r.b);
+    ol.add(0x00_69, "LD L, C", 1,4,|cpu,mmu| cpu.r.l = cpu.r.c);
+    ol.add(0x00_6a, "LD L, D", 1,4,|cpu,mmu| cpu.r.l = cpu.r.d);
+    ol.add(0x00_6b, "LD L, E", 1,4,|cpu,mmu| cpu.r.l = cpu.r.e);
+    ol.add(0x00_6c, "LD L, H", 1,4,|cpu,mmu| cpu.r.l = cpu.r.h);
+    ol.add(0x00_6d, "LD L, L", 1,4,|cpu,mmu| cpu.r.l = cpu.r.l);
+    ol.add(0x00_6f, "LD L, A", 1,4,|cpu,mmu| cpu.r.l = cpu.r.a);
+
     return ol;
 }
 //16bit register loads
