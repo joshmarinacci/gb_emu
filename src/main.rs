@@ -57,7 +57,6 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x00_e2 => op_00e2_LD_CA(arg,cpu,mmu),
         0x00_0c => op_000c_INC_C(arg,cpu,mmu),
         0x00_77 => op_0077_LD_HL_A(arg,cpu,mmu),
-        0x00_e0 => op_00e0_LDH_a8_A(arg,cpu,mmu),
         0x00_1a => op_001a_LD_A_DE(arg,cpu,mmu),
         0x00_cd => op_00cd_call_a16(arg,cpu,mmu),
         0x00_13 => op_0013_inc_de(arg,cpu,mmu),
@@ -285,14 +284,21 @@ fn main() {
         execute(&mut cpu, &mut mmu);
     }
     println!("done with the zeroing of vram");
+    // setup audio device stuff
     execute(&mut cpu, &mut mmu); //0x000C  LD HL $0xFF26  # load 0xFF26 into HL
     execute(&mut cpu, &mut mmu); //0x000F  LD C, $0x11    # load 0x11 into C
+    assert_eq!(cpu.r.c,0x11);
     execute(&mut cpu, &mut mmu); //0x0011  LD A, $0x80    # load 0x80 into A
+    assert_eq!(cpu.r.a,0x80);
     execute(&mut cpu, &mut mmu); //0x0013  LD (HL-), A # load A to address pointed to by HL and Dec HL
+    assert_eq!(mmu.data[0xFF26],0x80);
     execute(&mut cpu, &mut mmu); //0x0014  LD ($0xFF00+C), A # load A to address 0xFF00+C (0xFF11)
+    assert_eq!(mmu.data[0xFF11],0x80);
     execute(&mut cpu, &mut mmu); //0x0015 – INC C # increment C register
     execute(&mut cpu, &mut mmu); //0x0016 – LD A, $0xF3 # load 0xF3 to A
+    assert_eq!(cpu.r.a,0xf3);
     execute(&mut cpu, &mut mmu); //0x0018 – LD ($0xFF00+C), A # load A to address 0xFF00+C (0xFF12)
+    assert_eq!(mmu.data[0xff12],0xf3);
     execute(&mut cpu, &mut mmu); //0x0019 – LD (HL-), A # load A to address pointed to by HL and Dec HL
     execute(&mut cpu, &mut mmu); //0x001A – LD A, $0x77 # load 0x77 to A
     execute(&mut cpu, &mut mmu); //0x001C – LD (HL), A # load A to address pointed to by HL
@@ -302,9 +308,12 @@ fn main() {
     // }
     println!("doing demanding part");
     execute(&mut cpu, &mut mmu); // 0x001D  LD A, $0xFC  # A represents the color number's mapping
+    assert_eq!(cpu.r.a,0xFC);
     execute(&mut cpu, &mut mmu); // 0x001F  LD (0xFF00 + 0x47), A #initialize the palette
+    assert_eq!(mmu.data[0xFF47],0xFC);
     execute(&mut cpu, &mut mmu); // 0x0021  LD DE 0x0104 # pointer to Nintendo logo
     execute(&mut cpu, &mut mmu); // 0x0024  LD HL 0x8010 # pointer to vram
+    assert_eq!(cpu.r.get_hl(),0x8010);
     execute(&mut cpu, &mut mmu); // 0x0027  LD A, (DE) # load next byte from Nintendo logo
     execute(&mut cpu, &mut mmu); // 0x0028  CALL $0x0095 # decompress, scale and write pixels to VRAM (1)
     execute(&mut cpu, &mut mmu); // 0x002B  CALL $0x0096 # decompress, scale and write pixels to VRAM (2)
@@ -328,10 +337,6 @@ fn main() {
 
 }
 
-fn op_00e0_LDH_a8_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.a = mmu.read8(cpu.r.pc+1);
-    (2,8)
-}
 
 
 // INC C
@@ -432,6 +437,13 @@ fn setup_op_codes() -> OpList {
     ol.add(0x00_6c, "LD L, H", 1,4,|cpu,mmu| cpu.r.l = cpu.r.h);
     ol.add(0x00_6d, "LD L, L", 1,4,|cpu,mmu| cpu.r.l = cpu.r.l);
     ol.add(0x00_6f, "LD L, A", 1,4,|cpu,mmu| cpu.r.l = cpu.r.a);
+
+    // e0 => LDH (n), A => load contents of A into address of (0xFF00 + immediate value)
+    ol.add(0x00_e0, "LDH(n), A",2,12, |cpu,mmu| {
+        let v = mmu.read8(cpu.r.pc+1);
+        let addr = (0xFF00 as u16) + (v as u16);
+        mmu.write8(addr,cpu.r.a);
+    });
 
     return ol;
 }

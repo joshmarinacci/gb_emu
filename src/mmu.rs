@@ -24,6 +24,9 @@ impl MMU {
     }
     pub fn read8(&self, addr:u16) -> u8 {
         // println!("reading from bios at location {:04x}",addr);
+        if addr >= VRAM_START  && addr <= VRAM_END {
+            println!("reading from vram {:04x}",addr);
+        }
         self.bios[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
@@ -33,8 +36,8 @@ impl MMU {
         return b1 + (b2 << 8);
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
-        if addr >= 0x8000  && addr <= 0x9FFF {
-            // println!("writing in VRAM {:04x}  {:x}", addr, val);
+        if addr >= VRAM_START  && addr <= VRAM_END {
+            println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == 0xFF47 {
             println!("writing to special LCD register")
@@ -42,3 +45,6 @@ impl MMU {
         self.data[addr as usize] = val;
     }
 }
+
+const VRAM_START:u16 = 0x8000;
+const VRAM_END:u16 = 0x9FFF;
