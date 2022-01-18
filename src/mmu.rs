@@ -39,6 +39,9 @@ impl MMU {
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
+        if addr == 0xFF40+0x40 {
+            println!("writing to turn on the LCD Display");
+        }
         if addr == 0xFF47 {
             println!("writing to special LCD register")
         }
