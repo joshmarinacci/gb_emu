@@ -1,6 +1,24 @@
 use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
 
+pub struct Hardware {
+    ly:u8,
+}
+
+impl Hardware {
+    fn init() -> Hardware {
+        Hardware {
+            ly: 0,
+        }
+    }
+    pub fn update(&mut self) {
+        self.ly = self.ly + 1;
+        if self.ly > 153 {
+            self.ly = 0
+        }
+        println!("LY is {}",self.ly);
+    }
+}
 pub struct MMU {
     inbios:bool,
     bios:Vec<u8>,
@@ -12,6 +30,13 @@ pub struct MMU {
 
     lowest_used_iram:u16,
     highest_used_iram:u16,
+    hardware:Hardware,
+}
+
+impl MMU {
+    pub(crate) fn update(&mut self) {
+        self.hardware.update();
+    }
 }
 
 impl MMU {
@@ -47,6 +72,7 @@ impl MMU {
             data: data,
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
+            hardware: Hardware::init(),
         }
     }
     pub fn init_with_rom_no_header(rom:&Vec<u8>) -> MMU {
@@ -62,12 +88,17 @@ impl MMU {
             data:data,
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
+            hardware: Hardware::init(),
         }
     }
     pub fn read8(&self, addr:u16) -> u8 {
         // println!("reading from bios at location {:04x}",addr);
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("reading from vram {:04x}",addr);
+        }
+        if addr == LY_LCDC_Y_COORD {
+            println!("reading LY LCDC_Y_COORD");
+            return self.hardware.ly;
         }
         self.data[addr as usize]
     }

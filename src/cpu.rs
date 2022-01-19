@@ -17,6 +17,7 @@ pub struct Z80_registers {
     // f:u8, // flag register
     pub(crate) zero_flag:bool,
     pub(crate) subtract_n_flag:bool,
+    pub(crate) carry_flag:bool,
 
     pub(crate) h:u8,
     pub(crate) l:u8,
@@ -80,6 +81,7 @@ impl Z80 {
                 e: 0,
                 zero_flag: false,
                 subtract_n_flag: false,
+                carry_flag: false,
                 h: 0,
                 l: 0,
                 pc: 0,

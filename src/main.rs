@@ -249,6 +249,7 @@ fn execute(cpu: &mut Z80, mmu: &mut MMU) {
         panic!("PC overflowed memory");
     }
     cpu.r.pc = v2;
+    mmu.update();
     // println!("inst size was {}",size_of_inst);
     // cpu.r.pc = cpu.r.pc.wrapping_add(size_of_inst as u16);
 }
