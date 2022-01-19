@@ -242,7 +242,11 @@ fn execute(cpu: &mut Z80, mmu: &mut MMU) {
     // println!("op {:0x} arg {:0x}", opcode, off);
     let (off,size_of_inst) = decode(opcode, off, cpu, mmu);
     // println!("off is {}",off);
-    cpu.r.pc = cpu.r.pc.wrapping_add(off as u16);
+    let (v2, went_over) = cpu.r.pc.overflowing_add(off as u16);
+    if went_over {
+        panic!("PC overflowed memory");
+    }
+    cpu.r.pc = v2;
     // println!("inst size was {}",size_of_inst);
     // cpu.r.pc = cpu.r.pc.wrapping_add(size_of_inst as u16);
 }
