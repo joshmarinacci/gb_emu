@@ -24,6 +24,8 @@ pub fn setup_op_codes() -> OpList {
     //
     //
     // // load 8bit register to 8bit register
+    ol.add(0x0078, "LD A, B", 1,4,|cpu,mmu| cpu.r.a = cpu.r.b);
+
     // ol.add(0x00_40, "LD B, B", 1,4,|cpu,mmu| cpu.r.b = cpu.r.b);
     // ol.add(0x00_41, "LD B, C", 1,4,|cpu,mmu| cpu.r.b = cpu.r.c);
     // ol.add(0x00_42, "LD B, D", 1,4,|cpu,mmu| cpu.r.b = cpu.r.d);
@@ -88,7 +90,7 @@ pub fn setup_op_codes() -> OpList {
         cpu.r.pc = (addr -3) as u16;
     });
     // JUMP if not zero to the address
-    ol.add(0x0020,"JR_NZ_r8",2,12,|cpu,mmu| {
+    ol.add(0x0020,"JR NZ r8",2,12,|cpu,mmu| {
         //convert e to i8 then i32 so it will be interpreted as signed
         let e = mmu.read8(cpu.r.pc+1);
         let addr = ((cpu.r.pc+2) as i32) + (e as i8 as i32);
@@ -117,11 +119,47 @@ pub fn setup_op_codes() -> OpList {
     //
     // // ====== INCREMENT Registers ==========
     ol.add(0x001c,"INC E",1,1,|cpu,mmu|{
-        // println!("register e contains {:x}",cpu.r.e);
-        cpu.r.e = cpu.r.e + 1;
+        println!("register e contains {:x}",cpu.r.e);
+        let (v2, changed) = cpu.r.e.overflowing_add(1);
+        println!("now it is {:x} flipped={}",v2, changed);
+        cpu.r.e = v2;
         if cpu.r.e == 0 { cpu.r.zero_flag = true; }
         cpu.r.subtract_n_flag = false;
+        println!("zero flag is {}",cpu.r.zero_flag);
+        // cpu.r.h_flag
     });
+    ol.add(0x0014,"INC D",1,1,|cpu,mmu|{
+        println!("register e contains {:x}",cpu.r.d);
+        let (v2, changed) = cpu.r.d.overflowing_add(1);
+        println!("now it is {:x} flipped={}",v2, changed);
+        cpu.r.d = v2;
+        if cpu.r.d == 0 { cpu.r.zero_flag = true; }
+        cpu.r.subtract_n_flag = false;
+        println!("zero flag is {}",cpu.r.zero_flag);
+        // cpu.r.h_flag
+    });
+
+    ol.add(0x000d,"DEC C",1,1,|cpu,mmu|{
+        println!("register c contains {:x}",cpu.r.c);
+        let (v2, changed) = cpu.r.c.overflowing_sub(1);
+        println!("now it is {:x} flipped={}",v2, changed);
+        cpu.r.c = v2;
+        if cpu.r.c == 0 { cpu.r.zero_flag = true; }
+        cpu.r.subtract_n_flag = true;
+        println!("zero flag is {}",cpu.r.zero_flag);
+        // cpu.r.h_flag
+    });
+
+    // ol.add(0x001c,"DEC C",1,1,|cpu,mmu|{
+    //     println!("register e contains {:x}",cpu.r.e);
+    //     let (v2, changed) = cpu.r.e.overflowing_add(1);
+    //     println!("now it is {:x} flipped={}",v2, changed);
+    //     cpu.r.e = v2;
+    //     if cpu.r.e == 0 { cpu.r.zero_flag = true; }
+    //     cpu.r.subtract_n_flag = false;
+    //     println!("zero flag is {}",cpu.r.zero_flag);
+    //     // cpu.r.h_flag
+    // });
     // ol.add(0x00_3c,"INC A",1,1,|cpu,mmu|{
     //     cpu.r.a = cpu.r.a + 1;
     //     if cpu.r.a == 0 { cpu.r.zero_flag = true; }
