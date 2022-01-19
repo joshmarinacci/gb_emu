@@ -12,7 +12,7 @@ pub fn setup_op_codes() -> OpList {
     ol.add(0x000e,"LD C, d8",2,8,|cpu,mmu|cpu.r.c = mmu.read8(cpu.r.pc+1));
     // ol.add(0x00_1e,"LD E, d8",2,8,|cpu,mmu|cpu.r.e = mmu.read8(cpu.r.pc+1));
     // ol.add(0x00_2e,"LD L, d8",2,8,|cpu,mmu|cpu.r.l = mmu.read8(cpu.r.pc+1));
-    // ol.add(0x00_3e,"LD A, d8",2,8,|cpu,mmu|cpu.r.a = mmu.read8(cpu.r.pc+1));
+    ol.add(0x003e,"LD A, d8",2,8,|cpu,mmu|cpu.r.a = mmu.read8(cpu.r.pc+1));
 
     //16bit immediate loads
     // ol.add(0x00_01,"LD BC d16", 3, 12, |cpu,mmu| {cpu.r.set_bc(mmu.read16(cpu.r.pc+1));});
@@ -105,6 +105,13 @@ pub fn setup_op_codes() -> OpList {
             cpu.r.pc =  addr as u16;
             println!("jumping to {:04x}", cpu.r.pc);
         }
+    });
+    //unconditional Jump to relative address specified by signed 8bit immediate value
+    ol.add(0x18,"JR e",0,3,|cpu,mmu|{
+        let e = mmu.read8(cpu.r.pc+1);
+        let addr = ((cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
+        println!("jumping by {}",u8_as_i8(e));
+        cpu.r.pc = addr as u16;
     });
 
 
