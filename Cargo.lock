@@ -221,6 +221,8 @@ dependencies = [
  "log",
  "log4rs",
  "png",
+ "serde",
+ "serde_json",
  "structopt",
 ]
 
