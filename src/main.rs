@@ -17,6 +17,8 @@ use log::{info, LevelFilter};
 use structopt::StructOpt;
 use crate::cpu::{OpList, Z80};
 use crate::mmu::MMU;
+use crate::opcodes::{LD, RegisterName};
+use crate::RegisterName::{A, B, C, D, E, H, L};
 
 
 fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
@@ -32,6 +34,68 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
     }
 }
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
+    let res:Option<(usize,usize)> = match code {
+
+        // 8bit register to register copies
+        0x78 => LD(A, B, cpu),
+        0x79 => LD(A, C, cpu),
+        0x7A => LD(A, D, cpu),
+        0x7B => LD(A, E, cpu),
+        0x7C => LD(A, H, cpu),
+        0x7D => LD(A, L, cpu),
+        0x7F => LD(A, A, cpu),
+
+        0x40 => LD(B, B, cpu),
+        0x41 => LD(B, C, cpu),
+        0x42 => LD(B, D, cpu),
+        0x43 => LD(B, E, cpu),
+        0x44 => LD(B, H, cpu),
+        0x45 => LD(B, L, cpu),
+
+        0x48 => LD(C, B, cpu),
+        0x49 => LD(C, C, cpu),
+        0x4A => LD(C, D, cpu),
+        0x4B => LD(C, E, cpu),
+        0x4C => LD(C, H, cpu),
+        0x4D => LD(C, L, cpu),
+        0x4F => LD(C, A, cpu),
+
+        0x50 => LD(D, B, cpu),
+        0x51 => LD(D, C, cpu),
+        0x52 => LD(D, D, cpu),
+        0x53 => LD(D, E, cpu),
+        0x54 => LD(D, H, cpu),
+        0x55 => LD(D, L, cpu),
+
+        0x58 => LD(E, B, cpu),
+        0x59 => LD(E, C, cpu),
+        0x5A => LD(E, D, cpu),
+        0x5B => LD(E, E, cpu),
+        0x5C => LD(E, H, cpu),
+        0x5D => LD(E, L, cpu),
+
+        0x60 => LD(H, B, cpu),
+        0x61 => LD(H, C, cpu),
+        0x62 => LD(H, D, cpu),
+        0x63 => LD(H, E, cpu),
+        0x64 => LD(H, H, cpu),
+        0x65 => LD(H, L, cpu),
+
+        0x68 => LD(L, B, cpu),
+        0x69 => LD(L, C, cpu),
+        0x6A => LD(L, D, cpu),
+        0x6B => LD(L, E, cpu),
+        0x6C => LD(L, H, cpu),
+        0x6D => LD(L, L, cpu),
+
+        _ => {None}
+    };
+
+    if let Some((a,b)) = res {
+        return (a,b)
+    }
+
+
     if let Some(op) = cpu.ops.ops.get(&code) {
         println!("PC {:04x}: OP {:04x}: {}", cpu.r.pc, code, op.name);
         let il = op.inst_len;
