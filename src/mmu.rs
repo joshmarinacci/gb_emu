@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
 
 pub struct MMU {
@@ -8,17 +9,20 @@ pub struct MMU {
     // wram:Vec<u8>,
     // eram:Vec<u8>,
     // zram:Vec<u8>,
+
+    lowest_used_iram:u16,
+    highest_used_iram:u16,
 }
 
 impl MMU {
     pub(crate) fn print_cram(&self)  {
         println!("----");
-        let iram:&[u8] = &self.data[(INTERNAL_RAM_START as usize)..(INTERNAL_RAM_END as usize)];
-        let mut pc = INTERNAL_RAM_START;
-        for ch in iram.chunks_exact(32) {
+        println!("lowest and heighest {:04x} {:04x}",self.lowest_used_iram, self.highest_used_iram);
+        let iram:&[u8] = &self.data[(self.lowest_used_iram as usize)..(self.highest_used_iram as usize)];
+        let mut pc = self.lowest_used_iram;
+        for ch in iram.chunks_exact(16) {
             println!("PC {:04x} = {:x?}",pc, ch);
-
-            pc+=32;
+            pc+=16;
         }
         // for i in  {
         //     print!("{:0x}",self.data[i as usize]);
@@ -41,6 +45,8 @@ impl MMU {
             inbios: true,
             bios: bios,
             data: data,
+            lowest_used_iram: INTERNAL_RAM_END,
+            highest_used_iram: INTERNAL_RAM_START,
         }
     }
     pub fn init_with_rom_no_header(rom:&Vec<u8>) -> MMU {
@@ -54,6 +60,8 @@ impl MMU {
             inbios:false,
             bios:bios,
             data:data,
+            lowest_used_iram: INTERNAL_RAM_END,
+            highest_used_iram: INTERNAL_RAM_START,
         }
     }
     pub fn read8(&self, addr:u16) -> u8 {
@@ -87,6 +95,8 @@ impl MMU {
         }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             println!("writing to internal ram:  {:04x} := {:x}",addr, val);
+            self.lowest_used_iram = min(self.lowest_used_iram,addr);
+            self.highest_used_iram = max(self.highest_used_iram,addr);
         }
         self.data[addr as usize] = val;
     }
