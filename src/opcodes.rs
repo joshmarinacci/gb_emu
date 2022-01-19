@@ -124,13 +124,39 @@ pub fn setup_op_codes() -> OpList {
     // });
     //
 
-    // //Load A, (HL+)
+    // //Load A, (HL+),  copy contents of memory at HL to A, then INC HL
     ol.add(0x002a,"LD A, (HL+)",1,2,|cpu,mmu|{
         cpu.r.a = mmu.read8(cpu.r.get_hl());
         cpu.r.set_hl(cpu.r.get_hl()+1);
     });
+    // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+    ol.add(0x22,"LD (HL+), A",1,2,|cpu,mmu|{
+        mmu.write8(cpu.r.get_hl(),cpu.r.a);
+        cpu.r.set_hl(cpu.r.get_hl()+1);
+    });
+
+    ol.add(0x13,"INC DE",1,2,|cpu,mmu|{
+        println!("incrementing DE");
+        cpu.r.set_de(cpu.r.get_de()+1);
+    });
+
+    ol.add(0x0B,"DEC BC",1,1,|cpu,mmu|{
+        println!("decrementing BC");
+        let (v2, changed) = cpu.r.get_bc().overflowing_sub(1);
+        cpu.r.set_bc(v2);
+        if v2 == 0 { cpu.r.zero_flag = true; }
+        cpu.r.subtract_n_flag = true;
+    });
 
 
+    ol.add(0xB1,"OR C",1,1,|cpu,mmu|{
+        println!("ORING C with itself");
+        cpu.r.c = cpu.r.c | cpu.r.c;
+    });
+    ol.add(0xA7,"AND A",1,1,|cpu,mmu|{
+        println!("ORING A with itself");
+        cpu.r.a = cpu.r.a | cpu.r.a;
+    });
     ol.add(0x0012,"LD (DE),A",1,2,|cpu,mmu|{
         mmu.write8(cpu.r.get_de(),cpu.r.a);
     });

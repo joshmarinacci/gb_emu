@@ -35,6 +35,7 @@ impl Z80_registers {
     pub fn get_hl(&self) -> u16 {
         (self.l as u16) + ((self.h as u16) << 8)
     }
+    pub fn get_bc(&self) -> u16 { (self.c as u16) + ((self.b as u16) << 8) }
     pub fn set_bc(&mut self, val:u16) {
         self.b = (val >> 8) as u8;
         self.c = (0x00FF & val) as u8;
