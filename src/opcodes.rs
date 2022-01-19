@@ -73,14 +73,14 @@ pub fn setup_op_codes() -> OpList {
     // ol.add(0x00_6d, "LD L, L", 1,4,|cpu,mmu| cpu.r.l = cpu.r.l);
     // ol.add(0x00_6f, "LD L, A", 1,4,|cpu,mmu| cpu.r.l = cpu.r.a);
     //
-    // // e0 => LDH (n), A => load contents of A into address of (0xFF00 + immediate value)
-    // ol.add(0x00_e0, "LDH(n), A",2,12, |cpu,mmu| {
-    //     let v = mmu.read8(cpu.r.pc+1);
-    //     println!("n is {:x}",v);
-    //     let addr = (0xFF00 as u16) + (v as u16);
-    //     println!("calculated address {:04x}",addr);
-    //     mmu.write8(addr,cpu.r.a);
-    // });
+    // e0 => LDH (n), A => load contents of A into address of (0xFF00 + immediate value)
+    ol.add(0x00e0, "LDH(n), A",2,12, |cpu,mmu| {
+        let v = mmu.read8(cpu.r.pc+1);
+        println!("n is {:x}",v);
+        let addr = (0xFF00 as u16) + (v as u16);
+        println!("calculated address {:04x}",addr);
+        mmu.write8(addr,cpu.r.a);
+    });
 
     // put the memory addres 0xFF00 + n into A
     ol.add(0x00F0,"LDH A,(n)",2,3,|cpu,mmu|{
@@ -90,6 +90,24 @@ pub fn setup_op_codes() -> OpList {
         println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
     });
 
+    // put the immediate value into BC
+    ol.add(0x0001,"LD BC, u16",3,3,|cpu,mmu|{
+        let nn = mmu.read16(cpu.r.pc+1);
+        cpu.r.set_bc(nn);
+        // let n = mmu.read8(cpu.r.pc+1);
+        // let addr = (0xFF00 as u16) + (n as u16);
+        // cpu.r.a = mmu.read8(addr);
+        // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
+    });
+
+    //
+    ol.add(0x001a,"LD A,(DE)",1,2,|cpu,mmu|{
+        cpu.r.a = mmu.read8(cpu.r.get_de())
+        // let n = mmu.read8(cpu.r.pc+1);
+        // let addr = (0xFF00 as u16) + (n as u16);
+        // cpu.r.a = mmu.read8(addr);
+        // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
+    });
 
     //MATH
     ol.add(0x00AF,"XOR A,A",1,1,|cpu,mmu|{
