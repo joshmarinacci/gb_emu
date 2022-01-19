@@ -63,6 +63,7 @@ fn run_romfile(cart: RomFile) {
     let mut cpu = Z80::init();
     let mut mmu = MMU::init_with_rom_no_header(&cart.data);
     cpu.reset();
+    cpu.r.pc = 0x100;
     loop {
         execute(&mut cpu, &mut mmu);
     }
@@ -244,6 +245,7 @@ fn execute(cpu: &mut Z80, mmu: &mut MMU) {
     // println!("off is {}",off);
     let (v2, went_over) = cpu.r.pc.overflowing_add(off as u16);
     if went_over {
+        mmu.print_cram();
         panic!("PC overflowed memory");
     }
     cpu.r.pc = v2;

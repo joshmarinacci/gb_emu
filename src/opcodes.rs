@@ -102,13 +102,13 @@ pub fn setup_op_codes() -> OpList {
     });
 
 
-    // ol.add(0x00_c9, "RET",1,4,|cpu,mmu|{
-    //     let dst = mmu.read16(cpu.r.sp);
-    //     cpu.r.sp = cpu.r.sp + 2;
-    //     println!("returning from a function at {:0x} to dst {:0x}", cpu.r.sp,dst);
-    //     cpu.r.pc = dst;
-    // });
     // //Returns
+    ol.add(0x00C9, "RET",1,4,|cpu,mmu|{
+        let dst = mmu.read16(cpu.r.sp);
+        cpu.r.sp = cpu.r.sp + 2;
+        println!("returning from a function at {:0x} to dst {:0x}", cpu.r.sp,dst);
+        cpu.r.pc = dst;
+    });
     // ol.add(0x00_c0, "RET NZ",1,2,|cpu,mmu|{
     //     if cpu.r.zero_flag {
     //         println!("returning");
@@ -117,7 +117,18 @@ pub fn setup_op_codes() -> OpList {
     //     }
     // });
     //
+
     // // ====== INCREMENT Registers ==========
+    ol.add(0x003c,"INC A",1,1,|cpu,mmu|{
+        println!("register a contains {:x}",cpu.r.a);
+        let (v2, changed) = cpu.r.a.overflowing_add(1);
+        println!("now it is {:x} flipped={}",v2, changed);
+        cpu.r.a = v2;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+        cpu.r.subtract_n_flag = false;
+        println!("zero flag is {}",cpu.r.zero_flag);
+        // cpu.r.h_flag
+    });
     ol.add(0x001c,"INC E",1,1,|cpu,mmu|{
         println!("register e contains {:x}",cpu.r.e);
         let (v2, changed) = cpu.r.e.overflowing_add(1);
@@ -129,7 +140,7 @@ pub fn setup_op_codes() -> OpList {
         // cpu.r.h_flag
     });
     ol.add(0x0014,"INC D",1,1,|cpu,mmu|{
-        println!("register e contains {:x}",cpu.r.d);
+        println!("register D contains {:x}",cpu.r.d);
         let (v2, changed) = cpu.r.d.overflowing_add(1);
         println!("now it is {:x} flipped={}",v2, changed);
         cpu.r.d = v2;
