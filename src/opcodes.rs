@@ -78,5 +78,43 @@ pub fn setup_op_codes() -> OpList {
         mmu.write8(addr,cpu.r.a);
     });
 
+
+    // JUMPs
+    ol.add(0x00_c3, "JP u16", 3,16,|cpu,mmu|{
+        let addr = mmu.read16(cpu.r.pc+1);
+        cpu.r.pc = addr;
+    });
+
+    //Returns
+    ol.add(0x00_c0, "RET NZ",1,2,|cpu,mmu|{
+        if cpu.r.zero_flag {
+            println!("returning");
+        } else {
+            println!("not returning");
+        }
+    });
+
+    // ====== INCREMENT Registers ==========
+    ol.add(0x00_1c,"INC E",1,1,|cpu,mmu|{
+        println!("register e contains {:x}",cpu.r.e);
+        cpu.r.e = cpu.r.e + 1;
+        if cpu.r.e == 0 { cpu.r.zero_flag = true; }
+        cpu.r.subtract_n_flag = false;
+    });
+    ol.add(0x00_3c,"INC A",1,1,|cpu,mmu|{
+        cpu.r.a = cpu.r.a + 1;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+        cpu.r.subtract_n_flag = false;
+    });
+
+    //Load A, (HL+)
+    ol.add(0x00_2a,"LD A, (HL+)",1,2,|cpu,mmu|{
+        cpu.r.a = mmu.read8(cpu.r.get_hl());
+        cpu.r.set_hl(cpu.r.get_hl()+1);
+    });
+    ol.add(0x00_12,"LD (DE),A",1,2,|cpu,mmu|{
+        mmu.write8(cpu.r.get_de(),cpu.r.a);
+    });
+
     return ol;
 }

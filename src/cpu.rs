@@ -16,6 +16,7 @@ pub struct Z80_registers {
 
     // f:u8, // flag register
     pub(crate) zero_flag:bool,
+    pub(crate) subtract_n_flag:bool,
 
     pub(crate) h:u8,
     pub(crate) l:u8,
@@ -40,6 +41,9 @@ impl Z80_registers {
     pub fn set_hl(&mut self, val:u16) {
         self.h = (val >> 8) as u8;
         self.l = (0x00FF & val) as u8;
+    }
+    pub fn get_de(&self) -> u16 {
+        (self.e as u16) + ((self.d as u16) << 8)
     }
     pub fn set_de(&mut self, val:u16) {
         self.d = (val >> 8) as u8;
@@ -75,6 +79,7 @@ impl Z80 {
                 d: 0,
                 e: 0,
                 zero_flag: false,
+                subtract_n_flag: false,
                 h: 0,
                 l: 0,
                 pc: 0,
