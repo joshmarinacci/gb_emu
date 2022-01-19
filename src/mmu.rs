@@ -80,9 +80,11 @@ impl MMU {
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr == SB_REGISTER {
             println!("wrote to the SB register {:04x}", val);
+            panic!("halting");
         }
         if addr == SC_REGISTER {
             println!("wrote to the SC register {:04x}", val);
+            panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("writing in VRAM {:04x}  {:x}", addr, val);
