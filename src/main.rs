@@ -32,204 +32,14 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
     }
 }
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
-
     if let Some(op) = cpu.ops.ops.get(&code) {
-        println!("PC {:04x}: OP {:04x}: {}",cpu.r.pc, code, op.name);
+        println!("PC {:04x}: OP {:04x}: {}", cpu.r.pc, code, op.name);
         let il = op.inst_len;
         let tl = op.tim_len;
-        (op.fun)(cpu,mmu);
-        return (il,tl);
+        (op.fun)(cpu, mmu);
+        return (il, tl);
     }
-
-    if cpu.r.pc >= 0x0007 && cpu.r.pc <= 0x00a {
-        // println!("in the loop")
-    } else {
-        println!("PC {:04x}: OP {:04x}: {}", cpu.r.pc, code, op_to_name(code));
-    }
-
-    match code {
-        // 0x0000 => op_0000(arg,cpu,mmu),
-        0x00_AF => op_00AF_XOR_A(arg,cpu,mmu),
-        0x00_32 => op_0032_LD_HLm_A(arg,cpu,mmu),
-        0xCB_7C => op_CB76_BIT_7_H(arg,cpu,mmu),
-        0x00_20 => op_0020_JR_NZ_r8(arg,cpu,mmu),
-        0x00_e2 => op_00e2_LD_CA(arg,cpu,mmu),
-        0x00_0c => op_000c_INC_C(arg,cpu,mmu),
-        0x00_77 => op_0077_LD_HL_A(arg,cpu,mmu),
-        0x00_1a => op_001a_LD_A_DE(arg,cpu,mmu),
-        0x00_cd => op_00cd_call_a16(arg,cpu,mmu),
-        0x00_13 => op_0013_inc_de(arg,cpu,mmu),
-        0x00_7b => op_007b_LD_A_E(arg,cpu,mmu),
-        0x00_fe => op_00fe_CP_d8(arg,cpu,mmu),
-        0x00_05 => op_0005(arg,cpu,mmu),
-        0x00_22 => op_0022(arg,cpu,mmu),
-        0x00_23 => op_0023(arg,cpu,mmu),
-        0x00_ea => op_00ea(arg,cpu,mmu),
-        0x00_3d => op_003d(arg,cpu,mmu),
-        0x00_28 => op_0028(arg,cpu,mmu),
-        0x00_0d => op_000d(arg,cpu,mmu),
-        0x00_18 => op_0018(arg,cpu,mmu),
-        0x00_04 => op_0004(arg,cpu,mmu),
-        0x00_1d => op_001d(arg,cpu,mmu),
-        0x00_f0 => op_00f0(arg,cpu,mmu),
-        0x00_24 => op_0024(arg,cpu,mmu),
-        0x00_7c => op_007c(arg,cpu,mmu),
-        0x00_f2 => op_00f2(arg,cpu,mmu),
-        0x00_90 => op_0090(arg,cpu,mmu),
-        0x00_15 => op_0015(arg,cpu,mmu),
-        0x00_17 => op_0017(arg,cpu,mmu),
-        0x00_c5 => op_00c5(arg,cpu,mmu),
-        0xcb_11 => op_cb11(arg,cpu,mmu),
-        0x00_c1 => op_00c1(arg,cpu,mmu),
-        0x00_c9 => op_00c9(arg,cpu,mmu),
-
-        _ => {
-            panic!("unknown op code {:04x}:  {:?}",code, cpu);
-        }
-    }
-}
-
-fn op_0028(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,8)
-}
-
-fn op_000d(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-
-fn op_0023(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,8)
-}
-
-fn op_0022(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,8)
-}
-
-fn op_0013_inc_de(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,8)
-}
-
-fn op_00cd_call_a16(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (3,24)
-}
-
-fn op_001a_LD_A_DE(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,8)
-}
-fn op_007b_LD_A_E(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_00fe_CP_d8(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,8)
-}
-fn op_0005(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_00ea(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (3,16)
-}
-fn op_003d(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_002e(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,8)
-}
-fn op_0018(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,12)
-}
-fn op_0004(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_001e(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,8)
-}
-fn op_00f0(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,12)
-}
-fn op_001d(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_0024(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_007c(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_00f2(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,8)
-}
-
-
-fn op_0090(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_0015(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-fn op_0017(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,4)
-}
-
-fn op_00c5(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.sp = cpu.r.sp -1;
-    mmu.write8(cpu.r.sp,cpu.r.b);
-    cpu.r.sp = cpu.r.sp -1;
-    mmu.write8(cpu.r.sp,cpu.r.c);
-    (1,16)
-}
-fn op_cb11(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (2,8)
-}
-fn op_00c1(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,12)
-}
-fn op_00c9(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    (1,16)
-}
-
-
-fn op_to_name(op: u16) -> &'static str {
-    match op {
-        0x00_AF => "XOR A",
-        0x00_32 => "LD (HL-) A",
-        0xCB_7C => "BIT 7 H",
-        0xCB_11 => "RL C",
-        0x00_20 => "JR NZ.+",
-        0x00_e2 => "LD (C),A",
-        0x00_0c => "INC C",
-        0x00_77 => "LD (HL) A",
-        0x00_e0 => "LDH (a8),A",
-        0x00_1a => "LD A,(DE)",
-        0x00_cd => "CALL a16",
-        0x00_13 => "INC DE",
-        0x00_7b => "LD A,E",
-        0x00_fe => "CP d8",
-        0x00_05 => "DEC B",
-        0x00_22 => "LD (HL+),A",
-        0x00_23 => "INC HL",
-        0x00_ea => "LD (a16), A",
-        0x00_3d => "DEC A",
-        0x00_28 => "JR Z, r8",
-        0x00_0d => "DEC C",
-        0x00_18 => "JR r8",
-        0x00_04 => "INC B",
-        0x00_f0 => "LDH A,(a8)",
-        0x00_1d => "DEC E",
-        0x00_24 => "INC H",
-        0x00_7c => "LD A,H",
-        0x00_f2 => "LD A,(C)",
-
-
-        0x00_90 => "SUB B",
-        0x00_15 => "DEC D",
-        0x00_c5 => "PUSH BC",
-        0x00_17 => "RLA",
-        0x00_c1 => "POP BC",
-        0x00_c9 => "RET",
-        _ => {
-            panic!("unknown op code {:04x}:",op);
-        }
-    }
+    panic!("unknown op code {:04x}", code);
 }
 
 struct RomFile {
@@ -385,57 +195,46 @@ fn run_bootrom() {
 }
 
 
-
-// INC C
-fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    // println!("INC C");
-    cpu.r.c += 1;
-    (1,8)
-}
-
-// LD (C),A
-fn op_00e2_LD_CA(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    let addr:u16 = ((0xFF00 as u16) + (cpu.r.c as u16)) as u16;
-    mmu.write8(addr, cpu.r.a);
-    (1,8)
-}
-
-// JUMP if not zero to the address
-fn op_0020_JR_NZ_r8(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    if !cpu.r.zero_flag {
-        let off = mmu.read8(cpu.r.pc+1);
-        //convert off to i8 then i32 so it will be interpreted as signed
-        let addr = ((cpu.r.pc+2) as i32) + (off as i8 as i32);
-        //subtract off an extra two because the CPU will automatically move us forward two
-        cpu.r.pc =  (addr - 2) as u16;
-    }
-    (2,12)
-}
-
-
-// XOR A
-fn op_00AF_XOR_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.a.bitxor_assign(cpu.r.a);
-    (1,4)
-}
-//16bit register loads
-
-// load register A into memory pointed at by HL, then decrement HL
-fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    mmu.write8(cpu.r.get_hl(),cpu.r.a);
-    cpu.r.set_hl(cpu.r.get_hl()-1);
-    (1,8)
-}
-// load register A into memory pointed at by HL
-fn op_0077_LD_HL_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    mmu.write8(cpu.r.get_hl(),cpu.r.a);
-    (1,8)
-}
-// BIT 7,H
-fn op_CB76_BIT_7_H(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-    cpu.r.zero_flag = !((cpu.r.h & 0b1000_0000) > 0);
-    (2,8)
-}
+//
+// // INC C
+// fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+//     // println!("INC C");
+//     cpu.r.c += 1;
+//     (1,8)
+// }
+//
+// // LD (C),A
+// fn op_00e2_LD_CA(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+//     let addr:u16 = ((0xFF00 as u16) + (cpu.r.c as u16)) as u16;
+//     mmu.write8(addr, cpu.r.a);
+//     (1,8)
+// }
+//
+//
+//
+// // XOR A
+// fn op_00AF_XOR_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+//     cpu.r.a.bitxor_assign(cpu.r.a);
+//     (1,4)
+// }
+// //16bit register loads
+//
+// // load register A into memory pointed at by HL, then decrement HL
+// fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+//     mmu.write8(cpu.r.get_hl(),cpu.r.a);
+//     cpu.r.set_hl(cpu.r.get_hl()-1);
+//     (1,8)
+// }
+// // load register A into memory pointed at by HL
+// fn op_0077_LD_HL_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+//     mmu.write8(cpu.r.get_hl(),cpu.r.a);
+//     (1,8)
+// }
+// // BIT 7,H
+// fn op_CB76_BIT_7_H(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
+//     cpu.r.zero_flag = !((cpu.r.h & 0b1000_0000) > 0);
+//     (2,8)
+// }
 
 fn execute(cpu: &mut Z80, mmu: &mut MMU) {
     // println!("PC at {:04x}",cpu.r.pc);

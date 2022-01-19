@@ -50,6 +50,12 @@ impl MMU {
         return b1 + (b2 << 8);
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
+        if addr == SB_REGISTER {
+            println!("wrote to the SB register {:04x}", val);
+        }
+        if addr == SC_REGISTER {
+            println!("wrote to the SC register {:04x}", val);
+        }
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
@@ -65,3 +71,5 @@ impl MMU {
 
 const VRAM_START:u16 = 0x8000;
 const VRAM_END:u16 = 0x9FFF;
+const SB_REGISTER:u16 = 0xFF01;
+const SC_REGISTER:u16 = 0xff02;
