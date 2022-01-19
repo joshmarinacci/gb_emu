@@ -17,7 +17,7 @@ use log::{info, LevelFilter};
 use structopt::StructOpt;
 use crate::cpu::{OpList, Z80};
 use crate::mmu::MMU;
-use crate::opcodes::{LD, RegisterName};
+use crate::opcodes::{DEC, INC, LD, LD_r_u8, RegisterName};
 use crate::RegisterName::{A, B, C, D, E, H, L};
 
 
@@ -35,8 +35,15 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
 }
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
     let res:Option<(usize,usize)> = match code {
+        // 8bit immediate value to register copy: LD r,n
+        0x06 => LD_r_u8(B,cpu,mmu),
+        0x0E => LD_r_u8(C,cpu,mmu),
+        0x16 => LD_r_u8(D,cpu,mmu),
+        0x1E => LD_r_u8(E,cpu,mmu),
+        0x26 => LD_r_u8(H,cpu,mmu),
+        0x2E => LD_r_u8(L,cpu,mmu),
 
-        // 8bit register to register copies
+        // 8bit register to register copies:  LD r,r
         0x78 => LD(A, B, cpu),
         0x79 => LD(A, C, cpu),
         0x7A => LD(A, D, cpu),
@@ -87,6 +94,24 @@ fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
         0x6B => LD(L, E, cpu),
         0x6C => LD(L, H, cpu),
         0x6D => LD(L, L, cpu),
+
+        // Register Increments
+        0x3C => INC(A, cpu),
+        0x04 => INC(B, cpu),
+        0x0C => INC(C, cpu),
+        0x14 => INC(D, cpu),
+        0x1C => INC(E, cpu),
+        0x24 => INC(H, cpu),
+        0x2C => INC(L, cpu),
+
+        //register decrements
+        0x3d => DEC(A,cpu),
+        0x05 => DEC(B,cpu),
+        0x0d => DEC(C,cpu),
+        0x15 => DEC(D,cpu),
+        0x1d => DEC(E,cpu),
+        0x25 => DEC(H,cpu),
+        0x2d => DEC(L,cpu),
 
         _ => {None}
     };

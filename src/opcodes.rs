@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use crate::cpu::Op;
-use crate::{OpList, Z80};
+use crate::{MMU, OpList, Z80};
 
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
@@ -8,10 +8,6 @@ pub fn setup_op_codes() -> OpList {
     //NO-OP
     ol.add(0x00_00,"NOOP",1,1, |cpu,mmu|());
 
-    // Load immediate into 8 bit register
-    // ol.add(0x00_06,"LD B, d8",2,8,|cpu,mmu|cpu.r.b = mmu.read8(cpu.r.pc+1));
-    // ol.add(0x00_16,"LD D, d8",2,8,|cpu,mmu|cpu.r.d = mmu.read8(cpu.r.pc+1));
-    // ol.add(0x00_26,"LD H, d8",2,8,|cpu,mmu|cpu.r.h = mmu.read8(cpu.r.pc+1));
     //
     ol.add(0x000e,"LD C, d8",2,8,|cpu,mmu|cpu.r.c = mmu.read8(cpu.r.pc+1));
     // ol.add(0x00_1e,"LD E, d8",2,8,|cpu,mmu|cpu.r.e = mmu.read8(cpu.r.pc+1));
@@ -128,85 +124,6 @@ pub fn setup_op_codes() -> OpList {
     // });
     //
 
-    // // ====== INCREMENT Registers ==========
-    // ol.add(0x003c,"INC A",1,1,|cpu,mmu|{
-    //     println!("register a contains {:x}",cpu.r.a);
-    //     let (v2, changed) = cpu.r.a.overflowing_add(1);
-    //     println!("now it is {:x} flipped={}",v2, changed);
-    //     cpu.r.a = v2;
-    //     if cpu.r.a == 0 { cpu.r.zero_flag = true; }
-    //     cpu.r.subtract_n_flag = false;
-    //     println!("zero flag is {}",cpu.r.zero_flag);
-    //     // cpu.r.h_flag
-    // });
-    ol.ops.insert(0x003c, Op{
-        //INC
-        name: format!("INC {}",RegisterName::A),
-        inst_len: 1,
-        tim_len: 1,
-        fun: (|cpu,mmu|{
-            let r = RegisterName::A;
-            let old_value = get_cpu_register_u8(cpu,&r);
-            println!("register a contains {:x}",old_value);
-            let (new_value, changed) = old_value.overflowing_add(1);
-            println!("now it is {:x} flipped={}", new_value, changed);
-            set_cpu_register_u8(cpu,&r,new_value);
-            // cpu.r.a = new_value;
-            if new_value == 0 { cpu.r.zero_flag = true; }
-            cpu.r.subtract_n_flag = false;
-            println!("zero flag is {}",cpu.r.zero_flag);
-        })
-    });
-    ol.add(0x001c,"INC E",1,1,|cpu,mmu|{
-        println!("register e contains {:x}",cpu.r.e);
-        let (v2, changed) = cpu.r.e.overflowing_add(1);
-        println!("now it is {:x} flipped={}",v2, changed);
-        cpu.r.e = v2;
-        if cpu.r.e == 0 { cpu.r.zero_flag = true; }
-        cpu.r.subtract_n_flag = false;
-        println!("zero flag is {}",cpu.r.zero_flag);
-        // cpu.r.h_flag
-    });
-    ol.add(0x0014,"INC D",1,1,|cpu,mmu|{
-        println!("register D contains {:x}",cpu.r.d);
-        let (v2, changed) = cpu.r.d.overflowing_add(1);
-        println!("now it is {:x} flipped={}",v2, changed);
-        cpu.r.d = v2;
-        if cpu.r.d == 0 { cpu.r.zero_flag = true; }
-        cpu.r.subtract_n_flag = false;
-        println!("zero flag is {}",cpu.r.zero_flag);
-        // cpu.r.h_flag
-    });
-
-    ol.add(0x000d,"DEC C",1,1,|cpu,mmu|{
-        println!("register c contains {:x}",cpu.r.c);
-        let (v2, changed) = cpu.r.c.overflowing_sub(1);
-        println!("now it is {:x} flipped={}",v2, changed);
-        cpu.r.c = v2;
-        if cpu.r.c == 0 { cpu.r.zero_flag = true; }
-        cpu.r.subtract_n_flag = true;
-        println!("zero flag is {}",cpu.r.zero_flag);
-        // cpu.r.h_flag
-    });
-
-    // ol.add(0x001c,"DEC C",1,1,|cpu,mmu|{
-    //     println!("register e contains {:x}",cpu.r.e);
-    //     let (v2, changed) = cpu.r.e.overflowing_add(1);
-    //     println!("now it is {:x} flipped={}",v2, changed);
-    //     cpu.r.e = v2;
-    //     if cpu.r.e == 0 { cpu.r.zero_flag = true; }
-    //     cpu.r.subtract_n_flag = false;
-    //     println!("zero flag is {}",cpu.r.zero_flag);
-    //     // cpu.r.h_flag
-    // });
-    // ol.add(0x00_3c,"INC A",1,1,|cpu,mmu|{
-    //     cpu.r.a = cpu.r.a + 1;
-    //     if cpu.r.a == 0 { cpu.r.zero_flag = true; }
-    //     cpu.r.subtract_n_flag = false;
-    // });
-    //
-
-
     // //Load A, (HL+)
     ol.add(0x002a,"LD A, (HL+)",1,2,|cpu,mmu|{
         cpu.r.a = mmu.read8(cpu.r.get_hl());
@@ -239,6 +156,35 @@ pub fn LD(r1: RegisterName, r2: RegisterName, cpu:&mut Z80) -> Option<(usize, us
     set_cpu_register_u8(cpu, &r1, value);
     Some((1,1))
 }
+pub fn LD_r_u8(reg: RegisterName, cpu:&mut Z80, mmu:&mut MMU) -> Option<(usize, usize)> {
+    set_cpu_register_u8(cpu, &reg, mmu.read8(cpu.r.pc+1));
+    Some((2,8))
+}
+pub fn INC(reg:RegisterName, cpu:&mut Z80) -> Option<(usize, usize)> {
+    let old_value = get_cpu_register_u8(cpu,&reg);
+    // println!("register a contains {:x}",old_value);
+    let (new_value, changed) = old_value.overflowing_add(1);
+    //         println!("now it is {:x} flipped={}", new_value, changed);
+    set_cpu_register_u8(cpu,&reg,new_value);
+    //         // cpu.r.a = new_value;
+    if new_value == 0 { cpu.r.zero_flag = true; }
+    cpu.r.subtract_n_flag = false;
+    //         println!("zero flag is {}",cpu.r.zero_flag);
+    Some((1,1))
+}
+
+pub fn DEC(reg:RegisterName, cpu:&mut Z80) -> Option<(usize, usize)> {
+    // println!("register c contains {:x}",get_cpu_register_u8(cpu,&reg));
+    let (v2, changed) = get_cpu_register_u8(cpu,&reg).overflowing_sub(1);
+    // println!("now it is {:x} flipped={}",v2, changed);
+    set_cpu_register_u8(cpu,&reg,v2);
+    // cpu.r.c = v2;
+    if v2 == 0 { cpu.r.zero_flag = true; }
+    cpu.r.subtract_n_flag = true;
+    // println!("zero flag is {}",cpu.r.zero_flag);
+    Some((1,1))
+}
+
 
 fn u8_as_i8(v: u8) -> i8 {
     return v as i8
