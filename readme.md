@@ -13,3 +13,9 @@ To try executing one of the test roms
 ```shell
 cargo run "./resources/testroms/cpu_instrs/individual/04-op r,imm.gb"
 ```
+
+
+
+`hello-world.gb` is from [here](https://github.com/dusterherz/gb-hello-world) by 'dusterherz'.
+
+

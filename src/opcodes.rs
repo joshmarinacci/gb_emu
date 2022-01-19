@@ -64,8 +64,17 @@ pub fn setup_op_codes() -> OpList {
     });
 
     //MATH
-    ol.add(0x00AF,"XOR A,A",1,1,|cpu,mmu|{
-        cpu.r.a = cpu.r.a ^ cpu.r.a
+    ol.add(0xAF,"XOR A,A",1,1,|cpu,mmu|{
+        cpu.r.a = cpu.r.a ^ cpu.r.a;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+    });
+    ol.add(0xA8,"XOR A,B",1,1,|cpu,mmu|{
+        cpu.r.a = cpu.r.b ^ cpu.r.a;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+    });
+    ol.add(0xA9,"XOR A,C",1,1,|cpu,mmu|{
+        cpu.r.a = cpu.r.b ^ cpu.r.a;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
     });
 
 
@@ -90,10 +99,10 @@ pub fn setup_op_codes() -> OpList {
     });
     //jump to relative immediate address if condition, signed immediate value.
     //check the carry flag
-    ol.add(0x0038, "JR cc,e Carry Flag",0,4,|cpu,mmu|{
+    ol.add(0x38, "JR cc,e Carry Flag",0,4,|cpu,mmu|{
         let e = mmu.read8(cpu.r.pc+1);
         cpu.r.pc += 2;
-        println!("immediate value is 0x{:x} {} {}",e, (e as i8), u8_as_i8(e));
+        // println!("immediate value is 0x{:x} {} {}",e, (e as i8), u8_as_i8(e));
         println!("carry flag is set to {}",cpu.r.carry_flag);
         if cpu.r.carry_flag {
             // let v2 = (e as i8);
@@ -104,6 +113,8 @@ pub fn setup_op_codes() -> OpList {
             let addr = (((cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
             cpu.r.pc =  addr as u16;
             println!("jumping to {:04x}", cpu.r.pc);
+        } else {
+            println!("not jumping, just continuing");
         }
     });
     //unconditional Jump to relative address specified by signed 8bit immediate value
@@ -156,12 +167,19 @@ pub fn setup_op_codes() -> OpList {
     });
 
 
-    ol.add(0xB1,"OR C",1,1,|cpu,mmu|{
-        println!("ORING C with itself");
-        cpu.r.c = cpu.r.c | cpu.r.c;
+    ol.add(0xB1,"OR A, C",1,1,|cpu,mmu|{
+        println!("ORING C with A");
+        cpu.r.a = cpu.r.c | cpu.r.a;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
     });
+    ol.add(0xB2,"OR A, D",1,1,|cpu,mmu|{
+        println!("ORING C with D");
+        cpu.r.a = cpu.r.d | cpu.r.a;
+        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+    });
+
     ol.add(0xA7,"AND A",1,1,|cpu,mmu|{
-        println!("ORING A with itself");
+        println!("ANDING A with itself");
         cpu.r.a = cpu.r.a | cpu.r.a;
     });
     ol.add(0x0012,"LD (DE),A",1,2,|cpu,mmu|{

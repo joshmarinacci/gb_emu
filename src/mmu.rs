@@ -97,7 +97,7 @@ impl MMU {
             println!("reading from vram {:04x}",addr);
         }
         if addr == LY_LCDC_Y_COORD {
-            println!("reading LY LCDC_Y_COORD");
+            // println!("reading LY LCDC_Y_COORD");
             return self.hardware.ly;
         }
         self.data[addr as usize]
@@ -120,8 +120,11 @@ impl MMU {
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
-        if addr == 0xFF40+0x40 {
+        if addr == LCDC_LCDCONTROL {
             println!("writing to turn on the LCD Display");
+        }
+        if addr == STAT_LCDCONTROL {
+            println!("writing to stat the LCD Display");
         }
         if addr == 0xFF47 {
             println!("writing to special LCD register")
