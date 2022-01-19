@@ -6,6 +6,15 @@ mod opcodes;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::ops::BitXorAssign;
+use std::path::PathBuf;
+use std::{fs, thread};
+use std::io::Error;
+use std::time::Duration;
+use log4rs::append::file::FileAppender;
+use log4rs::Config;
+use log4rs::config::{Appender, Root};
+use log::{info, LevelFilter};
+use structopt::StructOpt;
 use crate::cpu::{OpList, Z80};
 use crate::mmu::MMU;
 
@@ -22,17 +31,6 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
         (fb as u16, 1)
     }
 }
-// NOOP
-// fn op_0000(arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
-//     (4,1)
-// }
-// LD (HL),nn -> load to
-// LD (HL),n -> load to memory at address in HL from arg n
-// fn op_0036(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     mmu.write16(cpu.r.get_hl(),arg);
-//     cpu.r.sp += 2; //increment PC
-//     (3,12)
-// }
 fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU) -> (usize, usize) {
 
     if let Some(op) = cpu.ops.ops.get(&code) {
@@ -234,10 +232,43 @@ fn op_to_name(op: u16) -> &'static str {
     }
 }
 
+struct RomFile {
+    data: Vec<u8>,
+}
 
 fn main() {
+    let args = init_setup();
+    if let Some(pth) = args.romfile {
+        println!("loading the romfile {:?}", pth.as_path());
+        if let Ok(cart) = load_romfile(pth) {
+            run_romfile(cart);
+        }
+    } else {
+        run_bootrom();
+    }
+}
+
+fn run_romfile(cart: RomFile) {
+    println!("running the cart {:?}", cart.data.len());
     let mut cpu = Z80::init();
-    let mut mmu = MMU::init();
+    let mut mmu = MMU::init_with_rom_no_header(&cart.data);
+    cpu.reset();
+    loop {
+        execute(&mut cpu, &mut mmu);
+    }
+}
+
+fn load_romfile(pth: PathBuf) -> Result<RomFile,Error> {
+    let data:Vec<u8> = fs::read(pth)?;
+    Ok(RomFile {
+        data:data,
+    })
+}
+
+fn run_bootrom() {
+    println!("======= running the bootrom ===== ");
+    let mut cpu = Z80::init();
+    let mut mmu = MMU::init_with_bootrom();
     cpu.reset();
 
     //by following along from
@@ -417,3 +448,43 @@ fn execute(cpu: &mut Z80, mmu: &mut MMU) {
     // cpu.r.pc = cpu.r.pc.wrapping_add(size_of_inst as u16);
 }
 
+
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "gbemu", about = "gb emulator")]
+struct Cli {
+    #[structopt(long)]
+    debug:bool,
+    #[structopt(parse(from_os_str))]
+    romfile: Option<PathBuf>,
+}
+
+fn init_setup() -> Cli {
+    let args:Cli = Cli::from_args();
+    let loglevel = if args.debug { LevelFilter::Debug } else { LevelFilter::Error };
+
+    // create file appender with target file path
+    let logfile = FileAppender::builder()
+        .build("log/output.log").expect("error setting up file appender");
+
+    // make a config
+    let config = Config::builder()
+        //add the file appender
+        .appender(Appender::builder().build("logfile", Box::new(logfile)))
+        //now make it
+        .build(Root::builder()
+            .appender("logfile") // why do we need to mention logfile again?
+            .build(loglevel)).expect("error setting up log file");
+
+    log4rs::init_config(config).expect("error initing config");
+
+    thread::sleep(Duration::from_millis(100));
+    println!("logging to log/output.log");
+    for i in 0..5 {
+        info!("        ");
+    }
+    info!("==============");
+    info!("starting new run");
+    info!("running with args {:?}",args);
+    return args;
+}

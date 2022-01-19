@@ -11,15 +11,29 @@ pub struct MMU {
 }
 
 impl MMU {
-    pub fn init() -> MMU {
+    pub fn init_with_bootrom() -> MMU {
+        let mut data:Vec<u8> = vec![0; 66000];
+        let bios = Vec::from(BOOT_ROM);
+        for i in 0..bios.len() {
+            data[i] = bios[i]
+        }
         MMU {
             inbios: true,
-            bios: Vec::from(BOOT_ROM),
-            // wram: vec![u8; 8192],
-            // eram: vec![u8; 8192],
-            // zram: vec![u8; 127],
-            // rom: vec![u8; 0],
-            data: vec![0;66000],
+            bios: bios,
+            data: data,
+        }
+    }
+    pub fn init_with_rom_no_header(rom:&Vec<u8>) -> MMU {
+        let mut data:Vec<u8> = vec![0; 66000];
+        let len = rom.len();
+        for i in 0..len {
+            data[i] = rom[i];
+        }
+        let bios = Vec::from(BOOT_ROM);
+        MMU {
+            inbios:false,
+            bios:bios,
+            data:data,
         }
     }
     pub fn read8(&self, addr:u16) -> u8 {
@@ -27,7 +41,7 @@ impl MMU {
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("reading from vram {:04x}",addr);
         }
-        self.bios[addr as usize]
+        self.data[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
         // println!("reading from bios at location {:04x}",addr);

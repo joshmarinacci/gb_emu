@@ -3,6 +3,9 @@ use crate::OpList;
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
 
+    //NO-OP
+    ol.add(0x00_00,"NOOP",1,1, |cpu,mmu|());
+
     // Load immediate into 8 bit register
     ol.add(0x00_06,"LD B, d8",2,8,|cpu,mmu|cpu.r.b = mmu.read8(cpu.r.pc+1));
     ol.add(0x00_16,"LD D, d8",2,8,|cpu,mmu|cpu.r.d = mmu.read8(cpu.r.pc+1));
