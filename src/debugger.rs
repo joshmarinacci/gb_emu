@@ -201,6 +201,15 @@ impl Ctx {
                 self.mmu.write8(addr,v);
                 self.inc_pc(1);
             },
+            //LD (FF00+C),A    put contents of A into address 0xF00+C
+            Load::Load_high_r_r(off,r) => {
+                self.inc_pc(1);
+                let v = self.cpu.r.get_u8reg(r);
+                let addr = (0xFF00 as u16) + (self.cpu.r.get_u8reg(off) as u16);
+                println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
+                self.mmu.write8(addr,v);
+                self.inc_pc(1);
+            }
             Load::Load_r_r(dst, src) => {
                 self.inc_pc(1);
                 let val = self.cpu.r.get_u8reg(src);
@@ -378,6 +387,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8",r),
         Instr::Load(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High: put contents of 0xFF00 + u8 into register {}",r,r),
         Instr::Load(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}",r,r),
+        Instr::Load(Load::Load_high_r_r(off, src)) => format!("LD (FF00 + {},{}  -- Load High: put contents of register {} into memory of 0xFF00 + {} ",off,src,src,off),
         Instr::Load(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}",rr,rr),
         Instr::Load(Load::Load_r_addr_R2(rr)) => format!("LD A, ({}) -- load data pointed to by {} into A",rr,rr),
         Instr::Load(Load::Load_addr_R2_A(rr)) => format!("LD (rr),A -- load contents of A into memory pointed to by {}",rr),

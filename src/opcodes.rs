@@ -263,8 +263,11 @@ pub enum Special {
 pub enum Load {
     Load_r_u8(RegisterName),
     Load_r_r(RegisterName,RegisterName),
+
     Load_high_r_u8(RegisterName),
     Load_high_u8_r(RegisterName),
+    Load_high_r_r(RegisterName,RegisterName),
+
     Load_R2_u16(DoubleRegister),
     Load_r_addr_R2(DoubleRegister),
     Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
@@ -433,7 +436,9 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
         0x02 => Some(Instr::Load(Load::Load_addr_R2_A(BC))),
         0x12 => Some(Instr::Load(Load::Load_addr_R2_A(DE))),
+        0x77 => Some(Instr::Load(Load::Load_addr_R2_A(HL))),
 
+        0xe2 => Some(Instr::Load(Load::Load_high_r_r(C,A))),
 
 
         0x00 => Some(Instr::Special(NOOP())),
