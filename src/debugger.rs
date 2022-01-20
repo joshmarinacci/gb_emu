@@ -2,7 +2,7 @@ use std::io;
 use console::Term;
 use io::Result;
 use serde_json::Value;
-use crate::{A, execute, fetch_opcode_from_memory, MMU, RegisterName, Z80};
+use crate::{A, Cli, execute, fetch_opcode_from_memory, MMU, RegisterName, Z80};
 use crate::common::RomFile;
 use crate::opcodes::{Compare, decode, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
 
@@ -10,6 +10,7 @@ struct Ctx {
     cpu:Z80,
     mmu:MMU,
     opcodes:Value,
+    clock:u32,
 }
 
 impl Ctx {
@@ -24,6 +25,7 @@ impl Ctx {
             panic!("unknown op code");
         }
         self.mmu.update();
+        self.clock+=1;
     }
     fn execute_instruction(&mut self, inst: &Instr) {
         println!("executing");
@@ -118,6 +120,26 @@ impl Ctx {
                 let mut val = self.cpu.r.get_u16reg(rr);
                 val -= 1;
                 self.cpu.r.set_u16reg(rr, val);
+            }
+            Math::BIT(b,r) => {
+                self.inc_pc(1);
+                let val = self.cpu.r.get_u8reg(r);
+                let mask = match b {
+                    0 => 0b0000_0001,
+                    1 => 0b0000_0010,
+                    2 => 0b0000_0100,
+                    3 => 0b0000_1000,
+                    4 => 0b0001_0000,
+                    5 => 0b0010_0000,
+                    6 => 0b0100_0000,
+                    7 => 0b1000_0000,
+                    _ => {
+                        panic!("we can't look at bits higher than 7")
+                    }
+                };
+                self.cpu.r.zero_flag = !((val & mask) > 0);
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = true;
             }
         }
     }
@@ -250,16 +272,20 @@ impl Ctx {
     }
 }
 
-pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, opcodes};
+pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
+    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0};
     let mut term = Term::stdout();
+
+    for n in 0..fast_forward {
+        ctx.execute(&mut term);
+    }
 
     loop {
         term.clear_screen()?;
         if let Some(cart) = &cart {
             term.write_line(&format!("executing rom {}", cart.path))?;
         }
-        term.write_line(&format!("op count {}",&ctx.cpu.ops.ops.len()))?;
+        term.write_line(&format!("clock {}",&ctx.clock))?;
         term.write_line(&format!("========="))?;
 
         // print the current memory
@@ -358,7 +384,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}",rr,rr,rr),
         Instr::Load(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}",rr,rr,rr),
         Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
-        // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+        Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
 
 
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
@@ -366,6 +392,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Jump(Jump::JumpRelative_cond_notzero_u8()) => format!("JR NZ,e -- Jump relative if Not Zero flag set"),
         Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
+
         Instr::Math(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
@@ -374,7 +401,9 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}. sets flags",rr,rr),
         Instr::Math(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags",r,r),
         Instr::Math(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags",r,r),
-        Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
+
+        Instr::Math(Math::BIT(bit, r)) => format!("BIT {:0x}, {}",bit,r),
+
 
         Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
         Instr::Special(Special::NOOP()) => format!("NOOP -- do nothing"),

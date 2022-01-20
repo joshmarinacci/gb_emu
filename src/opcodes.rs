@@ -289,6 +289,7 @@ pub enum Math {
     Inc_rr(DoubleRegister),
     Dec_r(RegisterName),
     Dec_rr(DoubleRegister),
+    BIT(u8,RegisterName),
 }
 pub enum Instr {
     Load(Load),
@@ -499,6 +500,8 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x3B => Some(Instr::Math(Math::Dec_rr(SP))),
         0x3C => Some(Instr::Math(Math::Inc_r(A))),
         0x3D => Some(Instr::Math(Math::Dec_r(A))),
+
+        0xCB7C => Some(Instr::Math(Math::BIT(7, H))),
 
         _ => {
             println!("WARNING. can't lookup opcode {:04x}",code);
