@@ -145,8 +145,10 @@ impl Ctx {
     }
     fn execute_load_instructions(&mut self, load: &Load) {
         match load {
-            Load::Load_r_u8(_) => {
-                todo!()
+            Load::Load_r_u8(r) => {
+                self.inc_pc(1);
+                let n = self.mmu.read8(self.cpu.r.pc);
+                self.cpu.r.set_u8reg(r,n);
             }
             // put the memory address 0xFF00 + n into register r
             Load::Load_high_r_u8(r) => {
@@ -180,12 +182,22 @@ impl Ctx {
                 println!("copied immediate value {:04x} into register {}",val,rr)
             }
             Load::Load_r_addr_R2(rr) => {
+                // load to the 8bit register A, data from the address in the 16 bit register
                 self.inc_pc(1);
                 let addr = self.cpu.r.get_u16reg(rr);
                 let val = self.mmu.read8(addr);
                 self.cpu.r.set_u8reg(&A,val);
                 println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
             }
+            Load::Load_A_addr_R2_inc(rr) => {
+                // load to the 8bit register A, data from the address in the 16 bit register, then increment that register
+                self.inc_pc(1);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let val = self.mmu.read8(addr);
+                self.cpu.r.set_u8reg(&A,val);
+                println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
+                self.cpu.r.set_u16reg(rr,self.cpu.r.get_u16reg(rr)+1);
+            },
             Load::Load_addr_R2_A_inc(rr) => {
                 self.inc_pc(1);
                 let val = self.cpu.r.get_u8reg(&A);
@@ -194,6 +206,13 @@ impl Ctx {
                 self.cpu.r.set_hl(self.cpu.r.get_hl()+1);
             }
 
+            Load::Load_addr_R2_A(rr) => {
+                //copy contents of A to memory pointed to by RR
+                self.inc_pc(1);
+                let val = self.cpu.r.get_u8reg(&A);
+                let addr = self.cpu.r.get_u16reg(rr);
+                self.mmu.write8(addr,val);
+            }
         }
     }
     fn execute_special_instructions(&mut self, special: &Special) {
@@ -201,6 +220,13 @@ impl Ctx {
             Special::DisableInterrupts() => {
                 println!("pretending to disable iterrupts");
                 self.inc_pc(1);
+            }
+            Special::NOOP() => {
+                self.inc_pc(1);
+            }
+            Special::STOP() => {
+                self.inc_pc(1);
+                println!("stopping interrupts");
             }
         }
     }
@@ -301,12 +327,13 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
 fn lookup_opcode_info(op: Instr) -> String {
     match op {
         Instr::Load(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8",r),
-        Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
         Instr::Load(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High: put contents of 0xFF00 + u8 into register {}",r,r),
         Instr::Load(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}",r,r),
         Instr::Load(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}",rr,rr),
         Instr::Load(Load::Load_r_addr_R2(rr)) => format!("LD A, ({}) -- load data pointed to by {} into A",rr,rr),
+        Instr::Load(Load::Load_addr_R2_A(rr)) => format!("LD (rr),A -- load contents of A into memory pointed to by {}",rr),
         Instr::Load(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}",rr,rr,rr),
+        Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
         // Load (HL+), A, copy contents of A into memory at HL, then INC HL
 
 
@@ -323,6 +350,10 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags",r,r),
         Instr::Math(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags",r,r),
         Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
+
+        Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
+        Instr::Special(Special::NOOP()) => format!("NOOP -- do nothing"),
+        Instr::Special(Special::STOP()) => format!("STOP -- stop interrupts?"),
     }
 }
 

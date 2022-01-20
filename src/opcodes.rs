@@ -3,13 +3,15 @@ use serde_json::Value;
 use crate::cpu::Op;
 use crate::{MMU, OpList, Z80};
 use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
+use crate::opcodes::Load::Load_r_u8;
+use crate::opcodes::Special::{DisableInterrupts, NOOP, STOP};
 use crate::RegisterName::{A, B, C, D, E, H, L};
 
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
 
     //NO-OP
-    ol.add(0x00_00,"NOOP",1,1, |cpu,mmu|());
+    // ol.add(0x00_00,"NOOP",1,1, |cpu,mmu|());
 
     //
     ol.add(0x000e,"LD C, d8",2,8,|cpu,mmu|cpu.r.c = mmu.read8(cpu.r.pc+1));
@@ -147,10 +149,10 @@ pub fn setup_op_codes() -> OpList {
     //
 
     // //Load A, (HL+),  copy contents of memory at HL to A, then INC HL
-    ol.add(0x2a,"LD A, (HL+)",1,2,|cpu,mmu|{
-        cpu.r.a = mmu.read8(cpu.r.get_hl());
-        cpu.r.set_hl(cpu.r.get_hl()+1);
-    });
+    // ol.add(0x2a,"LD A, (HL+)",1,2,|cpu,mmu|{
+    //     cpu.r.a = mmu.read8(cpu.r.get_hl());
+    //     cpu.r.set_hl(cpu.r.get_hl()+1);
+    // });
     // Load (HL+), A, copy contents of A into memory at HL, then INC HL
     // ol.add(0x22,"LD (HL+), A",1,2,|cpu,mmu|{
     //     mmu.write8(cpu.r.get_hl(),cpu.r.a);
@@ -254,7 +256,9 @@ pub enum DoubleRegister {
     BC,DE,HL, SP,
 }
 pub enum Special {
-    DisableInterrupts()
+    NOOP(),
+    STOP(),
+    DisableInterrupts(),
 }
 pub enum Load {
     Load_r_u8(RegisterName),
@@ -264,6 +268,8 @@ pub enum Load {
     Load_R2_u16(DoubleRegister),
     Load_r_addr_R2(DoubleRegister),
     Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+    Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
+    Load_addr_R2_A(DoubleRegister),      // Load (rr), A
 }
 pub enum Jump {
     JumpAbsolute_u16(),
@@ -344,45 +350,93 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
         // loads
         0x40 => Some(Instr::Load(Load::Load_r_r(B,B))),
-        0x50 => Some(Instr::Load(Load::Load_r_r(D,B))),
-        0x60 => Some(Instr::Load(Load::Load_r_r(H,B))),
         0x41 => Some(Instr::Load(Load::Load_r_r(B,C))),
-        0x51 => Some(Instr::Load(Load::Load_r_r(D,C))),
-        0x61 => Some(Instr::Load(Load::Load_r_r(H,C))),
         0x42 => Some(Instr::Load(Load::Load_r_r(B,D))),
-        0x52 => Some(Instr::Load(Load::Load_r_r(D,D))),
-        0x62 => Some(Instr::Load(Load::Load_r_r(H,D))),
         0x43 => Some(Instr::Load(Load::Load_r_r(B,E))),
-        0x53 => Some(Instr::Load(Load::Load_r_r(D,E))),
-        0x63 => Some(Instr::Load(Load::Load_r_r(H,E))),
-
         0x44 => Some(Instr::Load(Load::Load_r_r(B,H))),
-        0x54 => Some(Instr::Load(Load::Load_r_r(D,H))),
-        0x64 => Some(Instr::Load(Load::Load_r_r(H,H))),
         0x45 => Some(Instr::Load(Load::Load_r_r(B,L))),
-        0x55 => Some(Instr::Load(Load::Load_r_r(D,L))),
-        0x65 => Some(Instr::Load(Load::Load_r_r(H,L))),
-
+        0x47 => Some(Instr::Load(Load::Load_r_r(B,A))),
         0x48 => Some(Instr::Load(Load::Load_r_r(C,B))),
-        0x58 => Some(Instr::Load(Load::Load_r_r(E,B))),
-        0x68 => Some(Instr::Load(Load::Load_r_r(L,B))),
-        0x78 => Some(Instr::Load(Load::Load_r_r(A,B))),
+        0x49 => Some(Instr::Load(Load::Load_r_r(C,C))),
+        0x4A => Some(Instr::Load(Load::Load_r_r(C,D))),
+        0x4B => Some(Instr::Load(Load::Load_r_r(C,E))),
+        0x4C => Some(Instr::Load(Load::Load_r_r(C,H))),
+        0x4D => Some(Instr::Load(Load::Load_r_r(C,L))),
+        0x4F => Some(Instr::Load(Load::Load_r_r(C,A))),
 
-        0x06 => Some(Instr::Load(Load::Load_r_u8(B))),
+        0x50 => Some(Instr::Load(Load::Load_r_r(D,B))),
+        0x51 => Some(Instr::Load(Load::Load_r_r(D,C))),
+        0x52 => Some(Instr::Load(Load::Load_r_r(D,D))),
+        0x53 => Some(Instr::Load(Load::Load_r_r(D,E))),
+        0x54 => Some(Instr::Load(Load::Load_r_r(D,H))),
+        0x55 => Some(Instr::Load(Load::Load_r_r(D,L))),
+        0x57 => Some(Instr::Load(Load::Load_r_r(D,A))),
+        0x58 => Some(Instr::Load(Load::Load_r_r(E,B))),
+        0x59 => Some(Instr::Load(Load::Load_r_r(E,C))),
+        0x5A => Some(Instr::Load(Load::Load_r_r(E,D))),
+        0x5B => Some(Instr::Load(Load::Load_r_r(E,E))),
+        0x5C => Some(Instr::Load(Load::Load_r_r(E,H))),
+        0x5D => Some(Instr::Load(Load::Load_r_r(E,L))),
+        0x5F => Some(Instr::Load(Load::Load_r_r(E,A))),
+
+        0x60 => Some(Instr::Load(Load::Load_r_r(H,B))),
+        0x61 => Some(Instr::Load(Load::Load_r_r(H,C))),
+        0x62 => Some(Instr::Load(Load::Load_r_r(H,D))),
+        0x63 => Some(Instr::Load(Load::Load_r_r(H,E))),
+        0x64 => Some(Instr::Load(Load::Load_r_r(H,H))),
+        0x65 => Some(Instr::Load(Load::Load_r_r(H,L))),
+        0x67 => Some(Instr::Load(Load::Load_r_r(H,A))),
+
+        0x68 => Some(Instr::Load(Load::Load_r_r(L,B))),
+        0x69 => Some(Instr::Load(Load::Load_r_r(L,C))),
+        0x6A => Some(Instr::Load(Load::Load_r_r(L,D))),
+        0x6B => Some(Instr::Load(Load::Load_r_r(L,E))),
+        0x6C => Some(Instr::Load(Load::Load_r_r(L,H))),
+        0x6D => Some(Instr::Load(Load::Load_r_r(L,L))),
+        0x6F => Some(Instr::Load(Load::Load_r_r(L,A))),
+
+
+        0x78 => Some(Instr::Load(Load::Load_r_r(A,B))),
+        0x79 => Some(Instr::Load(Load::Load_r_r(A,C))),
+        0x7A => Some(Instr::Load(Load::Load_r_r(A,D))),
+        0x7B => Some(Instr::Load(Load::Load_r_r(A,E))),
+        0x7C => Some(Instr::Load(Load::Load_r_r(A,H))),
+        0x7D => Some(Instr::Load(Load::Load_r_r(A,L))),
+        0x7F => Some(Instr::Load(Load::Load_r_r(A,A))),
+
+
+        // 8bit immediate value to register copy: LD r,n
+        0x06 => Some(Instr::Load(Load_r_u8(B))),
+        0x0E => Some(Instr::Load(Load_r_u8(C))),
+        0x16 => Some(Instr::Load(Load_r_u8(D))),
+        0x1E => Some(Instr::Load(Load_r_u8(E))),
+        0x26 => Some(Instr::Load(Load_r_u8(H))),
+        0x2E => Some(Instr::Load(Load_r_u8(L))),
+
+
+
         0xE0 => Some(Instr::Load(Load::Load_high_u8_r(A))),
+
         0x01 => Some(Instr::Load(Load::Load_R2_u16(BC))),
         0x11 => Some(Instr::Load(Load::Load_R2_u16(DE))),
         0x21 => Some(Instr::Load(Load::Load_R2_u16(HL))),
+        0x31 => Some(Instr::Load(Load::Load_R2_u16(SP))),
 
         0x1a => Some(Instr::Load(Load::Load_r_addr_R2(DE))),
         // put value pointed to by DE into A
 
         0x22 => Some(Instr::Load(Load::Load_addr_R2_A_inc(HL))),
-        // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+        0x2A => Some(Instr::Load(Load::Load_A_addr_R2_inc(HL))),
+
+        0x02 => Some(Instr::Load(Load::Load_addr_R2_A(BC))),
+        0x12 => Some(Instr::Load(Load::Load_addr_R2_A(DE))),
 
 
 
-        0xF3 => Some(Instr::Special(Special::DisableInterrupts())),
+        0x00 => Some(Instr::Special(NOOP())),
+        0xF3 => Some(Instr::Special(DisableInterrupts())),
+        0x10 => Some(Instr::Special(STOP())),
+
         0xF0 => Some(Instr::Load(Load::Load_high_r_u8(A))),
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
@@ -423,84 +477,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 pub fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU, opcodes: &Value) -> (usize, usize) {
     println!("executing op {:02x}", code);
     let res:Option<(usize,usize)> = match code {
-        // 8bit immediate value to register copy: LD r,n
-        0x06 => LD_r_u8(B,cpu,mmu),
-        0x0E => LD_r_u8(C,cpu,mmu),
-        0x16 => LD_r_u8(D,cpu,mmu),
-        0x1E => LD_r_u8(E,cpu,mmu),
-        0x26 => LD_r_u8(H,cpu,mmu),
-        0x2E => LD_r_u8(L,cpu,mmu),
-
         // 8bit register to register copies:  LD r,r
-        0x78 => LD(A, B, cpu),
-        0x79 => LD(A, C, cpu),
-        0x7A => LD(A, D, cpu),
-        0x7B => LD(A, E, cpu),
-        0x7C => LD(A, H, cpu),
-        0x7D => LD(A, L, cpu),
-        0x7F => LD(A, A, cpu),
-
-        0x40 => LD(B, B, cpu),
-        0x41 => LD(B, C, cpu),
-        0x42 => LD(B, D, cpu),
-        0x43 => LD(B, E, cpu),
-        0x44 => LD(B, H, cpu),
-        0x45 => LD(B, L, cpu),
-
-        0x48 => LD(C, B, cpu),
-        0x49 => LD(C, C, cpu),
-        0x4A => LD(C, D, cpu),
-        0x4B => LD(C, E, cpu),
-        0x4C => LD(C, H, cpu),
-        0x4D => LD(C, L, cpu),
-        0x4F => LD(C, A, cpu),
-
-        0x50 => LD(D, B, cpu),
-        0x51 => LD(D, C, cpu),
-        0x52 => LD(D, D, cpu),
-        0x53 => LD(D, E, cpu),
-        0x54 => LD(D, H, cpu),
-        0x55 => LD(D, L, cpu),
-
-        0x58 => LD(E, B, cpu),
-        0x59 => LD(E, C, cpu),
-        0x5A => LD(E, D, cpu),
-        0x5B => LD(E, E, cpu),
-        0x5C => LD(E, H, cpu),
-        0x5D => LD(E, L, cpu),
-
-        0x60 => LD(H, B, cpu),
-        0x61 => LD(H, C, cpu),
-        0x62 => LD(H, D, cpu),
-        0x63 => LD(H, E, cpu),
-        0x64 => LD(H, H, cpu),
-        0x65 => LD(H, L, cpu),
-
-        0x68 => LD(L, B, cpu),
-        0x69 => LD(L, C, cpu),
-        0x6A => LD(L, D, cpu),
-        0x6B => LD(L, E, cpu),
-        0x6C => LD(L, H, cpu),
-        0x6D => LD(L, L, cpu),
-
-        // Register Increments
-        0x3C => INC(A, cpu),
-        0x04 => INC(B, cpu),
-        0x0C => INC(C, cpu),
-        0x14 => INC(D, cpu),
-        0x1C => INC(E, cpu),
-        0x24 => INC(H, cpu),
-        0x2C => INC(L, cpu),
-
-        //register decrements
-        0x3d => DEC(A,cpu),
-        0x05 => DEC(B,cpu),
-        0x0d => DEC(C,cpu),
-        0x15 => DEC(D,cpu),
-        0x1d => DEC(E,cpu),
-        0x25 => DEC(H,cpu),
-        0x2d => DEC(L,cpu),
-
         _ => {None}
     };
 
