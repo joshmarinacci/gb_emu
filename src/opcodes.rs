@@ -413,16 +413,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x1E => Some(Instr::Load(Load_r_u8(E))),
         0x26 => Some(Instr::Load(Load_r_u8(H))),
         0x2E => Some(Instr::Load(Load_r_u8(L))),
-
-
-
-        0x06 => Some(Instr::Load(Load::Load_r_u8(B))),
-        0x16 => Some(Instr::Load(Load::Load_r_u8(D))),
-        0x26 => Some(Instr::Load(Load::Load_r_u8(H))),
-        0x0E => Some(Instr::Load(Load::Load_r_u8(C))),
-        0x1E => Some(Instr::Load(Load::Load_r_u8(E))),
-        0x2E => Some(Instr::Load(Load::Load_r_u8(L))),
-        0x3E => Some(Instr::Load(Load::Load_r_u8(A))),
+        0x3E => Some(Instr::Load(Load_r_u8(A))),
 
         0xE0 => Some(Instr::Load(Load::Load_high_u8_r(A))),
 
