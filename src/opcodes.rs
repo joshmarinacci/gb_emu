@@ -91,7 +91,7 @@ pub fn setup_op_codes() -> OpList {
         // cpu.r.pc = (addr -3) as u16;
     });
     // JUMP if not zero to the address
-    ol.add(0x0020,"JR NZ r8",2,12,|cpu,mmu| {
+    ol.add(0x20,"JR NZ r8",2,12,|cpu,mmu| {
         //convert e to i8 then i32 so it will be interpreted as signed
         let e = mmu.read8(cpu.r.pc+1);
         let addr = ((cpu.r.pc+2) as i32) + (e as i8 as i32);

@@ -24,158 +24,16 @@ impl Ctx {
             println!("unknown op code {:04x}",opcode);
             panic!("unknown op code");
         }
-
-        // let (off,size_of_inst) = decode(opcode, off, &mut self.cpu, &mut self.mmu, &self.opcodes);
-        // // println!("off is {}",off);
-        // let (v2, went_over) = self.cpu.r.pc.overflowing_add(off as u16);
-        // if went_over {
-        //     self.mmu.print_cram();
-        //     panic!("PC overflowed memory");
-        // }
-        // self.cpu.r.pc = v2;
         self.mmu.update();
     }
     fn execute_instruction(&mut self, inst: &Instr) {
         println!("executing");
         match inst {
-            Instr::Special(Special::DisableInterrupts()) => {
-                println!("pretending to disable iterrupts");
-                self.inc_pc(1);
-            }
-            // put the memory address 0xFF00 + n into register r
-            Instr::Load(Load::Load_high_r_u8(r)) => {
-                // println!("running LDH");
-                let n = self.mmu.read8(self.cpu.r.pc+1);
-                let addr = (0xFF00 as u16) + (n as u16);
-                self.cpu.r.a = self.mmu.read8(addr);
-                // println!("assigned content of mem:{:x} value {:x}, to A",addr,self.cpu.r.a);
-                self.inc_pc(2);
-            }
-            Instr::Load(Load::Load_high_u8_r(r)) => {
-                self.inc_pc(1);
-                let e =self.mmu.read8(self.cpu.r.pc);
-                let addr = (0xFF00 as u16) + (e as u16);
-                let v = self.cpu.r.get_u8reg(r);
-                println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
-                self.mmu.write8(addr,v);
-                self.inc_pc(1);
-            },
-            Instr::Load(Load::Load_r_r(dst, src)) => {
-                self.inc_pc(1);
-                let val = self.cpu.r.get_u8reg(src);
-                self.cpu.r.set_u8reg(dst,val);
-            }
-
-            Instr::Load(Load::Load_R2_u16(rr)) => {
-                self.inc_pc(1);
-                let val = self.mmu.read16(self.cpu.r.pc);
-                self.cpu.r.set_u16reg(rr,val);
-                self.inc_pc(2);
-                println!("copied immediate value {:04x} into register {}",val,rr)
-            }
-            Instr::Load(Load::Load_r_addr_R2(rr)) => {
-                self.inc_pc(1);
-                let addr = self.cpu.r.get_u16reg(rr);
-                let val = self.mmu.read8(addr);
-                self.cpu.r.set_u8reg(&A,val);
-                println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
-            }
-            Instr::Load(Load::Load_addr_R2_A_inc(rr)) => {
-                self.inc_pc(1);
-                let val = self.cpu.r.get_u8reg(&A);
-                let addr = self.cpu.r.get_u16reg(rr);
-                self.mmu.write8(addr,val);
-                self.cpu.r.set_hl(self.cpu.r.get_hl()+1);
-            }
-
-            Instr::Jump(Jump::JumpAbsolute_u16()) => {
-                // println!("jumping to absolute address");
-                let addr = self.mmu.read16(self.cpu.r.pc+1);
-                // println!("jumping to address {:04x}",addr);
-                self.set_pc(addr);
-            }
-            Instr::Jump(Jump::JumpRelative_cond_carry_u8()) => {
-                self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
-                self.inc_pc(1);
-                // println!("carry flag is set to {}",self.cpu.r.carry_flag);
-                if self.cpu.r.carry_flag {
-                    let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-                    // println!("jump address is {:04x}",(addr as u16));
-                    self.set_pc(addr as u16);
-                } else {
-                }
-            }
-            Instr::Compare(Compare::CP_A_n()) => {
-                let n = self.mmu.read8(self.cpu.r.pc+1);
-                // println!("comparing A:{:x} to n:{:x}",self.cpu.r.a,n);
-                self.cpu.r.zero_flag = self.cpu.r.a == n;
-                self.cpu.r.carry_flag = self.cpu.r.a < n;
-                self.cpu.r.subtract_n_flag = true;
-                self.inc_pc(2);
-            }
-            Instr::Compare(Compare::CP_A_r(r)) => {
-                todo!()
-            }
-            Instr::Math(math) => {
-                match math {
-                    Math::Xor_A_r(r) => {
-                        self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r));
-                        if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
-                        self.cpu.r.subtract_n_flag = false;
-                        self.cpu.r.half_flag = true;
-                        self.cpu.r.carry_flag = false;
-                        self.inc_pc(1);
-                    }
-                    Math::OR_A_r(r) => {
-                        self.inc_pc(1);
-                        self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) | self.cpu.r.get_u8reg(r));
-                        if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
-                        self.cpu.r.subtract_n_flag = false;
-                        self.cpu.r.half_flag = false;
-                        self.cpu.r.carry_flag = false;
-                    }
-                    Math::AND_A_r(r) => {
-                        self.inc_pc(1);
-                        self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & self.cpu.r.get_u8reg(r));
-                        if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
-                        self.cpu.r.subtract_n_flag = false;
-                        self.cpu.r.half_flag = true;
-                        self.cpu.r.carry_flag = false;
-                    }
-                    Math::Inc_r(r) => {
-                        self.inc_pc(1);
-                        let mut val = self.cpu.r.get_u8reg(r);
-                        val += 1;
-                        self.cpu.r.set_u8reg(r, val);
-                        if val == 0 { self.cpu.r.zero_flag = true; }
-                        self.cpu.r.subtract_n_flag = false;
-                    }
-                    Math::Dec_r(r) => {
-                        self.inc_pc(1);
-                        let mut val = self.cpu.r.get_u8reg(r);
-                        val -= 1;
-                        self.cpu.r.set_u8reg(r, val);
-                        if val == 0 { self.cpu.r.zero_flag = true; }
-                        self.cpu.r.subtract_n_flag = true;
-                    }
-                    Math::Inc_rr(rr) => {
-                        self.inc_pc(1);
-                        let mut val = self.cpu.r.get_u16reg(rr);
-                        val += 1;
-                        self.cpu.r.set_u16reg(rr,val);
-                    }
-                    Math::Dec_rr(rr) => {
-                        self.inc_pc(1);
-                        let mut val = self.cpu.r.get_u16reg(rr);
-                        val -= 1;
-                        self.cpu.r.set_u16reg(rr,val);
-                    }
-                }
-            }
-            Instr::Load(Load::Load_r_u8(_)) => {
-                todo!()
-            }
+            Instr::Special(special)  => self.execute_special_instructions(special),
+            Instr::Load(load)         => self.execute_load_instructions(load),
+            Instr::Compare(comp)   => self.execute_compare_instructions(comp),
+            Instr::Math(math)         => self.execute_math_instructions(math),
+            Instr::Jump(jump)         => self.execute_jump_instructions(jump),
         }
     }
     fn inc_pc(&mut self, n: i32) {
@@ -189,6 +47,162 @@ impl Ctx {
     fn set_pc(&mut self, addr: u16) {
         println!("jumping to {:04x}",addr);
         self.cpu.r.pc = addr;
+    }
+}
+
+impl Ctx {
+    fn execute_compare_instructions(&mut self, comp:&Compare) {
+        match comp {
+            Compare::CP_A_n() => {
+                let n = self.mmu.read8(self.cpu.r.pc + 1);
+                // println!("comparing A:{:x} to n:{:x}",self.cpu.r.a,n);
+                self.cpu.r.zero_flag = self.cpu.r.a == n;
+                self.cpu.r.carry_flag = self.cpu.r.a < n;
+                self.cpu.r.subtract_n_flag = true;
+                self.inc_pc(2);
+            }
+            Compare::CP_A_r(r) => {
+                todo!()
+            }
+        }
+    }
+    fn execute_math_instructions(&mut self, math: &Math) {
+        match math {
+            Math::Xor_A_r(r) => {
+                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r));
+                if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = true;
+                self.cpu.r.carry_flag = false;
+                self.inc_pc(1);
+            }
+            Math::OR_A_r(r) => {
+                self.inc_pc(1);
+                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) | self.cpu.r.get_u8reg(r));
+                if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = false;
+                self.cpu.r.carry_flag = false;
+            }
+            Math::AND_A_r(r) => {
+                self.inc_pc(1);
+                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & self.cpu.r.get_u8reg(r));
+                if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = true;
+                self.cpu.r.carry_flag = false;
+            }
+            Math::Inc_r(r) => {
+                self.inc_pc(1);
+                let mut val = self.cpu.r.get_u8reg(r);
+                val += 1;
+                self.cpu.r.set_u8reg(r, val);
+                if val == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.subtract_n_flag = false;
+            }
+            Math::Dec_r(r) => {
+                self.inc_pc(1);
+                let mut val = self.cpu.r.get_u8reg(r);
+                val -= 1;
+                self.cpu.r.set_u8reg(r, val);
+                if val == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.subtract_n_flag = true;
+            }
+            Math::Inc_rr(rr) => {
+                self.inc_pc(1);
+                let mut val = self.cpu.r.get_u16reg(rr);
+                val += 1;
+                self.cpu.r.set_u16reg(rr, val);
+            }
+            Math::Dec_rr(rr) => {
+                self.inc_pc(1);
+                let mut val = self.cpu.r.get_u16reg(rr);
+                val -= 1;
+                self.cpu.r.set_u16reg(rr, val);
+            }
+        }
+    }
+    fn execute_jump_instructions(&mut self, jump: &Jump) {
+        match jump {
+            Jump::JumpAbsolute_u16() => {
+                // println!("jumping to absolute address");
+                let addr = self.mmu.read16(self.cpu.r.pc + 1);
+                // println!("jumping to address {:04x}",addr);
+                self.set_pc(addr);
+            }
+            Jump::JumpRelative_cond_carry_u8() => {
+                self.inc_pc(1);
+                let e = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+                // println!("carry flag is set to {}",self.cpu.r.carry_flag);
+                if self.cpu.r.carry_flag {
+                    let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
+                    // println!("jump address is {:04x}",(addr as u16));
+                    self.set_pc(addr as u16);
+                } else {}
+            }
+        }
+    }
+    fn execute_load_instructions(&mut self, load: &Load) {
+        match load {
+            Load::Load_r_u8(_) => {
+                todo!()
+            }
+            // put the memory address 0xFF00 + n into register r
+            Load::Load_high_r_u8(r) => {
+                // println!("running LDH");
+                let n = self.mmu.read8(self.cpu.r.pc+1);
+                let addr = (0xFF00 as u16) + (n as u16);
+                self.cpu.r.a = self.mmu.read8(addr);
+                // println!("assigned content of mem:{:x} value {:x}, to A",addr,self.cpu.r.a);
+                self.inc_pc(2);
+            }
+            Load::Load_high_u8_r(r) => {
+                self.inc_pc(1);
+                let e =self.mmu.read8(self.cpu.r.pc);
+                let addr = (0xFF00 as u16) + (e as u16);
+                let v = self.cpu.r.get_u8reg(r);
+                println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
+                self.mmu.write8(addr,v);
+                self.inc_pc(1);
+            },
+            Load::Load_r_r(dst, src) => {
+                self.inc_pc(1);
+                let val = self.cpu.r.get_u8reg(src);
+                self.cpu.r.set_u8reg(dst,val);
+            }
+
+            Load::Load_R2_u16(rr) => {
+                self.inc_pc(1);
+                let val = self.mmu.read16(self.cpu.r.pc);
+                self.cpu.r.set_u16reg(rr,val);
+                self.inc_pc(2);
+                println!("copied immediate value {:04x} into register {}",val,rr)
+            }
+            Load::Load_r_addr_R2(rr) => {
+                self.inc_pc(1);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let val = self.mmu.read8(addr);
+                self.cpu.r.set_u8reg(&A,val);
+                println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
+            }
+            Load::Load_addr_R2_A_inc(rr) => {
+                self.inc_pc(1);
+                let val = self.cpu.r.get_u8reg(&A);
+                let addr = self.cpu.r.get_u16reg(rr);
+                self.mmu.write8(addr,val);
+                self.cpu.r.set_hl(self.cpu.r.get_hl()+1);
+            }
+
+        }
+    }
+    fn execute_special_instructions(&mut self, special: &Special) {
+        match special {
+            Special::DisableInterrupts() => {
+                println!("pretending to disable iterrupts");
+                self.inc_pc(1);
+            }
+        }
     }
 }
 
