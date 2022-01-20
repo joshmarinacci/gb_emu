@@ -268,6 +268,7 @@ pub enum Load {
     Load_R2_u16(DoubleRegister),
     Load_r_addr_R2(DoubleRegister),
     Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+    Load_addr_R2_A_dec(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
     Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
     Load_addr_R2_A(DoubleRegister),      // Load (rr), A
 }
@@ -426,6 +427,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         // put value pointed to by DE into A
 
         0x22 => Some(Instr::Load(Load::Load_addr_R2_A_inc(HL))),
+        0x32 => Some(Instr::Load(Load::Load_addr_R2_A_dec(HL))),
         0x2A => Some(Instr::Load(Load::Load_A_addr_R2_inc(HL))),
 
         0x02 => Some(Instr::Load(Load::Load_addr_R2_A(BC))),

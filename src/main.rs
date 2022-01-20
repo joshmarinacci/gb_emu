@@ -49,8 +49,22 @@ fn main() {
             run_romfile(cart,args.interactive);
         }
     } else {
-        run_bootrom();
+        if args.interactive {
+            run_bootrom_interactive();
+        } else {
+            run_bootrom();
+        }
     }
+}
+
+fn run_bootrom_interactive() {
+    println!("running the bootrom");
+    let mut cpu = Z80::init();
+    let mut mmu = MMU::init_with_bootrom();
+    cpu.reset();
+    cpu.r.pc = 0x00;
+    let OPCODE_MAP = load_opcode_map();
+    start_debugger(cpu,mmu,OPCODE_MAP, None);
 }
 
 fn load_opcode_map() -> serde_json::Value {
@@ -67,7 +81,7 @@ fn run_romfile(cart: RomFile, interactive: bool) {
     let OPCODE_MAP = load_opcode_map();
 
     if interactive {
-        start_debugger(cpu,mmu,OPCODE_MAP, cart);
+        start_debugger(cpu,mmu,OPCODE_MAP, Some(cart));
     } else {
         loop {
             execute(&mut cpu, &mut mmu, &OPCODE_MAP);
@@ -273,6 +287,8 @@ struct Cli {
     debug:bool,
     #[structopt(parse(from_os_str))]
     romfile: Option<PathBuf>,
+    #[structopt(long)]
+    boot:bool,
     #[structopt(long)]
     interactive:bool,
 }

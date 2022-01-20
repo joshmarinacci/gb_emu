@@ -10,7 +10,6 @@ struct Ctx {
     cpu:Z80,
     mmu:MMU,
     opcodes:Value,
-    cart:RomFile,
 }
 
 impl Ctx {
@@ -217,6 +216,13 @@ impl Ctx {
                 self.mmu.write8(addr,val);
                 self.cpu.r.set_hl(self.cpu.r.get_hl()+1);
             }
+            Load::Load_addr_R2_A_dec(rr) => {
+                self.inc_pc(1);
+                let val = self.cpu.r.get_u8reg(&A);
+                let addr = self.cpu.r.get_u16reg(rr);
+                self.mmu.write8(addr,val);
+                self.cpu.r.set_hl(self.cpu.r.get_hl()-1);
+            }
 
             Load::Load_addr_R2_A(rr) => {
                 //copy contents of A to memory pointed to by RR
@@ -244,13 +250,15 @@ impl Ctx {
     }
 }
 
-pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, opcodes, cart};
+pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>) -> Result<()> {
+    let mut ctx = Ctx { cpu, mmu, opcodes};
     let mut term = Term::stdout();
 
     loop {
         term.clear_screen()?;
-        term.write_line(&format!("executing rom {}", ctx.cart.path))?;
+        if let Some(cart) = &cart {
+            term.write_line(&format!("executing rom {}", cart.path))?;
+        }
         term.write_line(&format!("op count {}",&ctx.cpu.ops.ops.len()))?;
         term.write_line(&format!("========="))?;
 
@@ -348,6 +356,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_r_addr_R2(rr)) => format!("LD A, ({}) -- load data pointed to by {} into A",rr,rr),
         Instr::Load(Load::Load_addr_R2_A(rr)) => format!("LD (rr),A -- load contents of A into memory pointed to by {}",rr),
         Instr::Load(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}",rr,rr,rr),
+        Instr::Load(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}",rr,rr,rr),
         Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
         // Load (HL+), A, copy contents of A into memory at HL, then INC HL
 
