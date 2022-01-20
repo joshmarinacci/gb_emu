@@ -11,23 +11,23 @@ pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
 
     //NO-OP
-    // ol.add(0x00_00,"NOOP",1,1, |cpu,mmu|());
+    ol.add(0x00,"NOOP",1,1, |cpu,mmu|());
 
     //
-    ol.add(0x000e,"LD C, d8",2,8,|cpu,mmu|cpu.r.c = mmu.read8(cpu.r.pc+1));
+    // ol.add(0x0e,"LD C, d8",2,8,|cpu,mmu|cpu.r.c = mmu.read8(cpu.r.pc+1));
     // ol.add(0x00_1e,"LD E, d8",2,8,|cpu,mmu|cpu.r.e = mmu.read8(cpu.r.pc+1));
     // ol.add(0x00_2e,"LD L, d8",2,8,|cpu,mmu|cpu.r.l = mmu.read8(cpu.r.pc+1));
-    ol.add(0x003e,"LD A, d8",2,8,|cpu,mmu|cpu.r.a = mmu.read8(cpu.r.pc+1));
+    // ol.add(0x3e,"LD A, d8",2,8,|cpu,mmu|cpu.r.a = mmu.read8(cpu.r.pc+1));
 
     //16bit immediate loads
     // ol.add(0x00_01,"LD BC d16", 3, 12, |cpu,mmu| {cpu.r.set_bc(mmu.read16(cpu.r.pc+1));});
-    ol.add(0x0011,"LD DE d16", 3, 12, |cpu,mmu| {cpu.r.set_de(mmu.read16(cpu.r.pc+1));});
+    ol.add(0x11,"LD DE d16", 3, 12, |cpu,mmu| {cpu.r.set_de(mmu.read16(cpu.r.pc+1));});
     // ol.add(0x21,"LD HL d16", 3, 12, |cpu,mmu| {cpu.r.set_hl(mmu.read16(cpu.r.pc+1));});
-    ol.add(0x0031,"LD SP d16", 3, 12, |cpu,mmu| {cpu.r.set_sp(mmu.read16(cpu.r.pc+1));});
+    ol.add(0x31,"LD SP d16", 3, 12, |cpu,mmu| {cpu.r.set_sp(mmu.read16(cpu.r.pc+1));});
     //
     //
     // // load 8bit register to 8bit register
-    ol.add(0x0047, "LD B, A", 1,4,|cpu,mmu| cpu.r.b = cpu.r.a);
+    ol.add(0x47, "LD B, A", 1,4,|cpu,mmu| cpu.r.b = cpu.r.a);
     // ol.add(0x00_5f, "LD E, A", 1,4,|cpu,mmu| cpu.r.e = cpu.r.a);
     // ol.add(0x00_67, "LD H, A", 1,4,|cpu,mmu| cpu.r.h = cpu.r.a);
     // ol.add(0x00_6f, "LD L, A", 1,4,|cpu,mmu| cpu.r.l = cpu.r.a);
@@ -173,21 +173,21 @@ pub fn setup_op_codes() -> OpList {
     });
 
 
-    ol.add(0xB1,"OR A, C",1,1,|cpu,mmu|{
-        println!("ORING C with A");
-        cpu.r.a = cpu.r.c | cpu.r.a;
-        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
-    });
-    ol.add(0xB2,"OR A, D",1,1,|cpu,mmu|{
-        println!("ORING C with D");
-        cpu.r.a = cpu.r.d | cpu.r.a;
-        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
-    });
+    // ol.add(0xB1,"OR A, C",1,1,|cpu,mmu|{
+    //     println!("ORING C with A");
+    //     cpu.r.a = cpu.r.c | cpu.r.a;
+    //     if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+    // });
+    // ol.add(0xB2,"OR A, D",1,1,|cpu,mmu|{
+    //     println!("ORING C with D");
+    //     cpu.r.a = cpu.r.d | cpu.r.a;
+    //     if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+    // });
 
-    ol.add(0xA7,"AND A",1,1,|cpu,mmu|{
-        println!("ANDING A with itself");
-        cpu.r.a = cpu.r.a | cpu.r.a;
-    });
+    // ol.add(0xA7,"AND A",1,1,|cpu,mmu|{
+    //     println!("ANDING A with itself");
+    //     cpu.r.a = cpu.r.a | cpu.r.a;
+    // });
     ol.add(0x0012,"LD (DE),A",1,2,|cpu,mmu|{
         mmu.write8(cpu.r.get_de(),cpu.r.a);
     });
@@ -274,13 +274,14 @@ pub enum Load {
 pub enum Jump {
     JumpAbsolute_u16(),
     JumpRelative_cond_carry_u8(),
+    JumpRelative_cond_notzero_u8()
 }
 pub enum Compare {
     CP_A_r(RegisterName),
     CP_A_n()
 }
 pub enum Math {
-    Xor_A_r(RegisterName),
+    XOR_A_r(RegisterName),
     OR_A_r(RegisterName),
     AND_A_r(RegisterName),
     Inc_r(RegisterName),
@@ -415,6 +416,14 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
 
 
+        0x06 => Some(Instr::Load(Load::Load_r_u8(B))),
+        0x16 => Some(Instr::Load(Load::Load_r_u8(D))),
+        0x26 => Some(Instr::Load(Load::Load_r_u8(H))),
+        0x0E => Some(Instr::Load(Load::Load_r_u8(C))),
+        0x1E => Some(Instr::Load(Load::Load_r_u8(E))),
+        0x2E => Some(Instr::Load(Load::Load_r_u8(L))),
+        0x3E => Some(Instr::Load(Load::Load_r_u8(A))),
+
         0xE0 => Some(Instr::Load(Load::Load_high_u8_r(A))),
 
         0x01 => Some(Instr::Load(Load::Load_R2_u16(BC))),
@@ -441,16 +450,32 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
         0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_u8())),
+        0x20 => Some(Instr::Jump(Jump::JumpRelative_cond_notzero_u8())),
 
-        0xAF => Some(Instr::Math(Math::Xor_A_r(A))),
+        0xA8 => Some(Instr::Math(Math::XOR_A_r(B))),
+        0xA9 => Some(Instr::Math(Math::XOR_A_r(C))),
+        0xAA => Some(Instr::Math(Math::XOR_A_r(D))),
+        0xAB => Some(Instr::Math(Math::XOR_A_r(E))),
+        0xAC => Some(Instr::Math(Math::XOR_A_r(H))),
+        0xAD => Some(Instr::Math(Math::XOR_A_r(L))),
+        0xAF => Some(Instr::Math(Math::XOR_A_r(A))),
+
+        0xA0 => Some(Instr::Math(Math::AND_A_r(B))),
+        0xA1 => Some(Instr::Math(Math::AND_A_r(C))),
+        0xA2 => Some(Instr::Math(Math::AND_A_r(D))),
+        0xA3 => Some(Instr::Math(Math::AND_A_r(E))),
+        0xA4 => Some(Instr::Math(Math::AND_A_r(H))),
+        0xA5 => Some(Instr::Math(Math::AND_A_r(L))),
+        0xA7 => Some(Instr::Math(Math::AND_A_r(A))),
+
         0xB0 => Some(Instr::Math(Math::OR_A_r(B))),
         0xB1 => Some(Instr::Math(Math::OR_A_r(C))),
         0xB2 => Some(Instr::Math(Math::OR_A_r(D))),
         0xB3 => Some(Instr::Math(Math::OR_A_r(E))),
         0xB4 => Some(Instr::Math(Math::OR_A_r(H))),
         0xB5 => Some(Instr::Math(Math::OR_A_r(L))),
-
         0xB7 => Some(Instr::Math(Math::OR_A_r(A))),
+
 
 
         //increments and decrements
