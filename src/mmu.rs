@@ -2,7 +2,7 @@ use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
 
 pub struct Hardware {
-    ly:u8,
+    pub ly:u8,
 }
 
 impl Hardware {
@@ -30,7 +30,7 @@ pub struct MMU {
 
     lowest_used_iram:u16,
     highest_used_iram:u16,
-    hardware:Hardware,
+    pub hardware:Hardware,
 }
 
 impl MMU {

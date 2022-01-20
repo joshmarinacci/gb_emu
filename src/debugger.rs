@@ -4,7 +4,7 @@ use io::Result;
 use serde_json::Value;
 use crate::{execute, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::RomFile;
-use crate::opcodes::decode;
+use crate::opcodes::{Compare, decode, Instr, Jump, Load, lookup_opcode, Math, Special};
 
 struct Ctx {
     cpu:Z80,
@@ -38,9 +38,9 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
         // term.clear_screen()?;
         term.write_line(&format!("executing rom {}", ctx.cart.path))?;
         term.write_line(&format!("op count {}",&ctx.cpu.ops.ops.len()))?;
-        let (opcode, instr_len) = fetch_opcode(&mut ctx.cpu, &mut ctx.mmu);
-        term.write_line(&format!("PC ${:04x} op {:0x}", ctx.cpu.r.pc, opcode))?;
+        term.write_line(&format!("========="))?;
 
+        // print the current memory
         let start = ctx.cpu.r.pc;
         let back:i32 = 2;
         for n in 0..5 {
@@ -54,10 +54,42 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
             term.write_line(&format!("{} {:04x}  {:02x}",prefix,addr,data));
         }
 
+        {
+            // print the registers
+            term.write_line(&format!("PC={:04x}", ctx.cpu.r.pc))?;
+            term.write_line(&format!(" A={:02x}", ctx.cpu.r.a))?;
+            term.write_line(&format!(" B={:02x}", ctx.cpu.r.b))?;
+            term.write_line(&format!(" C={:02x}", ctx.cpu.r.c))?;
+            term.write_line(&format!(" D={:02x}", ctx.cpu.r.d))?;
+            term.write_line(&format!(" flags Z:{}   N:{}  C:{}",
+                                     ctx.cpu.r.zero_flag,
+                                     ctx.cpu.r.subtract_n_flag,
+                                     ctx.cpu.r.carry_flag))?;
+            term.write_line(&format!(" Screen: LY {:02x}",ctx.mmu.hardware.ly))?;
+        }
+
+        // print info about the next opcode
+        let (opcode, instr_len) = fetch_opcode(&mut ctx.cpu, &mut ctx.mmu);
+        let op = lookup_opcode(opcode);
+        if let Some(ld) = op {
+            term.write_line(&format!("${:04x} : {:0x}: {}",
+                                     ctx.cpu.r.pc,
+                                     opcode,
+                                     lookup_opcode_info(ld)))?;
+        } else {
+            panic!("unknown op code")
+        }
+
+
         term.write_line(&format!("next: j  back: k"))?;
         let ch = term.read_char()?;
+        if ch == 'J' {
+            term.write_line(&format!("doing 16 instructions"))?;
+            for n in 0..16 {
+                ctx.execute(&mut term);
+            }
+        }
         if ch == 'j' {
-            ctx.cpu.r.pc += 1;
             ctx.execute(&mut term)
         }
     }
@@ -76,6 +108,19 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
  */
 
     Ok(())
+}
+
+fn lookup_opcode_info(op: Instr) -> String {
+    match op {
+        Instr::Load(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8",r),
+        Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
+        Instr::Load(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High with {} + immediate u8",r,r),
+        Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
+        Instr::Jump(Jump::JumpRelative_cond_carry_u8()) => format!("JR cc,e -- Jump relative if Carry Flag set"),
+        Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
+        Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
+        Instr::Math(Math::Xor_A_r(r)) => format!("Xor A, {} -- Xor A with {}, store in A",r,r),
+    }
 }
 
 fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16,u16) {

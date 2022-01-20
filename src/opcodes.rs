@@ -193,6 +193,7 @@ pub fn setup_op_codes() -> OpList {
         println!("Disabling interrupts");
     });
 
+    // Compare A with u8 n. sets flags based on teh comparison
     ol.add(0x00FE, "CP A,n",2,4,|cpu,mmu|{
         let n = mmu.read8(cpu.r.pc+1);
         println!("comparing A:{:x} to n:{:x}",cpu.r.a,n);
@@ -248,9 +249,43 @@ fn u8_as_i8(v: u8) -> i8 {
 pub enum RegisterName {
     A,B,C,D,E,H,L
 }
+pub enum Special {
+    DisableInterrupts()
+}
+pub enum Load {
+    Load_r_u8(RegisterName),
+    Load_high_r_u8(RegisterName),
+}
+pub enum Jump {
+    JumpAbsolute_u16(),
+    JumpRelative_cond_carry_u8(),
+}
+pub enum Compare {
+    CP_A_r(RegisterName),
+    CP_A_n()
+}
+pub enum Math {
+    Xor_A_r(RegisterName),
+}
+pub enum Instr {
+    Load(Load),
+    Special(Special),
+    Jump(Jump),
+    Compare(Compare),
+    Math(Math),
+}
+
 impl Display for RegisterName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("blah")
+        f.write_str(match self {
+            A => "A",
+            B => "B",
+            C => "C",
+            D => "D",
+            E => "E",
+            H => "H",
+            L => "L",
+        })
     }
 }
 
@@ -278,6 +313,21 @@ fn get_cpu_register_u8(cpu: &mut Z80, reg: &RegisterName) -> u8 {
     }
 }
 
+pub fn lookup_opcode(code:u16) -> Option<Instr> {
+    return match code {
+        0x06 => Some(Instr::Load(Load::Load_r_u8(B))),
+        0xF3 => Some(Instr::Special(Special::DisableInterrupts())),
+        0xF0 => Some(Instr::Load(Load::Load_high_r_u8(A))),
+        0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
+        0xFE => Some(Instr::Compare(Compare::CP_A_n())),
+        0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_u8())),
+        0xAF => Some(Instr::Math(Math::Xor_A_r(A))),
+        _ => {
+            println!("WARNING. can't lookup opcode {:04x}",code);
+            None
+        }
+    }
+}
 pub fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU, opcodes: &Value) -> (usize, usize) {
     println!("executing op {:02x}", code);
     let res:Option<(usize,usize)> = match code {
