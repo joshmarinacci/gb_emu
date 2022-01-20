@@ -20,7 +20,7 @@ pub fn setup_op_codes() -> OpList {
     //16bit immediate loads
     // ol.add(0x00_01,"LD BC d16", 3, 12, |cpu,mmu| {cpu.r.set_bc(mmu.read16(cpu.r.pc+1));});
     ol.add(0x0011,"LD DE d16", 3, 12, |cpu,mmu| {cpu.r.set_de(mmu.read16(cpu.r.pc+1));});
-    ol.add(0x0021,"LD HL d16", 3, 12, |cpu,mmu| {cpu.r.set_hl(mmu.read16(cpu.r.pc+1));});
+    // ol.add(0x21,"LD HL d16", 3, 12, |cpu,mmu| {cpu.r.set_hl(mmu.read16(cpu.r.pc+1));});
     ol.add(0x0031,"LD SP d16", 3, 12, |cpu,mmu| {cpu.r.set_sp(mmu.read16(cpu.r.pc+1));});
     //
     //
@@ -31,25 +31,25 @@ pub fn setup_op_codes() -> OpList {
     // ol.add(0x00_6f, "LD L, A", 1,4,|cpu,mmu| cpu.r.l = cpu.r.a);
     //
     // e0 => LDH (n), A => load contents of A into address of (0xFF00 + immediate value)
-    ol.add(0x00e0, "LDH(n), A",2,12, |cpu,mmu| {
-        let v = mmu.read8(cpu.r.pc+1);
-        println!("n is {:x}",v);
-        let addr = (0xFF00 as u16) + (v as u16);
-        println!("calculated address {:04x}",addr);
-        mmu.write8(addr,cpu.r.a);
-    });
+    // ol.add(0xe0, "LDH(n), A",2,12, |cpu,mmu| {
+    //     let v = mmu.read8(cpu.r.pc+1);
+    //     println!("n is {:x}",v);
+    //     let addr = (0xFF00 as u16) + (v as u16);
+    //     println!("calculated address {:04x}",addr);
+    //     mmu.write8(addr,cpu.r.a);
+    // });
 
     // put the memory addres 0xFF00 + n into A
-    ol.add(0x00F0,"LDH A,(n)",2,3,|cpu,mmu|{
-        println!("running LDH");
-        let n = mmu.read8(cpu.r.pc+1);
-        let addr = (0xFF00 as u16) + (n as u16);
-        cpu.r.a = mmu.read8(addr);
-        println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
-    });
+    // ol.add(0xF0,"LDH A,(n)",2,3,|cpu,mmu|{
+    //     println!("running LDH");
+    //     let n = mmu.read8(cpu.r.pc+1);
+    //     let addr = (0xFF00 as u16) + (n as u16);
+    //     cpu.r.a = mmu.read8(addr);
+    //     println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
+    // });
 
     // put the immediate value into BC
-    ol.add(0x0001,"LD BC, u16",3,3,|cpu,mmu|{
+    ol.add(0x01,"LD BC, u16",3,3,|cpu,mmu|{
         let nn = mmu.read16(cpu.r.pc+1);
         cpu.r.set_bc(nn);
         // let n = mmu.read8(cpu.r.pc+1);
@@ -59,19 +59,19 @@ pub fn setup_op_codes() -> OpList {
     });
 
     // put value pointed to by DE into A
-    ol.add(0x001a,"LD A,(DE)",1,2,|cpu,mmu|{
-        cpu.r.a = mmu.read8(cpu.r.get_de())
-        // let n = mmu.read8(cpu.r.pc+1);
-        // let addr = (0xFF00 as u16) + (n as u16);
-        // cpu.r.a = mmu.read8(addr);
-        // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
-    });
+    // ol.add(0x1a,"LD A,(DE)",1,2,|cpu,mmu|{
+    //     cpu.r.a = mmu.read8(cpu.r.get_de())
+    //     // let n = mmu.read8(cpu.r.pc+1);
+    //     // let addr = (0xFF00 as u16) + (n as u16);
+    //     // cpu.r.a = mmu.read8(addr);
+    //     // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
+    // });
 
     //MATH
-    ol.add(0xAF,"XOR A,A",1,1,|cpu,mmu|{
-        cpu.r.a = cpu.r.a ^ cpu.r.a;
-        if cpu.r.a == 0 { cpu.r.zero_flag = true; }
-    });
+    // ol.add(0xAF,"XOR A,A",1,1,|cpu,mmu|{
+    //     cpu.r.a = cpu.r.a ^ cpu.r.a;
+    //     if cpu.r.a == 0 { cpu.r.zero_flag = true; }
+    // });
     ol.add(0xA8,"XOR A,B",1,1,|cpu,mmu|{
         cpu.r.a = cpu.r.b ^ cpu.r.a;
         if cpu.r.a == 0 { cpu.r.zero_flag = true; }
@@ -83,7 +83,7 @@ pub fn setup_op_codes() -> OpList {
 
 
     // // JUMPs
-    ol.add(0x00C3, "JP u16", 0,16,|cpu,mmu|{
+    ol.add(0xC3, "JP u16", 0,16,|cpu,mmu|{
         let addr = mmu.read16(cpu.r.pc+1);
         println!("jumping to address {:04x}",addr);
         // subtract off an extra two because the CPU will automatically move us forward three
@@ -103,24 +103,24 @@ pub fn setup_op_codes() -> OpList {
     });
     //jump to relative immediate address if condition, signed immediate value.
     //check the carry flag
-    ol.add(0x38, "JR cc,e Carry Flag",0,4,|cpu,mmu|{
-        let e = mmu.read8(cpu.r.pc+1);
-        cpu.r.pc += 2;
-        // println!("immediate value is 0x{:x} {} {}",e, (e as i8), u8_as_i8(e));
-        println!("carry flag is set to {}",cpu.r.carry_flag);
-        if cpu.r.carry_flag {
-            // let v2 = (e as i8);
-            // println!("signed {}",v2);
-            // let v3 = cpu.r.pc as i32;
-            // println!("v3 is {}",v3);
-            // let v4 = v3 + (v2 as i32);
-            let addr = (((cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-            cpu.r.pc =  addr as u16;
-            println!("jumping to {:04x}", cpu.r.pc);
-        } else {
-            println!("not jumping, just continuing");
-        }
-    });
+    // ol.add(0x38, "JR cc,e Carry Flag",0,4,|cpu,mmu|{
+    //     let e = mmu.read8(cpu.r.pc+1);
+    //     cpu.r.pc += 2;
+    //     // println!("immediate value is 0x{:x} {} {}",e, (e as i8), u8_as_i8(e));
+    //     println!("carry flag is set to {}",cpu.r.carry_flag);
+    //     if cpu.r.carry_flag {
+    //         // let v2 = (e as i8);
+    //         // println!("signed {}",v2);
+    //         // let v3 = cpu.r.pc as i32;
+    //         // println!("v3 is {}",v3);
+    //         // let v4 = v3 + (v2 as i32);
+    //         let addr = (((cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
+    //         cpu.r.pc =  addr as u16;
+    //         println!("jumping to {:04x}", cpu.r.pc);
+    //     } else {
+    //         println!("not jumping, just continuing");
+    //     }
+    // });
     //unconditional Jump to relative address specified by signed 8bit immediate value
     ol.add(0x18,"JR e",0,3,|cpu,mmu|{
         let e = mmu.read8(cpu.r.pc+1);
@@ -152,15 +152,15 @@ pub fn setup_op_codes() -> OpList {
         cpu.r.set_hl(cpu.r.get_hl()+1);
     });
     // Load (HL+), A, copy contents of A into memory at HL, then INC HL
-    ol.add(0x22,"LD (HL+), A",1,2,|cpu,mmu|{
-        mmu.write8(cpu.r.get_hl(),cpu.r.a);
-        cpu.r.set_hl(cpu.r.get_hl()+1);
-    });
+    // ol.add(0x22,"LD (HL+), A",1,2,|cpu,mmu|{
+    //     mmu.write8(cpu.r.get_hl(),cpu.r.a);
+    //     cpu.r.set_hl(cpu.r.get_hl()+1);
+    // });
 
-    ol.add(0x13,"INC DE",1,2,|cpu,mmu|{
-        println!("incrementing DE");
-        cpu.r.set_de(cpu.r.get_de()+1);
-    });
+    // ol.add(0x13,"INC DE",1,2,|cpu,mmu|{
+    //     println!("incrementing DE");
+    //     cpu.r.set_de(cpu.r.get_de()+1);
+    // });
 
     ol.add(0x0B,"DEC BC",1,1,|cpu,mmu|{
         println!("decrementing BC");
@@ -195,14 +195,14 @@ pub fn setup_op_codes() -> OpList {
     });
 
     // Compare A with u8 n. sets flags based on teh comparison
-    ol.add(0x00FE, "CP A,n",2,4,|cpu,mmu|{
-        let n = mmu.read8(cpu.r.pc+1);
-        println!("comparing A:{:x} to n:{:x}",cpu.r.a,n);
-        // let v  = cpu.r.a - n;
-        cpu.r.zero_flag = cpu.r.a == n;
-        cpu.r.carry_flag = cpu.r.a < n;
-        cpu.r.subtract_n_flag = true;
-    });
+    // ol.add(0xFE, "CP A,n",2,4,|cpu,mmu|{
+    //     let n = mmu.read8(cpu.r.pc+1);
+    //     println!("comparing A:{:x} to n:{:x}",cpu.r.a,n);
+    //     // let v  = cpu.r.a - n;
+    //     cpu.r.zero_flag = cpu.r.a == n;
+    //     cpu.r.carry_flag = cpu.r.a < n;
+    //     cpu.r.subtract_n_flag = true;
+    // });
 
     return ol;
 }
@@ -243,7 +243,7 @@ pub fn DEC(reg:RegisterName, cpu:&mut Z80) -> Option<(usize, usize)> {
 }
 
 
-fn u8_as_i8(v: u8) -> i8 {
+pub fn u8_as_i8(v: u8) -> i8 {
     return v as i8
 }
 
@@ -276,6 +276,7 @@ pub enum Compare {
 pub enum Math {
     Xor_A_r(RegisterName),
     OR_A_r(RegisterName),
+    AND_A_r(RegisterName),
     Inc_r(RegisterName),
     Inc_rr(DoubleRegister),
     Dec_r(RegisterName),
