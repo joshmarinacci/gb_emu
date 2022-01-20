@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use serde_json::Value;
 use crate::cpu::Op;
 use crate::{MMU, OpList, Z80};
+use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
 use crate::RegisterName::{A, B, C, D, E, H, L};
 
 pub fn setup_op_codes() -> OpList {
@@ -57,7 +58,7 @@ pub fn setup_op_codes() -> OpList {
         // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
     });
 
-    //
+    // put value pointed to by DE into A
     ol.add(0x001a,"LD A,(DE)",1,2,|cpu,mmu|{
         cpu.r.a = mmu.read8(cpu.r.get_de())
         // let n = mmu.read8(cpu.r.pc+1);
@@ -146,7 +147,7 @@ pub fn setup_op_codes() -> OpList {
     //
 
     // //Load A, (HL+),  copy contents of memory at HL to A, then INC HL
-    ol.add(0x002a,"LD A, (HL+)",1,2,|cpu,mmu|{
+    ol.add(0x2a,"LD A, (HL+)",1,2,|cpu,mmu|{
         cpu.r.a = mmu.read8(cpu.r.get_hl());
         cpu.r.set_hl(cpu.r.get_hl()+1);
     });
@@ -249,12 +250,20 @@ fn u8_as_i8(v: u8) -> i8 {
 pub enum RegisterName {
     A,B,C,D,E,H,L
 }
+pub enum DoubleRegister {
+    BC,DE,HL, SP,
+}
 pub enum Special {
     DisableInterrupts()
 }
 pub enum Load {
     Load_r_u8(RegisterName),
+    Load_r_r(RegisterName,RegisterName),
     Load_high_r_u8(RegisterName),
+    Load_high_u8_r(RegisterName),
+    Load_R2_u16(DoubleRegister),
+    Load_r_addr_R2(DoubleRegister),
+    Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
 }
 pub enum Jump {
     JumpAbsolute_u16(),
@@ -266,6 +275,11 @@ pub enum Compare {
 }
 pub enum Math {
     Xor_A_r(RegisterName),
+    OR_A_r(RegisterName),
+    Inc_r(RegisterName),
+    Inc_rr(DoubleRegister),
+    Dec_r(RegisterName),
+    Dec_rr(DoubleRegister),
 }
 pub enum Instr {
     Load(Load),
@@ -285,6 +299,17 @@ impl Display for RegisterName {
             E => "E",
             H => "H",
             L => "L",
+        })
+    }
+}
+
+impl Display for DoubleRegister {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DoubleRegister::BC => "BC",
+            DoubleRegister::DE => "DE",
+            DoubleRegister::HL => "HL",
+            SP => "SP",
         })
     }
 }
@@ -315,13 +340,79 @@ fn get_cpu_register_u8(cpu: &mut Z80, reg: &RegisterName) -> u8 {
 
 pub fn lookup_opcode(code:u16) -> Option<Instr> {
     return match code {
+
+        // loads
+        0x40 => Some(Instr::Load(Load::Load_r_r(B,B))),
+        0x50 => Some(Instr::Load(Load::Load_r_r(D,B))),
+        0x60 => Some(Instr::Load(Load::Load_r_r(H,B))),
+        0x41 => Some(Instr::Load(Load::Load_r_r(B,C))),
+        0x51 => Some(Instr::Load(Load::Load_r_r(D,C))),
+        0x61 => Some(Instr::Load(Load::Load_r_r(H,C))),
+        0x42 => Some(Instr::Load(Load::Load_r_r(B,D))),
+        0x52 => Some(Instr::Load(Load::Load_r_r(D,D))),
+        0x62 => Some(Instr::Load(Load::Load_r_r(H,D))),
+        0x43 => Some(Instr::Load(Load::Load_r_r(B,E))),
+        0x53 => Some(Instr::Load(Load::Load_r_r(D,E))),
+        0x63 => Some(Instr::Load(Load::Load_r_r(H,E))),
+
+        0x44 => Some(Instr::Load(Load::Load_r_r(B,H))),
+        0x54 => Some(Instr::Load(Load::Load_r_r(D,H))),
+        0x64 => Some(Instr::Load(Load::Load_r_r(H,H))),
+        0x45 => Some(Instr::Load(Load::Load_r_r(B,L))),
+        0x55 => Some(Instr::Load(Load::Load_r_r(D,L))),
+        0x65 => Some(Instr::Load(Load::Load_r_r(H,L))),
+
+        0x48 => Some(Instr::Load(Load::Load_r_r(C,B))),
+        0x58 => Some(Instr::Load(Load::Load_r_r(E,B))),
+        0x68 => Some(Instr::Load(Load::Load_r_r(L,B))),
+        0x78 => Some(Instr::Load(Load::Load_r_r(A,B))),
+
         0x06 => Some(Instr::Load(Load::Load_r_u8(B))),
+        0xE0 => Some(Instr::Load(Load::Load_high_u8_r(A))),
+        0x01 => Some(Instr::Load(Load::Load_R2_u16(BC))),
+        0x11 => Some(Instr::Load(Load::Load_R2_u16(DE))),
+        0x21 => Some(Instr::Load(Load::Load_R2_u16(HL))),
+
+        0x1a => Some(Instr::Load(Load::Load_r_addr_R2(DE))),
+        // put value pointed to by DE into A
+
+        0x22 => Some(Instr::Load(Load::Load_addr_R2_A_inc(HL))),
+        // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+
+
+
         0xF3 => Some(Instr::Special(Special::DisableInterrupts())),
         0xF0 => Some(Instr::Load(Load::Load_high_r_u8(A))),
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
         0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_u8())),
+
         0xAF => Some(Instr::Math(Math::Xor_A_r(A))),
+        0xB0 => Some(Instr::Math(Math::OR_A_r(B))),
+        0xB1 => Some(Instr::Math(Math::OR_A_r(C))),
+        0xB2 => Some(Instr::Math(Math::OR_A_r(D))),
+        0xB3 => Some(Instr::Math(Math::OR_A_r(E))),
+        0xB4 => Some(Instr::Math(Math::OR_A_r(H))),
+        0xB5 => Some(Instr::Math(Math::OR_A_r(L))),
+
+        0xB7 => Some(Instr::Math(Math::OR_A_r(A))),
+
+
+        //increments and decrements
+        0x04 => Some(Instr::Math(Math::Inc_r(B))),
+        0x14 => Some(Instr::Math(Math::Inc_r(D))),
+        0x05 => Some(Instr::Math(Math::Dec_r(B))),
+        0x15 => Some(Instr::Math(Math::Dec_r(D))),
+
+        0x03 => Some(Instr::Math(Math::Inc_rr(BC))),
+        0x13 => Some(Instr::Math(Math::Inc_rr(DE))),
+        0x23 => Some(Instr::Math(Math::Inc_rr(HL))),
+        0x33 => Some(Instr::Math(Math::Inc_rr(SP))),
+
+        0x0B => Some(Instr::Math(Math::Dec_rr(BC))),
+        0x1B => Some(Instr::Math(Math::Dec_rr(DE))),
+        0x2B => Some(Instr::Math(Math::Dec_rr(HL))),
+        0x3B => Some(Instr::Math(Math::Dec_rr(SP))),
         _ => {
             println!("WARNING. can't lookup opcode {:04x}",code);
             None

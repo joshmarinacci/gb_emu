@@ -2,7 +2,7 @@ use std::io;
 use console::Term;
 use io::Result;
 use serde_json::Value;
-use crate::{execute, fetch_opcode_from_memory, MMU, Z80};
+use crate::{execute, fetch_opcode_from_memory, MMU, RegisterName, Z80};
 use crate::common::RomFile;
 use crate::opcodes::{Compare, decode, Instr, Jump, Load, lookup_opcode, Math, Special};
 
@@ -56,11 +56,23 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
 
         {
             // print the registers
-            term.write_line(&format!("PC={:04x}", ctx.cpu.r.pc))?;
-            term.write_line(&format!(" A={:02x}", ctx.cpu.r.a))?;
-            term.write_line(&format!(" B={:02x}", ctx.cpu.r.b))?;
-            term.write_line(&format!(" C={:02x}", ctx.cpu.r.c))?;
-            term.write_line(&format!(" D={:02x}", ctx.cpu.r.d))?;
+            term.write_line(&format!("PC: {:04x}", ctx.cpu.r.pc))?;
+            let regs_u8 = format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
+                                  ctx.cpu.r.a,
+                                  ctx.cpu.r.b,
+                                  ctx.cpu.r.c,
+                                  ctx.cpu.r.d,
+                                  ctx.cpu.r.e,
+                                  ctx.cpu.r.h,
+                                  ctx.cpu.r.l,
+            );
+            term.write_line(&regs_u8)?;
+            let regs_u16 = format!("BC:{:04x}  DE:{:04x}  HL:{:04x}",
+                                   ctx.cpu.r.get_bc(),
+                                   ctx.cpu.r.get_de(),
+                                   ctx.cpu.r.get_hl(),
+            );
+            term.write_line(&regs_u16)?;
             term.write_line(&format!(" flags Z:{}   N:{}  C:{}",
                                      ctx.cpu.r.zero_flag,
                                      ctx.cpu.r.subtract_n_flag,
@@ -72,7 +84,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
         let (opcode, instr_len) = fetch_opcode(&mut ctx.cpu, &mut ctx.mmu);
         let op = lookup_opcode(opcode);
         if let Some(ld) = op {
-            term.write_line(&format!("${:04x} : {:0x}: {}",
+            term.write_line(&format!("${:04x} : {:02x}: {}",
                                      ctx.cpu.r.pc,
                                      opcode,
                                      lookup_opcode_info(ld)))?;
@@ -115,11 +127,25 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8",r),
         Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
         Instr::Load(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High with {} + immediate u8",r,r),
+        Instr::Load(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}",r,r),
+        Instr::Load(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}",rr,rr),
+        Instr::Load(Load::Load_r_addr_R2(rr)) => format!("LD A, ({}) -- load data pointed to by {} into A",rr,rr),
+        Instr::Load(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}",rr,rr,rr),
+        // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+
+
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
         Instr::Jump(Jump::JumpRelative_cond_carry_u8()) => format!("JR cc,e -- Jump relative if Carry Flag set"),
         Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
-        Instr::Math(Math::Xor_A_r(r)) => format!("Xor A, {} -- Xor A with {}, store in A",r,r),
+        Instr::Math(Math::Xor_A_r(r)) => format!("XOR A, {} -- Xor A with {}, store in A",r,r),
+        Instr::Math(Math::OR_A_r(r)) => format!("OR A, {} -- OR A with {}, store in A",r,r),
+
+        Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}. sets flags",rr,rr),
+        Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}. sets flags",rr,rr),
+        Instr::Math(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags",r,r),
+        Instr::Math(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags",r,r),
+        Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
     }
 }
 
