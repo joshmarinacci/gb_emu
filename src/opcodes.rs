@@ -454,20 +454,34 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
 
         //increments and decrements
-        0x04 => Some(Instr::Math(Math::Inc_r(B))),
-        0x14 => Some(Instr::Math(Math::Inc_r(D))),
-        0x05 => Some(Instr::Math(Math::Dec_r(B))),
-        0x15 => Some(Instr::Math(Math::Dec_r(D))),
-
         0x03 => Some(Instr::Math(Math::Inc_rr(BC))),
-        0x13 => Some(Instr::Math(Math::Inc_rr(DE))),
-        0x23 => Some(Instr::Math(Math::Inc_rr(HL))),
-        0x33 => Some(Instr::Math(Math::Inc_rr(SP))),
-
+        0x04 => Some(Instr::Math(Math::Inc_r(B))),
+        0x05 => Some(Instr::Math(Math::Dec_r(B))),
         0x0B => Some(Instr::Math(Math::Dec_rr(BC))),
+        0x0C => Some(Instr::Math(Math::Inc_r(C))),
+        0x0D => Some(Instr::Math(Math::Dec_r(C))),
+
+        0x13 => Some(Instr::Math(Math::Inc_rr(DE))),
+        0x14 => Some(Instr::Math(Math::Inc_r(D))),
+        0x15 => Some(Instr::Math(Math::Dec_r(D))),
         0x1B => Some(Instr::Math(Math::Dec_rr(DE))),
+        0x1C => Some(Instr::Math(Math::Inc_r(E))),
+        0x1D => Some(Instr::Math(Math::Dec_r(E))),
+
+        0x23 => Some(Instr::Math(Math::Inc_rr(HL))),
+        0x24 => Some(Instr::Math(Math::Inc_r(H))),
+        0x25 => Some(Instr::Math(Math::Dec_r(H))),
         0x2B => Some(Instr::Math(Math::Dec_rr(HL))),
+        0x2C => Some(Instr::Math(Math::Inc_r(L))),
+        0x2D => Some(Instr::Math(Math::Dec_r(L))),
+
+        0x33 => Some(Instr::Math(Math::Inc_rr(SP))),
+        // 0x34 => Some(Instr::Math(Math::Inc_r(H))),
+        // 0x35 => Some(Instr::Math(Math::Dec_r(H))),
         0x3B => Some(Instr::Math(Math::Dec_rr(SP))),
+        0x3C => Some(Instr::Math(Math::Inc_r(A))),
+        0x3D => Some(Instr::Math(Math::Dec_r(A))),
+
         _ => {
             println!("WARNING. can't lookup opcode {:04x}",code);
             None
