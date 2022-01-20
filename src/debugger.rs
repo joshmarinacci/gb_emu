@@ -68,7 +68,7 @@ impl Ctx {
     }
     fn execute_math_instructions(&mut self, math: &Math) {
         match math {
-            Math::Xor_A_r(r) => {
+            Math::XOR_A_r(r) => {
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r));
                 if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
                 self.cpu.r.subtract_n_flag = false;
@@ -129,7 +129,7 @@ impl Ctx {
                 let addr = self.mmu.read16(self.cpu.r.pc + 1);
                 // println!("jumping to address {:04x}",addr);
                 self.set_pc(addr);
-            }
+            },
             Jump::JumpRelative_cond_carry_u8() => {
                 self.inc_pc(1);
                 let e = self.mmu.read8(self.cpu.r.pc);
@@ -140,13 +140,27 @@ impl Ctx {
                     // println!("jump address is {:04x}",(addr as u16));
                     self.set_pc(addr as u16);
                 } else {}
-            }
+            },
+            Jump::JumpRelative_cond_notzero_u8() => {
+                self.inc_pc(1);
+                let e = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+                let addr = (self.cpu.r.pc as i32) + (e as i8 as i32);
+                if !self.cpu.r.zero_flag {
+                    println!("jumping to {:04x}",addr);
+                    self.set_pc(addr as u16);
+                }
+            },
         }
     }
     fn execute_load_instructions(&mut self, load: &Load) {
         match load {
-            Load::Load_r_u8(_) => {
-                todo!()
+            Load::Load_r_u8(r) => {
+                // load immediate u8 into the register
+                self.inc_pc(1);
+                let val = self.mmu.read8(self.cpu.r.pc);
+                self.cpu.r.set_u8reg(r, val);
+                self.inc_pc(1);
             }
             // put the memory address 0xFF00 + n into register r
             Load::Load_high_r_u8(r) => {
@@ -211,7 +225,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
     let mut term = Term::stdout();
 
     loop {
-        // term.clear_screen()?;
+        term.clear_screen()?;
         term.write_line(&format!("executing rom {}", ctx.cart.path))?;
         term.write_line(&format!("op count {}",&ctx.cpu.ops.ops.len()))?;
         term.write_line(&format!("========="))?;
@@ -222,7 +236,10 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: RomFile) -> Resu
         for n in 0..5 {
             let iv = (start as i32) + n - back;
             // println!("n is {} {}",n,iv);
-            if iv < 0 { continue; }
+            if iv < 0 {
+                term.write_line("----")?;
+                continue;
+            }
             let addr = iv as u16;
             // println!("address is {:04x}",addr);
             let prefix = if(addr == start) { " *"} else {"  "};
@@ -312,9 +329,10 @@ fn lookup_opcode_info(op: Instr) -> String {
 
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
         Instr::Jump(Jump::JumpRelative_cond_carry_u8()) => format!("JR cc,e -- Jump relative if Carry Flag set"),
+        Instr::Jump(Jump::JumpRelative_cond_notzero_u8()) => format!("JR NZ,e -- Jump relative if Not Zero flag set"),
         Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
-        Instr::Math(Math::Xor_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A",r,r),
+        Instr::Math(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
 
