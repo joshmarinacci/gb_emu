@@ -151,6 +151,20 @@ impl Ctx {
                     self.set_pc(addr as u16);
                 }
             },
+            Jump::JumpRelative_i8() => {
+                self.inc_pc(1);
+                let e = self.mmu.read8(self.cpu.r.pc);
+                let addr = ((self.cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
+                println!("jumping by {}",u8_as_i8(e));
+                self.set_pc(addr as u16);
+                // ol.add(0x18,"JR e",0,3,|cpu,mmu|{
+                //     let e = mmu.read8(cpu.r.pc+1);
+                //     let addr = ((cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
+                //     println!("jumping by {}",u8_as_i8(e));
+                //     cpu.r.pc = addr as u16;
+                // });
+
+            }
         }
     }
     fn execute_load_instructions(&mut self, load: &Load) {
@@ -330,6 +344,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
         Instr::Jump(Jump::JumpRelative_cond_carry_u8()) => format!("JR cc,e -- Jump relative if Carry Flag set"),
         Instr::Jump(Jump::JumpRelative_cond_notzero_u8()) => format!("JR NZ,e -- Jump relative if Not Zero flag set"),
+        Instr::Jump(Jump::JumpRelative_i8()) => format!(" JR e, Jump relative with signed offset"),
         Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
         Instr::Math(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),

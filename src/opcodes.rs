@@ -122,12 +122,12 @@ pub fn setup_op_codes() -> OpList {
     //     }
     // });
     //unconditional Jump to relative address specified by signed 8bit immediate value
-    ol.add(0x18,"JR e",0,3,|cpu,mmu|{
-        let e = mmu.read8(cpu.r.pc+1);
-        let addr = ((cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
-        println!("jumping by {}",u8_as_i8(e));
-        cpu.r.pc = addr as u16;
-    });
+    // ol.add(0x18,"JR e",0,3,|cpu,mmu|{
+    //     let e = mmu.read8(cpu.r.pc+1);
+    //     let addr = ((cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
+    //     println!("jumping by {}",u8_as_i8(e));
+    //     cpu.r.pc = addr as u16;
+    // });
 
 
     // //Returns
@@ -268,7 +268,8 @@ pub enum Load {
 pub enum Jump {
     JumpAbsolute_u16(),
     JumpRelative_cond_carry_u8(),
-    JumpRelative_cond_notzero_u8()
+    JumpRelative_cond_notzero_u8(),
+    JumpRelative_i8(),
 }
 pub enum Compare {
     CP_A_r(RegisterName),
@@ -393,6 +394,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xF3 => Some(Instr::Special(Special::DisableInterrupts())),
         0xF0 => Some(Instr::Load(Load::Load_high_r_u8(A))),
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
+        0x18 => Some(Instr::Jump(Jump::JumpRelative_i8())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
         0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_u8())),
         0x20 => Some(Instr::Jump(Jump::JumpRelative_cond_notzero_u8())),
