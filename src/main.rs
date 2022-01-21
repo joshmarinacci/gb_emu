@@ -217,48 +217,6 @@ fn run_bootrom(x: &Cli) {
     //start the cartridge at 0x0100
 }
 
-
-//
-// // INC C
-// fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     // println!("INC C");
-//     cpu.r.c += 1;
-//     (1,8)
-// }
-//
-// // LD (C),A
-// fn op_00e2_LD_CA(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     let addr:u16 = ((0xFF00 as u16) + (cpu.r.c as u16)) as u16;
-//     mmu.write8(addr, cpu.r.a);
-//     (1,8)
-// }
-//
-//
-//
-// // XOR A
-// fn op_00AF_XOR_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     cpu.r.a.bitxor_assign(cpu.r.a);
-//     (1,4)
-// }
-// //16bit register loads
-//
-// // load register A into memory pointed at by HL, then decrement HL
-// fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     mmu.write8(cpu.r.get_hl(),cpu.r.a);
-//     cpu.r.set_hl(cpu.r.get_hl()-1);
-//     (1,8)
-// }
-// // load register A into memory pointed at by HL
-// fn op_0077_LD_HL_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     mmu.write8(cpu.r.get_hl(),cpu.r.a);
-//     (1,8)
-// }
-// // BIT 7,H
-// fn op_CB76_BIT_7_H(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     cpu.r.zero_flag = !((cpu.r.h & 0b1000_0000) > 0);
-//     (2,8)
-// }
-
 fn execute(cpu: &mut Z80, mmu: &mut MMU, opcodes: &Value) {
     // println!("PC at {:04x}",cpu.r.pc);
     let (opcode, off) = fetch_opcode_from_memory(cpu, mmu);

@@ -1,6 +1,8 @@
 use std::io;
-use console::Term;
+use console::{Color, style, Style, Term};
 use io::Result;
+use std::io::Error;
+use console::Color::{Black, White};
 use serde_json::Value;
 use crate::{Cli, execute, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::RomFile;
@@ -18,7 +20,7 @@ impl Ctx {
     pub(crate) fn execute(&mut self, term: &mut Term) {
         // term.write_line(&format!("PC at {:04x}", self.cpu.r.pc));
         let (opcode, off) = fetch_opcode_from_memory(&mut self.cpu, &mut self.mmu);
-        term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode));
+        // term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode));
         if let Some(instr) = lookup_opcode(opcode) {
             self.execute_instruction(&instr);
         } else {
@@ -29,7 +31,6 @@ impl Ctx {
         self.clock+=1;
     }
     fn execute_instruction(&mut self, inst: &Instr) {
-        println!("executing");
         match inst {
             Instr::Special(special)  => self.execute_special_instructions(special),
             Instr::Load(load)         => self.execute_load_instructions(load),
@@ -47,7 +48,7 @@ impl Ctx {
         self.cpu.r.pc = pc;
     }
     fn set_pc(&mut self, addr: u16) {
-        println!("jumping to {:04x}",addr);
+        // println!("jumping to {:04x}",addr);
         self.cpu.r.pc = addr;
     }
 }
@@ -314,7 +315,7 @@ impl Ctx {
                 let e =self.mmu.read8(self.cpu.r.pc);
                 let addr = (0xFF00 as u16) + (e as u16);
                 let v = self.cpu.r.get_u8reg(r);
-                println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
+                // println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
                 self.mmu.write8(addr,v);
                 self.inc_pc(1);
             },
@@ -323,7 +324,7 @@ impl Ctx {
                 self.inc_pc(1);
                 let v = self.cpu.r.get_u8reg(r);
                 let addr = (0xFF00 as u16) + (self.cpu.r.get_u8reg(off) as u16);
-                println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
+                // println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
                 self.mmu.write8(addr,v);
                 self.inc_pc(1);
             }
@@ -338,7 +339,7 @@ impl Ctx {
                 let val = self.mmu.read16(self.cpu.r.pc);
                 self.cpu.r.set_u16reg(rr,val);
                 self.inc_pc(2);
-                println!("copied immediate value {:04x} into register {}",val,rr)
+                // println!("copied immediate value {:04x} into register {}",val,rr)
             }
             Load::Load_r_addr_R2(rr) => {
                 // load to the 8bit register A, data from the address in the 16 bit register
@@ -346,7 +347,7 @@ impl Ctx {
                 let addr = self.cpu.r.get_u16reg(rr);
                 let val = self.mmu.read8(addr);
                 self.cpu.r.set_u8reg(&A,val);
-                println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
+                // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
             }
             Load::Load_A_addr_R2_inc(rr) => {
                 // load to the 8bit register A, data from the address in the 16 bit register, then increment that register
@@ -354,7 +355,7 @@ impl Ctx {
                 let addr = self.cpu.r.get_u16reg(rr);
                 let val = self.mmu.read8(addr);
                 self.cpu.r.set_u8reg(&A,val);
-                println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
+                // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
                 self.cpu.r.set_u16reg(rr,self.cpu.r.get_u16reg(rr)+1);
             },
             Load::Load_addr_R2_A_inc(rr) => {
@@ -441,18 +442,20 @@ impl Ctx {
 pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
     let mut ctx = Ctx { cpu, mmu, opcodes, clock:0};
     let mut term = Term::stdout();
+    let mut full_registers_visible = false;
 
     for n in 0..fast_forward {
         ctx.execute(&mut term);
     }
 
+    let border = Style::new().bg(Color::Magenta).black();
     loop {
-        term.clear_screen()?;
+        // term.clear_screen()?;
         if let Some(cart) = &cart {
             term.write_line(&format!("executing rom {}", cart.path))?;
         }
         term.write_line(&format!("clock {}",&ctx.clock))?;
-        term.write_line(&format!("========="))?;
+        term.write_line(&border.apply_to("========================================").to_string())?;
 
         // print the current memory
         let start = ctx.cpu.r.pc;
@@ -473,6 +476,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
 
         {
             // print the registers
+            let reg_style = Style::new().bg(White).red().underlined();
             term.write_line(&format!("PC: {:04x}", ctx.cpu.r.pc))?;
             let regs_u8 = format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
                                   ctx.cpu.r.a,
@@ -483,35 +487,49 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
                                   ctx.cpu.r.h,
                                   ctx.cpu.r.l,
             );
-            term.write_line(&regs_u8)?;
+            term.write_line(&reg_style.apply_to(regs_u8).to_string())?;
             let regs_u16 = format!("BC:{:04x}  DE:{:04x}  HL:{:04x}",
                                    ctx.cpu.r.get_bc(),
                                    ctx.cpu.r.get_de(),
                                    ctx.cpu.r.get_hl(),
             );
             term.write_line(&regs_u16)?;
-            term.write_line(&format!(" flags Z:{}   N:{}  C:{}",
-                                     ctx.cpu.r.zero_flag,
-                                     ctx.cpu.r.subtract_n_flag,
-                                     ctx.cpu.r.carry_flag))?;
-            term.write_line(&format!(" Screen: LY {:02x}",ctx.mmu.hardware.ly))?;
+            let flag_style = Style::new().blue();
+            term.write_line(&format!("flags Z:{}   N:{}  H:{}  C:{}",
+                                     flag_style.apply_to(ctx.cpu.r.zero_flag),
+                                     flag_style.apply_to(ctx.cpu.r.subtract_n_flag),
+                                     flag_style.apply_to(ctx.cpu.r.half_flag),
+                                     flag_style.apply_to(ctx.cpu.r.carry_flag),
+            ))?;
+            // term.write_line(&format!(" Screen: LY {:02x}",ctx.mmu.hardware.LY))?;
+        }
+        if full_registers_visible {
+            show_full_hardware_registers(&term,&ctx);
         }
 
         // print info about the next opcode
+        let primary = Style::new().green().bold();
+        let bold = Style::new().reverse().red();
+        let italic = Style::new().italic();
         let (opcode, instr_len) = fetch_opcode(&mut ctx.cpu, &mut ctx.mmu);
         let op = lookup_opcode(opcode);
         if let Some(ld) = op {
-            term.write_line(&format!("${:04x} : {:02x}: {}",
-                                     ctx.cpu.r.pc,
-                                     opcode,
-                                     lookup_opcode_info(ld)))?;
+            term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
+                                                       ctx.cpu.r.pc,
+                                                       bold.apply_to(format!("{:02X}",opcode)),
+                                                       italic.apply_to(lookup_opcode_info(ld)),
+            )).to_string())?;
         } else {
             panic!("unknown op code")
         }
 
 
-        term.write_line(&format!("next: j  back: k"))?;
+        let commands = Style::new().reverse();
+        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hardwareregisters")).to_string())?;
         let ch = term.read_char()?;
+        if ch == 'r' {
+            full_registers_visible = !full_registers_visible;
+        }
         if ch == 'J' {
             term.write_line(&format!("doing 16 instructions"))?;
             for n in 0..16 {
@@ -536,6 +554,16 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
 - [ ] need a curses lib for drawing the ui?
  */
 
+    Ok(())
+}
+
+fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
+    let reg = Style::new().bg(Color::Cyan).red().bold();
+    term.write_line(&format!("registers are {} ",reg.apply_to("cool")));
+    term.write_line(&reg.apply_to(&format!("LY {}",ctx.mmu.hardware.LY)).to_string())?;
+    term.write_line(&format!("LYC {}",ctx.mmu.hardware.LYC))?;
+    term.write_line(&format!("SCX {}",ctx.mmu.hardware.SCX))?;
+    term.write_line(&format!("SCY {}",ctx.mmu.hardware.SCY))?;
     Ok(())
 }
 
