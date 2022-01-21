@@ -280,8 +280,11 @@ pub enum Load {
 }
 pub enum Jump {
     JumpAbsolute_u16(),
-    JumpRelative_cond_carry_u8(),
-    JumpRelative_cond_notzero_u8()
+    JumpRelative_i8(),
+    JumpRelative_cond_carry_i8(),
+    JumpRelative_cond_notcarry_i8(),
+    JumpRelative_cond_zero_i8(),
+    JumpRelative_cond_notzero_i8(),
 }
 pub enum Compare {
     CP_A_r(RegisterName),
@@ -466,10 +469,14 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         // 0xF5 => Some(Instr::Special(PUSH(AF))),
 
         0xF0 => Some(Instr::Load(Load::Load_high_r_u8(A))),
+
+        0x18 => Some(Instr::Jump(Jump::JumpRelative_i8())), //2 bytes, no flags, relative signed
+        0x20 => Some(Instr::Jump(Jump::JumpRelative_cond_notzero_i8())),
+        0x28 => Some(Instr::Jump(Jump::JumpRelative_cond_zero_i8())), //2 bytes, if zero, relative signed
+        0x30 => Some(Instr::Jump(Jump::JumpRelative_cond_notcarry_i8())), //2 bytes, if not carry, realtive signed
+        0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_i8())), //2 bytes, if carry, relative signed
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
-        0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_u8())),
-        0x20 => Some(Instr::Jump(Jump::JumpRelative_cond_notzero_u8())),
 
         0xA8 => Some(Instr::Math(Math::XOR_A_r(B))),
         0xA9 => Some(Instr::Math(Math::XOR_A_r(C))),

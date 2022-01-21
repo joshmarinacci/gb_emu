@@ -244,24 +244,48 @@ impl Ctx {
                 // println!("jumping to address {:04x}",addr);
                 self.set_pc(addr);
             },
-            Jump::JumpRelative_cond_carry_u8() => {
+            Jump::JumpRelative_i8() => {
+                self.inc_pc(1);
+                let e = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+                let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
+                self.set_pc(addr as u16);
+            },
+            Jump::JumpRelative_cond_carry_i8() => {
                 self.inc_pc(1);
                 let e = self.mmu.read8(self.cpu.r.pc);
                 self.inc_pc(1);
                 // println!("carry flag is set to {}",self.cpu.r.carry_flag);
                 if self.cpu.r.carry_flag {
                     let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-                    // println!("jump address is {:04x}",(addr as u16));
                     self.set_pc(addr as u16);
                 } else {}
             },
-            Jump::JumpRelative_cond_notzero_u8() => {
+            Jump::JumpRelative_cond_notcarry_i8() => {
+                self.inc_pc(1);
+                let e = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+                // println!("carry flag is set to {}",self.cpu.r.carry_flag);
+                if !self.cpu.r.carry_flag {
+                    let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
+                    self.set_pc(addr as u16);
+                }
+            }
+            Jump::JumpRelative_cond_zero_i8() => {
+                self.inc_pc(1);
+                let e = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+                let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
+                if self.cpu.r.zero_flag {
+                    self.set_pc(addr as u16);
+                }
+            }
+            Jump::JumpRelative_cond_notzero_i8() => {
                 self.inc_pc(1);
                 let e = self.mmu.read8(self.cpu.r.pc);
                 self.inc_pc(1);
                 let addr = (self.cpu.r.pc as i32) + (e as i8 as i32);
                 if !self.cpu.r.zero_flag {
-                    println!("jumping to {:04x}",addr);
                     self.set_pc(addr as u16);
                 }
             },
@@ -531,8 +555,11 @@ fn lookup_opcode_info(op: Instr) -> String {
 
 
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
-        Instr::Jump(Jump::JumpRelative_cond_carry_u8()) => format!("JR cc,e -- Jump relative if Carry Flag set"),
-        Instr::Jump(Jump::JumpRelative_cond_notzero_u8()) => format!("JR NZ,e -- Jump relative if Not Zero flag set"),
+        Instr::Jump(Jump::JumpRelative_i8()) => format!("JR e --   Jump relative to signed offset"),
+        Instr::Jump(Jump::JumpRelative_cond_carry_i8()) => format!("JR C,e -- Jump relative if Carry Flag set"),
+        Instr::Jump(Jump::JumpRelative_cond_notcarry_i8()) => format!("JR NC,e -- Jump relative if not Carry flag set"),
+        Instr::Jump(Jump::JumpRelative_cond_zero_i8()) => format!("JR Z,e -- Jump relative if Zero flag set"),
+        Instr::Jump(Jump::JumpRelative_cond_notzero_i8()) => format!("JR NZ,e -- Jump relative if not Zero flag set"),
         Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
 
