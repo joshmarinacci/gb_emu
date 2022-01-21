@@ -285,8 +285,6 @@ pub enum Jump {
     JumpRelative_cond_notcarry_i8(),
     JumpRelative_cond_zero_i8(),
     JumpRelative_cond_notzero_i8(),
-    JumpRelative_cond_carry_u8(),
-    JumpRelative_cond_notzero_u8(),
 }
 pub enum Compare {
     CP_A_r(RegisterName),
@@ -478,10 +476,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x30 => Some(Instr::Jump(Jump::JumpRelative_cond_notcarry_i8())), //2 bytes, if not carry, realtive signed
         0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_i8())), //2 bytes, if carry, relative signed
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
-        0x18 => Some(Instr::Jump(Jump::JumpRelative_i8())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
-        0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_u8())),
-        0x20 => Some(Instr::Jump(Jump::JumpRelative_cond_notzero_u8())),
 
         0xA8 => Some(Instr::Math(Math::XOR_A_r(B))),
         0xA9 => Some(Instr::Math(Math::XOR_A_r(C))),
@@ -532,94 +527,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 }
 pub fn decode(code:u16, arg:u16, cpu:&mut Z80, mmu:&mut MMU, opcodes: &Value) -> (usize, usize) {
     println!("executing op {:02x}", code);
-    let res:Option<(usize,usize)> = match code {
-        // 8bit immediate value to register copy: LD r,n
-        // 0x06 => LD_r_u8(B,cpu,mmu),
-        // 0x0E => LD_r_u8(C,cpu,mmu),
-        // 0x16 => LD_r_u8(D,cpu,mmu),
-        0x1E => LD_r_u8(E,cpu,mmu),
-        0x26 => LD_r_u8(H,cpu,mmu),
-        0x2E => LD_r_u8(L,cpu,mmu),
-        0x3E => LD_r_u8(A,cpu,mmu),
-
-        // 8bit register to register copies:  LD r,r
-        0x78 => LD(A, B, cpu),
-        0x79 => LD(A, C, cpu),
-        0x7A => LD(A, D, cpu),
-        0x7B => LD(A, E, cpu),
-        0x7C => LD(A, H, cpu),
-        0x7D => LD(A, L, cpu),
-        0x7F => LD(A, A, cpu),
-
-        0x40 => LD(B, B, cpu),
-        0x41 => LD(B, C, cpu),
-        0x42 => LD(B, D, cpu),
-        0x43 => LD(B, E, cpu),
-        0x44 => LD(B, H, cpu),
-        0x45 => LD(B, L, cpu),
-
-        0x48 => LD(C, B, cpu),
-        0x49 => LD(C, C, cpu),
-        0x4A => LD(C, D, cpu),
-        0x4B => LD(C, E, cpu),
-        0x4C => LD(C, H, cpu),
-        0x4D => LD(C, L, cpu),
-        0x4F => LD(C, A, cpu),
-
-        0x50 => LD(D, B, cpu),
-        0x51 => LD(D, C, cpu),
-        0x52 => LD(D, D, cpu),
-        0x53 => LD(D, E, cpu),
-        0x54 => LD(D, H, cpu),
-        0x55 => LD(D, L, cpu),
-
-        0x58 => LD(E, B, cpu),
-        0x59 => LD(E, C, cpu),
-        0x5A => LD(E, D, cpu),
-        0x5B => LD(E, E, cpu),
-        0x5C => LD(E, H, cpu),
-        0x5D => LD(E, L, cpu),
-
-        0x60 => LD(H, B, cpu),
-        0x61 => LD(H, C, cpu),
-        0x62 => LD(H, D, cpu),
-        0x63 => LD(H, E, cpu),
-        0x64 => LD(H, H, cpu),
-        0x65 => LD(H, L, cpu),
-
-        0x68 => LD(L, B, cpu),
-        0x69 => LD(L, C, cpu),
-        0x6A => LD(L, D, cpu),
-        0x6B => LD(L, E, cpu),
-        0x6C => LD(L, H, cpu),
-        0x6D => LD(L, L, cpu),
-
-        // Register Increments
-        // 0x3C => INC(A, cpu),
-        // 0x04 => INC(B, cpu),
-        // 0x0C => INC(C, cpu),
-        // 0x14 => INC(D, cpu),
-        // 0x1C => INC(E, cpu),
-        // 0x24 => INC(H, cpu),
-        // 0x2C => INC(L, cpu),
-
-        //register decrements
-        // 0x3d => DEC(A,cpu),
-        // 0x05 => DEC(B,cpu),
-        // 0x0d => DEC(C,cpu),
-        // 0x15 => DEC(D,cpu),
-        // 0x1d => DEC(E,cpu),
-        // 0x25 => DEC(H,cpu),
-        // 0x2d => DEC(L,cpu),
-
-        _ => {None}
-    };
-
-    if let Some((a,b)) = res {
-        return (a,b)
-    }
-
-
     if let Some(op) = cpu.ops.ops.get(&code) {
         println!("PC {:04x}: OP {:04x}: {}", cpu.r.pc, code, op.name);
         let il = op.inst_len;
