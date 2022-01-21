@@ -2,21 +2,30 @@ use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
 
 pub struct Hardware {
-    pub ly:u8,
+    pub SCY:u8,
+    pub SCX:u8,
+    pub LY:u8,
+    pub LYC:u8,
+    pub WY:u8,
+    pub WX:u8,
 }
 
 impl Hardware {
     fn init() -> Hardware {
         Hardware {
-            ly: 0,
+            SCY: 0,
+            SCX: 0,
+            LY: 0,
+            LYC: 0,
+            WY: 0,
+            WX: 0
         }
     }
     pub fn update(&mut self) {
-        self.ly = self.ly + 1;
-        if self.ly > 153 {
-            self.ly = 0
+        self.LY = self.LY + 1;
+        if self.LY > 153 {
+            self.LY = 0
         }
-        println!("LY is {}",self.ly);
     }
 }
 pub struct MMU {
@@ -96,10 +105,10 @@ impl MMU {
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("reading from vram {:04x}",addr);
         }
-        if addr == LY_LCDC_Y_COORD {
-            // println!("reading LY LCDC_Y_COORD");
-            return self.hardware.ly;
-        }
+        if addr == LY_LCDC_Y_COORD { return self.hardware.LY; }
+        if addr == LYC_LCDC_Y_COMPARE { return self.hardware.LYC; }
+        if addr == SCX_SCROLL_X { return self.hardware.SCX; }
+        if addr == SCY_SCROLL_Y { return self.hardware.SCY; }
         self.data[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
@@ -107,6 +116,12 @@ impl MMU {
         let b1 = self.read8(addr)   as u16;
         let b2 = self.read8(addr+1) as u16;
         return b1 + (b2 << 8);
+    }
+    pub fn write16(&mut self, addr:u16, data:u16) {
+        let b1 = ((data & 0xFF00) >> 8) as u8;
+        let b2 = ((data & 0x00FF) >> 0) as u8;
+        self.data[(addr + 0) as usize] = b1;
+        self.data[(addr + 1) as usize] = b2;
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr == SB_REGISTER {
@@ -118,7 +133,7 @@ impl MMU {
             panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            println!("writing in VRAM {:04x}  {:x}", addr, val);
+            // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == LCDC_LCDCONTROL {
             println!("writing to turn on the LCD Display");
@@ -126,9 +141,11 @@ impl MMU {
         if addr == STAT_LCDCONTROL {
             println!("writing to stat the LCD Display");
         }
-        if addr == 0xFF47 {
+        if addr == BGP {
             println!("writing to special LCD register")
         }
+        if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
+        if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             println!("writing to internal ram:  {:04x} := {:x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);

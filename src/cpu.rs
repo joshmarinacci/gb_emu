@@ -2,8 +2,8 @@ use core::default::Default;
 use core::fmt::{Debug, Formatter};
 use std::collections::HashMap;
 use crate::bootrom::BOOT_ROM;
-use crate::{MMU, RegisterName};
-use crate::opcodes::{DoubleRegister, setup_op_codes};
+use crate::{MMU};
+use crate::opcodes::{DoubleRegister, RegisterName, setup_op_codes};
 
 #[derive(Debug)]
 pub struct Z80_registers {

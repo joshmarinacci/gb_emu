@@ -23,8 +23,6 @@ use common::RomFile;
 use crate::cpu::{OpList, Z80};
 use crate::debugger::start_debugger;
 use crate::mmu::MMU;
-use crate::opcodes::{DEC, INC, LD, LD_r_u8, RegisterName};
-use crate::RegisterName::{A, B, C, D, E, H, L};
 
 
 fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
@@ -43,14 +41,28 @@ fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
 fn main() {
     let args = init_setup();
     println!("runnnig with args {:?}",args);
-    if let Some(pth) = args.romfile {
+    if let Some(ref pth) = args.romfile {
         println!("loading the romfile {:?}", pth.as_path());
         if let Ok(cart) = load_romfile(pth) {
-            run_romfile(cart,args.interactive);
+            run_romfile(cart, args.interactive, &args);
         }
     } else {
-        run_bootrom();
+        if args.interactive {
+            run_bootrom_interactive(&args);
+        } else {
+            run_bootrom(&args);
+        }
     }
+}
+
+fn run_bootrom_interactive(args: &Cli) {
+    println!("running the bootrom");
+    let mut cpu = Z80::init();
+    let mut mmu = MMU::init_with_bootrom();
+    cpu.reset();
+    cpu.r.pc = 0x00;
+    let OPCODE_MAP = load_opcode_map();
+    start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
 }
 
 fn load_opcode_map() -> serde_json::Value {
@@ -58,7 +70,7 @@ fn load_opcode_map() -> serde_json::Value {
     return serde_json::from_str(&raw).unwrap();
 }
 
-fn run_romfile(cart: RomFile, interactive: bool) {
+fn run_romfile(cart: RomFile, interactive: bool, args:&Cli) {
     println!("running the cart {:?}", cart.data.len());
     let mut cpu = Z80::init();
     let mut mmu = MMU::init_with_rom_no_header(&cart.data);
@@ -67,7 +79,7 @@ fn run_romfile(cart: RomFile, interactive: bool) {
     let OPCODE_MAP = load_opcode_map();
 
     if interactive {
-        start_debugger(cpu,mmu,OPCODE_MAP, cart);
+        start_debugger(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward);
     } else {
         loop {
             execute(&mut cpu, &mut mmu, &OPCODE_MAP);
@@ -76,7 +88,7 @@ fn run_romfile(cart: RomFile, interactive: bool) {
 }
 
 
-fn load_romfile(pth: PathBuf) -> Result<RomFile,Error> {
+fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
     let data:Vec<u8> = fs::read(pth)?;
     Ok(RomFile {
@@ -85,7 +97,7 @@ fn load_romfile(pth: PathBuf) -> Result<RomFile,Error> {
     })
 }
 
-fn run_bootrom() {
+fn run_bootrom(x: &Cli) {
     println!("======= running the bootrom ===== ");
     let mut cpu = Z80::init();
     let mut mmu = MMU::init_with_bootrom();
@@ -205,48 +217,6 @@ fn run_bootrom() {
     //start the cartridge at 0x0100
 }
 
-
-//
-// // INC C
-// fn op_000c_INC_C(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     // println!("INC C");
-//     cpu.r.c += 1;
-//     (1,8)
-// }
-//
-// // LD (C),A
-// fn op_00e2_LD_CA(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     let addr:u16 = ((0xFF00 as u16) + (cpu.r.c as u16)) as u16;
-//     mmu.write8(addr, cpu.r.a);
-//     (1,8)
-// }
-//
-//
-//
-// // XOR A
-// fn op_00AF_XOR_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     cpu.r.a.bitxor_assign(cpu.r.a);
-//     (1,4)
-// }
-// //16bit register loads
-//
-// // load register A into memory pointed at by HL, then decrement HL
-// fn op_0032_LD_HLm_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     mmu.write8(cpu.r.get_hl(),cpu.r.a);
-//     cpu.r.set_hl(cpu.r.get_hl()-1);
-//     (1,8)
-// }
-// // load register A into memory pointed at by HL
-// fn op_0077_LD_HL_A(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     mmu.write8(cpu.r.get_hl(),cpu.r.a);
-//     (1,8)
-// }
-// // BIT 7,H
-// fn op_CB76_BIT_7_H(arg: u16, cpu: &mut Z80, mmu: &mut MMU) -> (usize, usize) {
-//     cpu.r.zero_flag = !((cpu.r.h & 0b1000_0000) > 0);
-//     (2,8)
-// }
-
 fn execute(cpu: &mut Z80, mmu: &mut MMU, opcodes: &Value) {
     // println!("PC at {:04x}",cpu.r.pc);
     let (opcode, off) = fetch_opcode_from_memory(cpu, mmu);
@@ -274,7 +244,11 @@ struct Cli {
     #[structopt(parse(from_os_str))]
     romfile: Option<PathBuf>,
     #[structopt(long)]
+    boot:bool,
+    #[structopt(long)]
     interactive:bool,
+    #[structopt(long, default_value="0")]
+    fastforward:u32,
 }
 
 fn init_setup() -> Cli {
