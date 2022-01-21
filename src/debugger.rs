@@ -2,9 +2,10 @@ use std::io;
 use console::Term;
 use io::Result;
 use serde_json::Value;
-use crate::{A, Cli, execute, fetch_opcode_from_memory, MMU, RegisterName, Z80};
+use crate::{Cli, execute, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::RomFile;
 use crate::opcodes::{Compare, decode, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
+use crate::opcodes::RegisterName::A;
 
 struct Ctx {
     cpu:Z80,
@@ -71,7 +72,7 @@ impl Ctx {
         match math {
             Math::XOR_A_r(r) => {
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r));
-                if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
                 self.cpu.r.carry_flag = false;
@@ -80,7 +81,7 @@ impl Ctx {
             Math::OR_A_r(r) => {
                 self.inc_pc(1);
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) | self.cpu.r.get_u8reg(r));
-                if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = false;
                 self.cpu.r.carry_flag = false;
@@ -88,7 +89,7 @@ impl Ctx {
             Math::AND_A_r(r) => {
                 self.inc_pc(1);
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & self.cpu.r.get_u8reg(r));
-                if self.cpu.r.get_u8reg(&A) == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
                 self.cpu.r.carry_flag = false;
@@ -140,6 +141,98 @@ impl Ctx {
                 self.cpu.r.zero_flag = !((val & mask) > 0);
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
+            }
+            Math::RLC(r) => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(r);
+                let carry_flag = r_val & 0x80 == 0x80;
+                let f_val = (r_val << 1) | if carry_flag { 1 } else { 0 };
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(r,f_val);
+                self.inc_pc(1);
+            }
+            Math::RLCA() => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(&A);
+                let carry_flag = r_val & 0x80 == 0x80;
+                let f_val = (r_val << 1) | if carry_flag { 1 } else { 0 };
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(&A,f_val);
+            }
+            Math::RL(r) => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(r);
+                let carry_flag = r_val & 0x80 == 0x80;
+                let f_val = (r_val << 1) | (if self.cpu.r.carry_flag { 1 } else { 0 });
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(r, f_val);
+                self.inc_pc(1);
+            }
+            Math::RLA() => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(&A);
+                let carry_flag = r_val & 0x80 == 0x80;
+                let f_val = (r_val << 1) | (if self.cpu.r.carry_flag { 1 } else { 0 });
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(&A, f_val);
+            }
+            Math::RRC(r) => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(r);
+                let carry_flag = r_val & 0x01 == 0x01;
+                let f_val = (r_val >> 1) | (if carry_flag {0x80} else { 0x00 });
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(r, f_val);
+                self.inc_pc(1);
+            }
+            Math::RRCA() => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(&A);
+                let carry_flag = r_val & 0x01 == 0x01;
+                let f_val = (r_val >> 1) | (if carry_flag {0x80} else { 0x00 });
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(&A, f_val);
+            }
+            Math::RR(r) => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(r);
+                let carry_flag = r_val & 0x01 == 0x01;
+                let f_val = (r_val >> 1) | (if self.cpu.r.carry_flag { 0x80 } else { 0x00 });
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(r, f_val);
+                self.inc_pc(1);
+            }
+            Math::RRA() => {
+                self.inc_pc(1);
+                let r_val = self.cpu.r.get_u8reg(&A);
+                let carry_flag = r_val & 0x01 == 0x01;
+                let f_val = (r_val >> 1) | (if self.cpu.r.carry_flag { 0x80 } else { 0x00 });
+                self.cpu.r.half_flag = false;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.zero_flag = (f_val == 0);
+                self.cpu.r.carry_flag = carry_flag;
+                self.cpu.r.set_u8reg(&A, f_val);
             }
         }
     }
@@ -277,7 +370,47 @@ impl Ctx {
                 self.inc_pc(1);
                 println!("stopping interrupts");
             }
+            Special::CALL_u16() => {
+                self.inc_pc(1);
+                let addr = self.mmu.read16(self.cpu.r.pc);
+                self.inc_pc(2);
+                let next = self.cpu.r.pc;
+                self.mmu.write16(self.cpu.r.sp, next);
+                self.dec_sp();
+                self.dec_sp();
+                self.set_pc(addr);
+            }
+            Special::PUSH(rr) => {
+                self.inc_pc(1);
+                let value = self.cpu.r.get_u16reg(rr);
+                self.mmu.write16(self.cpu.r.sp, value);
+                self.dec_sp();
+                self.dec_sp();
+            }
+            Special::POP(rr) => {
+                self.inc_pc(1);
+                let value = self.mmu.read16(self.cpu.r.sp);
+                self.inc_sp();
+                self.inc_sp();
+                self.cpu.r.set_u16reg(rr,value);
+            }
         }
+    }
+    fn inc_sp(&mut self) {
+        let (sp, overflowed) = self.cpu.r.sp.overflowing_add(1);
+        if overflowed {
+            self.mmu.print_cram();
+            panic!("SPC overflowed memory");
+        }
+        self.cpu.r.sp = sp;
+    }
+    fn dec_sp(&mut self) {
+        let (sp, overflowed) = self.cpu.r.sp.overflowing_sub(1);
+        if overflowed {
+            self.mmu.print_cram();
+            panic!("SPC overflowed memory");
+        }
+        self.cpu.r.sp = sp;
     }
 }
 
@@ -407,17 +540,27 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
 
-        Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}. sets flags",rr,rr),
-        Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}. sets flags",rr,rr),
+        Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}",rr,rr),
+        Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}",rr,rr),
         Instr::Math(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags",r,r),
         Instr::Math(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags",r,r),
 
         Instr::Math(Math::BIT(bit, r)) => format!("BIT {:0x}, {}",bit,r),
-
+        Instr::Math(Math::RLC(r)) => format!("RLC {} --- rotate register {} .old bit 7 to carry flag. sets flags", r, r),
+        Instr::Math(Math::RL(r)) => format!("RL {} -- Rotate {} left through Carry flag. sets flags",r,r),
+        Instr::Math(Math::RRC(r)) => format!("RRC {} -- Rotate {} right, Old bit 0 to carry flag. sets flags.",r,r),
+        Instr::Math(Math::RR(r)) => format!("RR {} -- Rotate {} right through carry flag. sets flags",r,r),
+        Instr::Math(Math::RLA()) => format!("RLA -- rotate A left through carry flag. Same as RL A"),
+        Instr::Math(Math::RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
+        Instr::Math(Math::RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
+        Instr::Math(Math::RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
 
         Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
         Instr::Special(Special::NOOP()) => format!("NOOP -- do nothing"),
         Instr::Special(Special::STOP()) => format!("STOP -- stop interrupts?"),
+        Instr::Special(Special::CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
+        Instr::Special(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack",rr,rr),
+        Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
     }
 }
 

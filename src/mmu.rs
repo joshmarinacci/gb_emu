@@ -108,6 +108,12 @@ impl MMU {
         let b2 = self.read8(addr+1) as u16;
         return b1 + (b2 << 8);
     }
+    pub fn write16(&mut self, addr:u16, data:u16) {
+        let b1 = ((data & 0xFF00) >> 8) as u8;
+        let b2 = ((data & 0x00FF) >> 0) as u8;
+        self.data[(addr + 0) as usize] = b1;
+        self.data[(addr + 1) as usize] = b2;
+    }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr == SB_REGISTER {
             println!("wrote to the SB register {:04x}", val);

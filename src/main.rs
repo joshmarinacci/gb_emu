@@ -23,8 +23,6 @@ use common::RomFile;
 use crate::cpu::{OpList, Z80};
 use crate::debugger::start_debugger;
 use crate::mmu::MMU;
-use crate::opcodes::{DEC, INC, LD, LD_r_u8, RegisterName};
-use crate::RegisterName::{A, B, C, D, E, H, L};
 
 
 fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
