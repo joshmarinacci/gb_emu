@@ -1,7 +1,9 @@
 use std::io;
 use console::{Color, style, Style, Term};
 use io::Result;
-use std::io::Error;
+use std::fs::File;
+use std::io::{BufWriter, Error};
+use std::path::Path;
 use console::Color::{Black, White};
 use serde_json::Value;
 use crate::{Cli, execute, fetch_opcode_from_memory, MMU, Z80};
@@ -539,7 +541,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
 
 
         let commands = Style::new().reverse();
-        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hardwareregisters")).to_string())?;
+        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump")).to_string())?;
         let ch = term.read_char()?;
         if ch == 'r' {
             full_registers_visible = !full_registers_visible;
@@ -553,22 +555,102 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         if ch == 'j' {
             ctx.execute(&mut term)
         }
+        if ch == 'v' {
+            dump_vram(&term,&ctx);
+        }
     }
 
-
-/*
-- [ ] prints current instruction, previous 3, next three
-- [ ] prints PC address, current op, abbr of the current op, analyzed version of the op (longer name, parsed args, etc), will it actually jump, etc.
-- [ ] prints current status of registers
-- [ ] prints current status of hardware: scroll Y, LCD on or off,
-- [ ] step forward
-- [ ] step backware (needs undo ability, somehow)
-- [ ] jump forward until this loop exits. needs to know it’s in a loop somehow. so execute until this jump condition becomes true or false?
-- [ ] how to read keyboard input without enter key
-- [ ] need a curses lib for drawing the ui?
- */
-
     Ok(())
+}
+
+fn dump_vram(term: &Term, ctx: &Ctx) {
+    let vram:&[u8] = ctx.mmu.fetch_tiledata_block3();
+    const tile_count:usize = 127;
+    let mut buf:[u8;tile_count*8*8*4] = [255;tile_count*8*8*4];
+    println!("total buf count is {}",buf.len());
+
+    let mut tc = 0;
+    for tile in vram.chunks_exact(16) {
+        // term.write_line(&format!("chunk is {}",chunk.len()));
+        let hex_tile = tile
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+        term.write_line(&hex_tile);
+        let mut rc = 0;
+        let tw = 8;
+        let iw = 16*tw;
+        for row in tile.chunks_exact(2) {
+            let hex = format!("{:02x}{:02x}",row[0],row[1]);
+            let pixels = pixel_row_to_string(row);
+            println!("row count {}", pixel_row_to_colors(row).len());
+            let n = (tc * tw + rc * iw)*4;
+            for color in pixel_row_to_colors(row) {
+                match color {
+                    0 => buf[n+0] = 0,
+                    1 => buf[n+1] = 0,
+                    2 => buf[n+2] = 0,
+                    _ => {}
+                }
+            }
+            term.write_line(&format!("{}  {}",hex,pixels));
+            rc += 1;
+        }
+        term.write_line(&"");
+        tc += 1;
+    }
+
+    let path = Path::new(r"vram.png");
+    let file = File::create(path).unwrap();
+    let ref mut w = BufWriter::new(file);
+
+    let mut encoder = png::Encoder::new(w, 8, (tile_count * 8) as u32); // Width is 2 pixels and height is 1.
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+
+    let mut writer = encoder.write_header().unwrap();
+    println!("total bytes is {}", buf.len());
+    println!("tile count is {}",tile_count);
+    writer.write_image_data(buf.as_slice()).unwrap();
+    // let data = [255, 0, 0, 255, 0, 0, 0, 255]; // An array containing a RGBA sequence. First pixel is red and second pixel is black.
+    // writer.write_image_data(&data).unwrap(); // Save
+    println!("wrote out to 'vram.png'");
+}
+
+fn get_bit(by:u8,n:i32) -> u8 {
+    if by & (1<<n) != 0 { 1 } else { 0 }
+}
+fn pixel_row_to_string(row: &[u8]) -> String {
+    let b1 = row[0];
+    let b2 = row[1];
+    let mut colors:Vec<u8> = vec![];
+    for n in 0..7 {
+        let v1 = get_bit(b1,n);
+        let v2 = get_bit(b2,n);
+        colors.push((v1 << 1) | v2);
+    }
+    // let p0 = (((b1&0b0000_0001) >> 0) << 1) | ((b2&0b0000_0001) >> 0);
+    // let p1 = (((b1&0b0000_0010) >> 1) << 1) | ((b2&0b0000_0010) >> 1);
+    // let p2 = (((b1&0b0000_0100) >> 2) << 1) | ((b2&0b0000_0100) >> 2);
+    // let p3 = (((b1&0b0000_1000) >> 3) << 1) | ((b2&0b0000_1000) >> 3);
+    // let p4 = (((b1&0b0001_0000) >> 4) << 1) | ((b2&0b0001_0000) >> 4);
+    // let p5 = (((b1&0b0010_0000) >> 5) << 1) | ((b2&0b0010_0000) >> 5);
+    // let p6 = (((b1&0b0100_0000) >> 6) << 1) | ((b2&0b0100_0000) >> 6);
+    // let p7 = (((b1&0b1000_0000) >> 7) << 1) | ((b2&0b1000_0000) >> 7);
+    return colors.iter().map(|c|format!("{}",c)).collect();
+    // return format!("{}{}{}{}{}{}{}{}",p0,p1,p2,p3,p4,p5,p6,p7);
+}
+
+fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
+    let b1 = row[0];
+    let b2 = row[1];
+    let mut colors:Vec<u8> = vec![];
+    for n in 0..8 {
+        let v1 = get_bit(b1,n);
+        let v2 = get_bit(b2,n);
+        colors.push((v1 << 1) | v2);
+    }
+    return colors;
 }
 
 fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{

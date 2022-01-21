@@ -43,6 +43,18 @@ pub struct MMU {
 }
 
 impl MMU {
+    pub(crate) fn fetch_vram(&self) -> &[u8] {
+        &self.data[(VRAM_START as usize)..(VRAM_END as usize)]
+    }
+    pub(crate) fn fetch_tiledata(&self) -> &[u8] {
+        &self.data[(0x8000 as usize)..(0x97FF as usize)]
+    }
+    pub(crate) fn fetch_tiledata_block3(&self) -> &[u8] {
+        &self.data[(0x9000 as usize)..(0x97FF as usize)]
+    }
+}
+
+impl MMU {
     pub(crate) fn update(&mut self) {
         self.hardware.update();
     }
@@ -133,7 +145,7 @@ impl MMU {
             panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            // println!("writing in VRAM {:04x}  {:x}", addr, val);
+            println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == LCDC_LCDCONTROL {
             println!("writing to turn on the LCD Display");
@@ -155,8 +167,8 @@ impl MMU {
     }
 }
 
-const VRAM_START:u16 = 0x8000;
-const VRAM_END:u16 = 0x9FFF;
+pub const VRAM_START:u16 = 0x8000;
+pub const VRAM_END:u16 = 0x9FFF;
 
 const INTERNAL_RAM_START:u16 = 0xC000;
 const INTERNAL_RAM_END:u16 = 0xDFFF;
