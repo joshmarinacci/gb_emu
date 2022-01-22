@@ -185,7 +185,7 @@ impl MMU {
         if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
-            println!("writing to internal ram:  {:04x} := {:x}",addr, val);
+            println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);
             self.highest_used_iram = max(self.highest_used_iram,addr);
         }

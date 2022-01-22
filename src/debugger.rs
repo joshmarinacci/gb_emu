@@ -27,6 +27,7 @@ impl Ctx {
         if let Some(instr) = lookup_opcode(opcode) {
             self.execute_instruction(&instr);
         } else {
+            println!("current cycle {}", self.clock);
             println!("unknown op code {:04x}",opcode);
             panic!("unknown op code");
         }
@@ -72,7 +73,16 @@ impl Ctx {
                 self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
             }
             Compare::CP_A_r(r) => {
-                todo!()
+                self.inc_pc(1);
+                let src_v = self.cpu.r.get_u8reg(r);
+                self.inc_pc(1);
+
+                let dst_v = self.cpu.r.get_u8reg(&A);
+                let result = dst_v.wrapping_sub(src_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+                self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
             }
         }
     }
@@ -158,8 +168,8 @@ impl Ctx {
             Math::Inc_rr(rr) => {
                 self.inc_pc(1);
                 let mut val = self.cpu.r.get_u16reg(rr);
-                val += 1;
-                self.cpu.r.set_u16reg(rr, val);
+                let result = val.wrapping_add(1);
+                self.cpu.r.set_u16reg(rr, result);
             }
             Math::Dec_rr(rr) => {
                 self.inc_pc(1);
@@ -437,6 +447,14 @@ impl Ctx {
                 self.mmu.write8(addr,val);
                 self.inc_pc(2);
             }
+
+            Load::Load_addr_u16_R2(rr) => {
+                self.inc_pc(1);
+                let addr = self.mmu.read16(self.cpu.r.pc);
+                let val = self.cpu.r.get_u16reg(rr);
+                self.mmu.write16(addr,val);
+                self.inc_pc(2);
+            }
         }
     }
     fn execute_special_instructions(&mut self, special: &Special) {
@@ -503,6 +521,11 @@ impl Ctx {
                     self.inc_sp();
                     self.set_pc(addr);
                 }
+            }
+            Special::RST(h) => {
+                self.inc_pc(1);
+                self.mmu.write16(self.cpu.r.sp, self.cpu.r.pc);
+                self.set_pc((0x0000 | h) as u16);
             }
         }
     }
@@ -614,6 +637,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
                                                        italic.apply_to(lookup_opcode_info(ld)),
             )).to_string())?;
         } else {
+            println!("current cycle {}", ctx.clock);
             panic!("unknown op code")
         }
 
@@ -780,6 +804,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
         Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
         Instr::Load(Load::Load_addr_u16_A()) => format!("LD (nn),A -- load A into memory at address from immediate u16"),
+        Instr::Load(Load::Load_addr_u16_R2(rr)) => format!("LD (nn),{} -- load {} into memory at address from immediate u16",rr,rr),
 
 
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
@@ -822,6 +847,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
         Instr::Special(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
         Instr::Special(Special::RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
+        Instr::Special(Special::RST(h)) => format!("RST {:02x} -- put present address onto stack, jump to address {:02x}", h, h),
         Instr::Special(Special::RETZ()) => format!("RET Z  -- return of zflag is set"),
         Instr::Special(Special::HALT()) => format!("HALT -- completely stop the emulator"),
     }

@@ -1,11 +1,13 @@
 use std::fmt::{Display, Formatter};
 use serde_json::Value;
+use Compare::CP_A_r;
+use Math::{ADD_R_R, AND_A_r, OR_A_r, SUB_R_R, XOR_A_r};
 use crate::cpu::Op;
 use crate::{MMU, OpList, Z80};
 use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
-use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, STOP};
+use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
@@ -265,7 +267,8 @@ pub enum Special {
     POP(DoubleRegister),
     RET(),
     RETZ(),
-    RETI()
+    RETI(),
+    RST(u8),
 }
 pub enum Load {
     Load_r_u8(RegisterName),
@@ -281,7 +284,8 @@ pub enum Load {
     Load_addr_R2_A_dec(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
     Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
     Load_addr_R2_A(DoubleRegister, RegisterName),      // Load (rr), R
-    Load_addr_u16_A() // Load (nn), A
+    Load_addr_u16_A(), // Load (nn), A
+    Load_addr_u16_R2(DoubleRegister),
 }
 pub enum Jump {
     JumpAbsolute_u16(),
@@ -463,6 +467,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x11 => Some(Instr::Load(Load::Load_R2_u16(DE))),
         0x21 => Some(Instr::Load(Load::Load_R2_u16(HL))),
         0x31 => Some(Instr::Load(Load::Load_R2_u16(SP))),
+        0x08 => Some(Instr::Load(Load::Load_addr_u16_R2(SP))),
 
         0x0a => Some(Instr::Load(Load::Load_R_addr_R2(A,BC))),
         0x1a => Some(Instr::Load(Load::Load_R_addr_R2(A,DE))),
@@ -493,6 +498,15 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xC8 => Some(Instr::Special(RETZ())),
         0xC9 => Some(Instr::Special(RET())),
         0xD9 => Some(Instr::Special(RETI())),
+
+        0xC7 => Some(Instr::Special(RST(0x00))),
+        0xD7 => Some(Instr::Special(RST(0x10))),
+        0xE7 => Some(Instr::Special(RST(0x20))),
+        0xF7 => Some(Instr::Special(RST(0x30))),
+        0xCF => Some(Instr::Special(RST(0x08))),
+        0xDF => Some(Instr::Special(RST(0x18))),
+        0xEF => Some(Instr::Special(RST(0x28))),
+        0xFF => Some(Instr::Special(RST(0x38))),
         // 0xF1 => Some(Instr::Special(POP(AF))),
         // 0xF5 => Some(Instr::Special(PUSH(AF))),
 
@@ -506,33 +520,54 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
 
-        0xA8 => Some(Instr::Math(Math::XOR_A_r(B))),
-        0xA9 => Some(Instr::Math(Math::XOR_A_r(C))),
-        0xAA => Some(Instr::Math(Math::XOR_A_r(D))),
-        0xAB => Some(Instr::Math(Math::XOR_A_r(E))),
-        0xAC => Some(Instr::Math(Math::XOR_A_r(H))),
-        0xAD => Some(Instr::Math(Math::XOR_A_r(L))),
-        0xAF => Some(Instr::Math(Math::XOR_A_r(A))),
 
-        0xA0 => Some(Instr::Math(Math::AND_A_r(B))),
-        0xA1 => Some(Instr::Math(Math::AND_A_r(C))),
-        0xA2 => Some(Instr::Math(Math::AND_A_r(D))),
-        0xA3 => Some(Instr::Math(Math::AND_A_r(E))),
-        0xA4 => Some(Instr::Math(Math::AND_A_r(H))),
-        0xA5 => Some(Instr::Math(Math::AND_A_r(L))),
-        0xA7 => Some(Instr::Math(Math::AND_A_r(A))),
 
-        0xB0 => Some(Instr::Math(Math::OR_A_r(B))),
-        0xB1 => Some(Instr::Math(Math::OR_A_r(C))),
-        0xB2 => Some(Instr::Math(Math::OR_A_r(D))),
-        0xB3 => Some(Instr::Math(Math::OR_A_r(E))),
-        0xB4 => Some(Instr::Math(Math::OR_A_r(H))),
-        0xB5 => Some(Instr::Math(Math::OR_A_r(L))),
-        0xB7 => Some(Instr::Math(Math::OR_A_r(A))),
+        0x80 => Some(Instr::Math(ADD_R_R(A, B))),
+        0x81 => Some(Instr::Math(ADD_R_R(A, C))),
+        0x82 => Some(Instr::Math(ADD_R_R(A, D))),
+        0x83 => Some(Instr::Math(ADD_R_R(A, E))),
+        0x84 => Some(Instr::Math(ADD_R_R(A, H))),
+        0x85 => Some(Instr::Math(ADD_R_R(A, L))),
+        0x87 => Some(Instr::Math(ADD_R_R(A, A))),
+
+        0x90 => Some(Instr::Math(SUB_R_R(A, B))),
+        0x91 => Some(Instr::Math(SUB_R_R(A, C))),
+        0x92 => Some(Instr::Math(SUB_R_R(A, D))),
+        0x93 => Some(Instr::Math(SUB_R_R(A, E))),
+        0x94 => Some(Instr::Math(SUB_R_R(A, H))),
+        0x95 => Some(Instr::Math(SUB_R_R(A, L))),
+        0x97 => Some(Instr::Math(SUB_R_R(A, A))),
+
+        0xA0 => Some(Instr::Math(AND_A_r(B))),
+        0xA1 => Some(Instr::Math(AND_A_r(C))),
+        0xA2 => Some(Instr::Math(AND_A_r(D))),
+        0xA3 => Some(Instr::Math(AND_A_r(E))),
+        0xA4 => Some(Instr::Math(AND_A_r(H))),
+        0xA5 => Some(Instr::Math(AND_A_r(L))),
+        0xA7 => Some(Instr::Math(AND_A_r(A))),
+
+        0xA8 => Some(Instr::Math(XOR_A_r(B))),
+        0xA9 => Some(Instr::Math(XOR_A_r(C))),
+        0xAA => Some(Instr::Math(XOR_A_r(D))),
+        0xAB => Some(Instr::Math(XOR_A_r(E))),
+        0xAC => Some(Instr::Math(XOR_A_r(H))),
+        0xAD => Some(Instr::Math(XOR_A_r(L))),
+        0xAF => Some(Instr::Math(XOR_A_r(A))),
+
+        0xB0 => Some(Instr::Math(OR_A_r(B))),
+        0xB1 => Some(Instr::Math(OR_A_r(C))),
+        0xB2 => Some(Instr::Math(OR_A_r(D))),
+        0xB3 => Some(Instr::Math(OR_A_r(E))),
+        0xB4 => Some(Instr::Math(OR_A_r(H))),
+        0xB5 => Some(Instr::Math(OR_A_r(L))),
+        0xB7 => Some(Instr::Math(OR_A_r(A))),
+
+        0xB8 => Some(Instr::Compare(CP_A_r(B))),
+        0xB9 => Some(Instr::Compare(CP_A_r(C))),
+        0xBA => Some(Instr::Compare(CP_A_r(D))),
 
         0xC6 => Some(Instr::Math(Math::ADD_R_u8(A))),
-        0x80 => Some(Instr::Math(Math::ADD_R_R(A,B))),
-        0x97 => Some(Instr::Math(Math::SUB_R_R(A,A))),
+
 
 
         //increments and decrements
