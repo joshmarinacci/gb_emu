@@ -398,6 +398,14 @@ impl Ctx {
                 let addr = self.cpu.r.get_u16reg(rr);
                 self.mmu.write8(addr,val);
             }
+
+            Load::Load_addr_u16_A() => {
+                self.inc_pc(1);
+                let addr = self.mmu.read16(self.cpu.r.pc);
+                let val = self.cpu.r.get_u8reg(&A);
+                self.mmu.write8(addr,val);
+                self.inc_pc(2);
+            }
         }
     }
     fn execute_special_instructions(&mut self, special: &Special) {
@@ -437,6 +445,12 @@ impl Ctx {
                 self.inc_sp();
                 self.cpu.r.set_u16reg(rr,value);
             }
+            Special::RET() => {
+                let addr = self.mmu.read16(self.cpu.r.sp);
+                self.inc_sp();
+                self.inc_sp();
+                self.set_pc(addr);
+            }
         }
     }
     fn inc_sp(&mut self) {
@@ -455,6 +469,15 @@ impl Ctx {
         }
         self.cpu.r.sp = sp;
     }
+}
+
+pub fn start_debugger_loop(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
+    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0};
+    let mut term = Term::stdout();
+    loop {
+        ctx.execute(&mut term);
+    }
+    Ok(())
 }
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
@@ -703,6 +726,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}",rr,rr,rr),
         Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
         Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
+        Instr::Load(Load::Load_addr_u16_A()) => format!("LD (nn),A -- load A into memory at address from immediate u16"),
 
 
         Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
@@ -739,6 +763,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Special(Special::CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
         Instr::Special(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack",rr,rr),
         Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
+        Instr::Special(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
     }
 }
 

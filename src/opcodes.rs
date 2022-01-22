@@ -5,7 +5,7 @@ use crate::{MMU, OpList, Z80};
 use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
-use crate::opcodes::Special::{CALL_u16, DisableInterrupts, NOOP, POP, PUSH, STOP};
+use crate::opcodes::Special::{CALL_u16, DisableInterrupts, NOOP, POP, PUSH, RET, STOP};
 
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
@@ -262,6 +262,7 @@ pub enum Special {
     CALL_u16(),
     PUSH(DoubleRegister),
     POP(DoubleRegister),
+    RET(),
 }
 pub enum Load {
     Load_r_u8(RegisterName),
@@ -277,6 +278,7 @@ pub enum Load {
     Load_addr_R2_A_dec(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
     Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
     Load_addr_R2_A(DoubleRegister),      // Load (rr), A
+    Load_addr_u16_A() // Load (nn), A
 }
 pub enum Jump {
     JumpAbsolute_u16(),
@@ -453,6 +455,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x77 => Some(Instr::Load(Load::Load_addr_R2_A(HL))),
 
         0xe2 => Some(Instr::Load(Load::Load_high_r_r(C,A))),
+        0xea => Some(Instr::Load(Load::Load_addr_u16_A())),
 
 
         0x00 => Some(Instr::Special(NOOP())),
@@ -465,6 +468,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xD5 => Some(Instr::Special(PUSH(DE))),
         0xE1 => Some(Instr::Special(POP(HL))),
         0xE5 => Some(Instr::Special(PUSH(HL))),
+        0xC9 => Some(Instr::Special(RET())),
         // 0xF1 => Some(Instr::Special(POP(AF))),
         // 0xF5 => Some(Instr::Special(PUSH(AF))),
 

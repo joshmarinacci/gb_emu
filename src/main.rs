@@ -21,7 +21,7 @@ use serde_json::Value;
 use structopt::StructOpt;
 use common::RomFile;
 use crate::cpu::{OpList, Z80};
-use crate::debugger::start_debugger;
+use crate::debugger::{start_debugger, start_debugger_loop};
 use crate::mmu::MMU;
 
 
@@ -81,9 +81,7 @@ fn run_romfile(cart: RomFile, interactive: bool, args:&Cli) {
     if interactive {
         start_debugger(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward);
     } else {
-        loop {
-            execute(&mut cpu, &mut mmu, &OPCODE_MAP);
-        }
+        start_debugger_loop(cpu,mmu,OPCODE_MAP,Some(cart),args.fastforward);
     }
 }
 
