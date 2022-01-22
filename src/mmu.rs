@@ -1,5 +1,6 @@
 use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
+use crate::common::get_bit;
 
 pub struct Hardware {
     pub SCY:u8,
@@ -8,6 +9,7 @@ pub struct Hardware {
     pub LYC:u8,
     pub WY:u8,
     pub WX:u8,
+    pub LCDC:u8,
 }
 
 impl Hardware {
@@ -18,7 +20,8 @@ impl Hardware {
             LY: 0,
             LYC: 0,
             WY: 0,
-            WX: 0
+            WX: 0,
+            LCDC: 0
         }
     }
     pub fn update(&mut self) {
@@ -40,6 +43,18 @@ pub struct MMU {
     lowest_used_iram:u16,
     highest_used_iram:u16,
     pub hardware:Hardware,
+}
+
+impl MMU {
+    pub(crate) fn get_current_bg_display_data(&self) -> &[u8] {
+        let block = get_bit(self.hardware.LCDC,4);
+        let (start,end) = match block {
+            0 => (0x9800, 0x9BFF),
+            1 => (0x9C00, 0x9FFF),
+            _ => panic!("bad window tile map display select value")
+        };
+        return &self.data[start .. end];
+    }
 }
 
 impl MMU {
@@ -145,16 +160,25 @@ impl MMU {
             panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            // println!("writing in VRAM {:04x}  {:x}", addr, val);
+            println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == LCDC_LCDCONTROL {
             println!("writing to turn on the LCD Display");
+            println!("writing to LCDC register {:0b}",val);
+            self.hardware.LCDC = val;
+            let b3 = get_bit(self.hardware.LCDC,3);
+            println!("bit 3 is now {}",b3);
+            dump_LCDC_bits(self.hardware.LCDC);
         }
         if addr == STAT_LCDCONTROL {
             println!("writing to stat the LCD Display");
+            println!("writing to STAT LCD register {:0b}",val);
         }
         if addr == BGP {
-            println!("writing to special LCD register")
+            //this is the background color palette
+            //https://gbdev.gg8.se/wiki/articles/Video_Display#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only
+            println!("writing to BGP LCD register {:0b}",val);
+
         }
         if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
@@ -164,6 +188,24 @@ impl MMU {
             self.highest_used_iram = max(self.highest_used_iram,addr);
         }
         self.data[addr as usize] = val;
+    }
+}
+
+fn dump_LCDC_bits(by: u8) {
+    for n in 0..8 {
+        let b = get_bit(by,n);
+        let v:String = match n {
+            0 => format!("BG/Window Display/Priority = {}",b),
+            1 => format!("OBJ Display Enable = {}",b),
+            2 => format!("OBJ Size (8x8 vs 8x16)= {}",b),
+            3 => format!("BG Tile Map Display Select = {}",b),
+            4 => format!("BG & Window Tile Data Select = {}",b),
+            5 => format!("Window Display Enable = {}",b),
+            6 => format!("Window Tile Map Display Select = {}",b),
+            7 => format!("LCD Display Enable = {}",b),
+            _ => format!("Unknown so far"),
+        };
+        println!("foo {}",v);
     }
 }
 
@@ -199,7 +241,9 @@ const LY_LCDC_Y_COORD:u16 = 0xFF44;
 const LYC_LCDC_Y_COMPARE:u16 = 0xFF45;
 
 const DMA:u16 = 0xFF46;
-const BGP:u16 = 0xFF47;
+const BGP:u16 = 0xFF47; // BG Palette Data (R/W)
+const OBP0:u16 = 0xFF48; // Object Palette 0 Data (R/W)
+const OBP1:u16 = 0xFF49; // Object Palette 1 Data (R/W)
 
 const INTERRUPT_ENABLE:u16 = 0xffff;
 

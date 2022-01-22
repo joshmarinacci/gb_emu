@@ -6,8 +6,8 @@ use std::io::{BufWriter, Error};
 use std::path::Path;
 use console::Color::{Black, White};
 use serde_json::Value;
-use crate::{Cli, execute, fetch_opcode_from_memory, MMU, Z80};
-use crate::common::RomFile;
+use crate::{Cli, common, execute, fetch_opcode_from_memory, MMU, Z80};
+use crate::common::{Bitmap, RomFile};
 use crate::opcodes::{Compare, decode, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
 use crate::opcodes::RegisterName::A;
 
@@ -541,7 +541,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
 
 
         let commands = Style::new().reverse();
-        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump")).to_string())?;
+        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump")).to_string())?;
         let ch = term.read_char()?;
         if ch == 'r' {
             full_registers_visible = !full_registers_visible;
@@ -555,50 +555,17 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         if ch == 'j' {
             ctx.execute(&mut term)
         }
-        if ch == 'v' {
-            dump_vram(&term,&ctx);
-        }
+        if ch == 'v' { dump_vram(&term,&ctx); }
+        if ch == 's' { dump_screen(&term,&ctx); }
     }
 
     Ok(())
-}
-
-struct Bitmap {
-    data:Vec<u8>,
-    w: i32,
-    h: i32,
-}
-
-impl Bitmap {
-    pub(crate) fn set_pixel_rgb(&mut self, x: i32, y: i32, r: u8, g:u8, b:u8)  {
-        let n:usize = ((x + self.w*y)*4) as usize;
-        // println!("n is {}",n);
-        self.data[n+0] = r;
-        self.data[n+1] = g;
-        self.data[n+2] = b;
-        self.data[n+3] = 255;
-    }
-}
-
-impl Bitmap {
-    pub fn init(w:i32,h:i32) -> Bitmap {
-        let mut data:Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
-        data.resize((w * h * 4) as usize,255);
-        data.fill(255);
-        println!("Length is {}",data.len());
-        Bitmap {
-            w:w,
-            h:h,
-            data: data,
-        }
-    }
 }
 
 fn dump_vram(term: &Term, ctx: &Ctx) {
     let vram:&[u8] = ctx.mmu.fetch_tiledata_block3();
     const tile_count:usize = 127;
     let mut buf = Bitmap::init(16*8,16);
-    // let mut buf:[u8;tile_count*8*8*4] = [255;tile_count*8*8*4];
 
     let mut tc = 0;
     for tile in vram.chunks_exact(16) {
@@ -610,8 +577,9 @@ fn dump_vram(term: &Term, ctx: &Ctx) {
         // term.write_line(&hex_tile);
         let mut rc = 0;
         for row in tile.chunks_exact(2) {
-            let hex = format!("{:02x}{:02x}",row[0],row[1]);
-            let pixels = pixel_row_to_string(row);
+            // let addr = 0x9000 + tc*16;
+            // let hex = format!("{:02x}{:02x}",row[0],row[1]);
+            // let pixels = pixel_row_to_string(row);
             // println!("row count {}", pixel_row_to_colors(row).len());
             // let n = ((tc * 8 + rc * buf.width())*4) as usize;
             let mut pc = 0;
@@ -629,7 +597,7 @@ fn dump_vram(term: &Term, ctx: &Ctx) {
                 }
                 pc += 1;
             }
-            // term.write_line(&format!("{}  {}",hex,pixels));
+            // term.write_line(&format!("{:04x}  {}  {}",addr, hex,pixels));
             rc += 1;
         }
         // term.write_line(&"");
@@ -647,33 +615,54 @@ fn dump_vram(term: &Term, ctx: &Ctx) {
     let mut writer = encoder.write_header().unwrap();
     println!("tile count is {}",tile_count);
     writer.write_image_data(buf.data.as_slice()).unwrap();
-    // let data = [255, 0, 0, 255, 0, 0, 0, 255]; // An array containing a RGBA sequence. First pixel is red and second pixel is black.
-    // writer.write_image_data(&data).unwrap(); // Save
     println!("wrote out to 'vram.png'");
 }
 
-fn get_bit(by:u8,n:i32) -> u8 {
-    if by & (1<<n) != 0 { 1 } else { 0 }
+fn dump_screen(term: &Term, ctx: &Ctx) {
+    let mut buf = Bitmap::init(32*8,32*8); // actual window buffer is 256x256
+    buf.clear_with(0,0,0);
+    let vram:&[u8] = ctx.mmu.get_current_bg_display_data();
+    let tiledata:&[u8] = ctx.mmu.fetch_tiledata_block3();
+    // println!("vram len is {}",vram.len());
+    for (y,row) in vram.chunks_exact(32).enumerate() {
+        for (x, tile_id) in row.iter().enumerate() {
+            draw_tile_at(&mut buf, x*8, y*8, tile_id, tiledata);
+        }
+        let hex_tile = row.iter().map(|b| format!("{:02x} ", b)).collect::<String>();
+        println!("{}",hex_tile);
+    }
+    buf.write_to_file("./screen.png");
+    println!("wrote out to 'screen.png'");
 }
+
+fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: &u8, tiledata: &[u8]) {
+    let start:usize = ((*tile_id as u16)*16) as usize;
+    let stop:usize = start + 16;
+    let tile = &tiledata[start..stop];
+    for (line,row) in tile.chunks_exact(2).enumerate() {
+        for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
+            let (r,g,b) = match color {
+                0 => (50,50,50),
+                1 => (100,100,100),
+                2 => (0,0,0),
+                3 => (200,200,200),
+                _ => (255,0,255),
+            };
+            img.set_pixel_rgb((x+7 - n) as i32, (y + line) as i32, r, g, b);
+        }
+    }
+}
+
 fn pixel_row_to_string(row: &[u8]) -> String {
     let b1 = row[0];
     let b2 = row[1];
     let mut colors:Vec<u8> = vec![];
     for n in 0..7 {
-        let v1 = get_bit(b1,n);
-        let v2 = get_bit(b2,n);
+        let v1 = common::get_bit(b1, n);
+        let v2 = common::get_bit(b2, n);
         colors.push((v1 << 1) | v2);
     }
-    // let p0 = (((b1&0b0000_0001) >> 0) << 1) | ((b2&0b0000_0001) >> 0);
-    // let p1 = (((b1&0b0000_0010) >> 1) << 1) | ((b2&0b0000_0010) >> 1);
-    // let p2 = (((b1&0b0000_0100) >> 2) << 1) | ((b2&0b0000_0100) >> 2);
-    // let p3 = (((b1&0b0000_1000) >> 3) << 1) | ((b2&0b0000_1000) >> 3);
-    // let p4 = (((b1&0b0001_0000) >> 4) << 1) | ((b2&0b0001_0000) >> 4);
-    // let p5 = (((b1&0b0010_0000) >> 5) << 1) | ((b2&0b0010_0000) >> 5);
-    // let p6 = (((b1&0b0100_0000) >> 6) << 1) | ((b2&0b0100_0000) >> 6);
-    // let p7 = (((b1&0b1000_0000) >> 7) << 1) | ((b2&0b1000_0000) >> 7);
     return colors.iter().map(|c|format!("{}",c)).collect();
-    // return format!("{}{}{}{}{}{}{}{}",p0,p1,p2,p3,p4,p5,p6,p7);
 }
 
 fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
@@ -681,8 +670,8 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
     let b2 = row[1];
     let mut colors:Vec<u8> = vec![];
     for n in 0..8 {
-        let v1 = get_bit(b1,n);
-        let v2 = get_bit(b2,n);
+        let v1 = common::get_bit(b1, n);
+        let v2 = common::get_bit(b2, n);
         colors.push((v1 << 1) | v2);
     }
     return colors;
@@ -691,10 +680,11 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
 fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
     term.write_line(&format!("registers are {} ",reg.apply_to("cool")));
-    term.write_line(&reg.apply_to(&format!("LY {}",ctx.mmu.hardware.LY)).to_string())?;
-    term.write_line(&format!("LYC {}",ctx.mmu.hardware.LYC))?;
-    term.write_line(&format!("SCX {}",ctx.mmu.hardware.SCX))?;
-    term.write_line(&format!("SCY {}",ctx.mmu.hardware.SCY))?;
+    term.write_line(&reg.apply_to(&format!("LY   {}",ctx.mmu.hardware.LY)).to_string())?;
+    term.write_line(&format!("LYC  {}",ctx.mmu.hardware.LYC))?;
+    term.write_line(&format!("SCX  {}",ctx.mmu.hardware.SCX))?;
+    term.write_line(&format!("SCY  {}",ctx.mmu.hardware.SCY))?;
+    term.write_line(&format!("LCDC {:8b}",ctx.mmu.hardware.LCDC))?;
     Ok(())
 }
 
