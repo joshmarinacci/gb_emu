@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::bootrom::BOOT_ROM;
 use crate::{MMU};
 use crate::common::{get_bit, get_bit_as_bool, set_bit};
-use crate::opcodes::{DoubleRegister, RegisterName, setup_op_codes};
+use crate::opcodes::{DoubleRegister, RegisterName};
 use crate::opcodes::RegisterName::{A, F};
 
 #[derive(Debug)]
@@ -137,10 +137,7 @@ pub struct Z80 {
     clock_m: u16,
     clock_t: u16,
     pub r: Z80_registers,
-    // halt:u8,
-    // stop:u8,
     halt: bool,
-    pub(crate) ops: OpList,
 }
 
 impl Z80 {
@@ -168,7 +165,6 @@ impl Z80 {
                 t: 0,
                 ime: 0
             },
-            ops: setup_op_codes(),
         }
     }
     pub(crate) fn reset(&mut self) {
@@ -187,40 +183,5 @@ impl Z80 {
 
         self.r.m = 0;                       // set timing
         self.r.t = 0;
-    }
-}
-
-
-pub struct Op {
-    pub(crate) name:String,
-    pub(crate) inst_len:usize,
-    pub(crate) tim_len: usize,
-    pub(crate) fun:fn(&mut Z80, &mut MMU),
-}
-
-impl Debug for Op {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("stuff")
-    }
-}
-
-#[derive(Debug)]
-pub struct OpList {
-    pub(crate) ops:HashMap<u16,Op>,
-}
-
-impl OpList {
-    pub(crate) fn init() -> OpList {
-        OpList {
-            ops: Default::default()
-        }
-    }
-    pub(crate) fn add(&mut self, code:u16, name: &str, inst_len:usize, tim_len: usize, fun: fn(cpu:&mut Z80, mmu:&mut MMU)) {
-        self.ops.insert(code, Op {
-            name:name.to_string(),
-            inst_len,
-            tim_len,
-            fun,
-        });
     }
 }

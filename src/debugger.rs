@@ -6,9 +6,9 @@ use std::io::{BufWriter, Error};
 use std::path::Path;
 use console::Color::{Black, White};
 use serde_json::Value;
-use crate::{Cli, common, execute, fetch_opcode_from_memory, MMU, Z80};
+use crate::{Cli, common, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::{Bitmap, RomFile};
-use crate::opcodes::{Compare, decode, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
+use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
 use crate::opcodes::RegisterName::A;
 
 struct Ctx {
