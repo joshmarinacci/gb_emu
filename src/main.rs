@@ -101,10 +101,52 @@ fn run_romfile(cart: RomFile, interactive: bool, args:&Cli) {
 fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
     let data:Vec<u8> = fs::read(pth)?;
+    println!("0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",data[0x0104],data[0x0105]);
+    print!("name = ");
+    for ch in 0x0134 .. 0x0142 {
+        print!("{}",to_ascii(data[ch]));
+    }
+    println!("");
+    // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
+
     Ok(RomFile {
         data:data,
         path: pth2,
     })
+}
+
+fn to_ascii(v: u8) -> &'static str {
+    match v {
+        0x41 => "A",
+        0x42 => "B",
+        0x43 => "C",
+        0x44 => "D",
+        0x45 => "E",
+        0x46 => "F",
+        0x47 => "G",
+        0x48 => "H",
+        0x49 => "I",
+        0x4A => "J",
+        0x4B => "K",
+        0x4C => "L",
+        0x4D => "M",
+        0x4E => "N",
+        0x4F => "O",
+        0x50 => "P",
+        0x51 => "Q",
+        0x52 => "R",
+        0x53 => "S",
+        0x54 => "T",
+        0x55 => "U",
+        0x56 => "V",
+        0x57 => "W",
+        0x58 => "X",
+        0x59 => "Y",
+        0x5A => "Z",
+        0x2D => "-",
+        0x00 => " ",
+        _ => "?"
+    }
 }
 
 // fn run_bootrom(x: &Cli) {
