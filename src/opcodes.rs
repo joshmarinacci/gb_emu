@@ -5,7 +5,7 @@ use crate::{MMU, OpList, Z80};
 use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
-use crate::opcodes::Special::{CALL_u16, DisableInterrupts, NOOP, POP, PUSH, RET, STOP};
+use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, STOP};
 
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
@@ -258,6 +258,7 @@ pub enum DoubleRegister {
 pub enum Special {
     NOOP(),
     STOP(),
+    HALT(),
     DisableInterrupts(),
     CALL_u16(),
     PUSH(DoubleRegister),
@@ -273,11 +274,11 @@ pub enum Load {
     Load_high_r_r(RegisterName,RegisterName),
 
     Load_R2_u16(DoubleRegister),
-    Load_r_addr_R2(DoubleRegister),
+    Load_R_addr_R2(RegisterName,DoubleRegister),
     Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
     Load_addr_R2_A_dec(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
     Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
-    Load_addr_R2_A(DoubleRegister),      // Load (rr), A
+    Load_addr_R2_A(DoubleRegister, RegisterName),      // Load (rr), R
     Load_addr_u16_A() // Load (nn), A
 }
 pub enum Jump {
@@ -293,6 +294,7 @@ pub enum Compare {
     CP_A_n()
 }
 pub enum Math {
+    ADD_R_u8(RegisterName),
     XOR_A_r(RegisterName),
     OR_A_r(RegisterName),
     AND_A_r(RegisterName),
@@ -377,6 +379,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x43 => Some(Instr::Load(Load::Load_r_r(B,E))),
         0x44 => Some(Instr::Load(Load::Load_r_r(B,H))),
         0x45 => Some(Instr::Load(Load::Load_r_r(B,L))),
+        0x46 => Some(Instr::Load(Load::Load_R_addr_R2(B,HL))),
         0x47 => Some(Instr::Load(Load::Load_r_r(B,A))),
         0x48 => Some(Instr::Load(Load::Load_r_r(C,B))),
         0x49 => Some(Instr::Load(Load::Load_r_r(C,C))),
@@ -384,6 +387,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x4B => Some(Instr::Load(Load::Load_r_r(C,E))),
         0x4C => Some(Instr::Load(Load::Load_r_r(C,H))),
         0x4D => Some(Instr::Load(Load::Load_r_r(C,L))),
+        0x4E => Some(Instr::Load(Load::Load_R_addr_R2(C,HL))),
         0x4F => Some(Instr::Load(Load::Load_r_r(C,A))),
 
         0x50 => Some(Instr::Load(Load::Load_r_r(D,B))),
@@ -392,6 +396,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x53 => Some(Instr::Load(Load::Load_r_r(D,E))),
         0x54 => Some(Instr::Load(Load::Load_r_r(D,H))),
         0x55 => Some(Instr::Load(Load::Load_r_r(D,L))),
+        0x56 => Some(Instr::Load(Load::Load_R_addr_R2(D,HL))),
         0x57 => Some(Instr::Load(Load::Load_r_r(D,A))),
         0x58 => Some(Instr::Load(Load::Load_r_r(E,B))),
         0x59 => Some(Instr::Load(Load::Load_r_r(E,C))),
@@ -399,6 +404,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x5B => Some(Instr::Load(Load::Load_r_r(E,E))),
         0x5C => Some(Instr::Load(Load::Load_r_r(E,H))),
         0x5D => Some(Instr::Load(Load::Load_r_r(E,L))),
+        0x5E => Some(Instr::Load(Load::Load_R_addr_R2(E,HL))),
         0x5F => Some(Instr::Load(Load::Load_r_r(E,A))),
 
         0x60 => Some(Instr::Load(Load::Load_r_r(H,B))),
@@ -407,23 +413,33 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x63 => Some(Instr::Load(Load::Load_r_r(H,E))),
         0x64 => Some(Instr::Load(Load::Load_r_r(H,H))),
         0x65 => Some(Instr::Load(Load::Load_r_r(H,L))),
+        0x66 => Some(Instr::Load(Load::Load_R_addr_R2(H,HL))),
         0x67 => Some(Instr::Load(Load::Load_r_r(H,A))),
-
         0x68 => Some(Instr::Load(Load::Load_r_r(L,B))),
         0x69 => Some(Instr::Load(Load::Load_r_r(L,C))),
         0x6A => Some(Instr::Load(Load::Load_r_r(L,D))),
         0x6B => Some(Instr::Load(Load::Load_r_r(L,E))),
         0x6C => Some(Instr::Load(Load::Load_r_r(L,H))),
         0x6D => Some(Instr::Load(Load::Load_r_r(L,L))),
+        0x6E => Some(Instr::Load(Load::Load_R_addr_R2(L,HL))),
         0x6F => Some(Instr::Load(Load::Load_r_r(L,A))),
 
 
+        0x70 => Some(Instr::Load(Load::Load_addr_R2_A(HL,B))),
+        0x71 => Some(Instr::Load(Load::Load_addr_R2_A(HL,C))),
+        0x72 => Some(Instr::Load(Load::Load_addr_R2_A(HL,D))),
+        0x73 => Some(Instr::Load(Load::Load_addr_R2_A(HL,E))),
+        0x74 => Some(Instr::Load(Load::Load_addr_R2_A(HL,H))),
+        0x75 => Some(Instr::Load(Load::Load_addr_R2_A(HL,L))),
+
+        0x77 => Some(Instr::Load(Load::Load_addr_R2_A(HL,A))),
         0x78 => Some(Instr::Load(Load::Load_r_r(A,B))),
         0x79 => Some(Instr::Load(Load::Load_r_r(A,C))),
         0x7A => Some(Instr::Load(Load::Load_r_r(A,D))),
         0x7B => Some(Instr::Load(Load::Load_r_r(A,E))),
         0x7C => Some(Instr::Load(Load::Load_r_r(A,H))),
         0x7D => Some(Instr::Load(Load::Load_r_r(A,L))),
+        0x7E => Some(Instr::Load(Load::Load_R_addr_R2(A,HL))),
         0x7F => Some(Instr::Load(Load::Load_r_r(A,A))),
 
 
@@ -443,16 +459,16 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x21 => Some(Instr::Load(Load::Load_R2_u16(HL))),
         0x31 => Some(Instr::Load(Load::Load_R2_u16(SP))),
 
-        0x1a => Some(Instr::Load(Load::Load_r_addr_R2(DE))),
+        0x0a => Some(Instr::Load(Load::Load_R_addr_R2(A,BC))),
+        0x1a => Some(Instr::Load(Load::Load_R_addr_R2(A,DE))),
         // put value pointed to by DE into A
 
         0x22 => Some(Instr::Load(Load::Load_addr_R2_A_inc(HL))),
         0x32 => Some(Instr::Load(Load::Load_addr_R2_A_dec(HL))),
         0x2A => Some(Instr::Load(Load::Load_A_addr_R2_inc(HL))),
 
-        0x02 => Some(Instr::Load(Load::Load_addr_R2_A(BC))),
-        0x12 => Some(Instr::Load(Load::Load_addr_R2_A(DE))),
-        0x77 => Some(Instr::Load(Load::Load_addr_R2_A(HL))),
+        0x02 => Some(Instr::Load(Load::Load_addr_R2_A(BC,A))),
+        0x12 => Some(Instr::Load(Load::Load_addr_R2_A(DE,A))),
 
         0xe2 => Some(Instr::Load(Load::Load_high_r_r(C,A))),
         0xea => Some(Instr::Load(Load::Load_addr_u16_A())),
@@ -461,6 +477,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x00 => Some(Instr::Special(NOOP())),
         0xF3 => Some(Instr::Special(DisableInterrupts())),
         0x10 => Some(Instr::Special(STOP())),
+        0x76 => Some(Instr::Special(HALT())),
         0xCD => Some(Instr::Special(CALL_u16())),
         0xC1 => Some(Instr::Special(POP(BC))),
         0xC5 => Some(Instr::Special(PUSH(BC))),
@@ -506,6 +523,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xB5 => Some(Instr::Math(Math::OR_A_r(L))),
         0xB7 => Some(Instr::Math(Math::OR_A_r(A))),
 
+        0xC6 => Some(Instr::Math(Math::ADD_R_u8(A))),
 
 
         //increments and decrements

@@ -16,6 +16,7 @@ struct Ctx {
     mmu:MMU,
     opcodes:Value,
     clock:u32,
+    running:bool,
 }
 
 impl Ctx {
@@ -96,6 +97,18 @@ impl Ctx {
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
                 self.cpu.r.carry_flag = false;
+            }
+            Math::ADD_R_u8(r) => {
+                self.inc_pc(1);
+                let v1 = self.cpu.r.get_u8reg(r);
+                let v2 = self.mmu.read8(self.cpu.r.pc);
+                let v3 = v1.wrapping_add(v2);
+                self.inc_pc(1);
+                self.cpu.r.set_u8reg(r, v2);
+                self.cpu.r.zero_flag = v3 == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = ((v1 & 0xF) + (v2 & 0xF) > 0xFF);
+                self.cpu.r.carry_flag = ((v1 as u16) + (v2 as u16) > 0xFF);
             }
             Math::Inc_r(r) => {
                 self.inc_pc(1);
@@ -359,12 +372,12 @@ impl Ctx {
                 self.inc_pc(2);
                 // println!("copied immediate value {:04x} into register {}",val,rr)
             }
-            Load::Load_r_addr_R2(rr) => {
+            Load::Load_R_addr_R2(r,rr) => {
                 // load to the 8bit register A, data from the address in the 16 bit register
                 self.inc_pc(1);
                 let addr = self.cpu.r.get_u16reg(rr);
                 let val = self.mmu.read8(addr);
-                self.cpu.r.set_u8reg(&A,val);
+                self.cpu.r.set_u8reg(r,val);
                 // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
             }
             Load::Load_A_addr_R2_inc(rr) => {
@@ -391,10 +404,10 @@ impl Ctx {
                 self.cpu.r.set_hl(self.cpu.r.get_hl()-1);
             }
 
-            Load::Load_addr_R2_A(rr) => {
+            Load::Load_addr_R2_A(rr,r) => {
                 //copy contents of A to memory pointed to by RR
                 self.inc_pc(1);
-                let val = self.cpu.r.get_u8reg(&A);
+                let val = self.cpu.r.get_u8reg(r);
                 let addr = self.cpu.r.get_u16reg(rr);
                 self.mmu.write8(addr,val);
             }
@@ -416,6 +429,9 @@ impl Ctx {
             }
             Special::NOOP() => {
                 self.inc_pc(1);
+            }
+            Special::HALT() => {
+                self.running = false;
             }
             Special::STOP() => {
                 self.inc_pc(1);
@@ -472,16 +488,16 @@ impl Ctx {
 }
 
 pub fn start_debugger_loop(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0};
+    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true};
     let mut term = Term::stdout();
-    loop {
+    while ctx.running {
         ctx.execute(&mut term);
     }
     Ok(())
 }
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0};
+    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true};
     let mut term = Term::stdout();
     let mut full_registers_visible = false;
 
@@ -720,8 +736,8 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Load(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}",r,r),
         Instr::Load(Load::Load_high_r_r(off, src)) => format!("LD (FF00 + {},{}  -- Load High: put contents of register {} into memory of 0xFF00 + {} ",off,src,src,off),
         Instr::Load(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}",rr,rr),
-        Instr::Load(Load::Load_r_addr_R2(rr)) => format!("LD A, ({}) -- load data pointed to by {} into A",rr,rr),
-        Instr::Load(Load::Load_addr_R2_A(rr)) => format!("LD (rr),A -- load contents of A into memory pointed to by {}",rr),
+        Instr::Load(Load::Load_R_addr_R2(r,rr)) => format!("LD {}, ({}) -- load data pointed to by {} into {}",r,rr,rr,r),
+        Instr::Load(Load::Load_addr_R2_A(rr,r)) => format!("LD ({}),{} -- load contents of {} into memory pointed to by {}",rr,r,r,rr),
         Instr::Load(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}",rr,rr,rr),
         Instr::Load(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}",rr,rr,rr),
         Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
@@ -741,6 +757,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
+        Instr::Math(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}",r,r),
 
         Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}",rr,rr),
         Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}",rr,rr),
@@ -764,6 +781,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Special(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack",rr,rr),
         Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
         Instr::Special(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
+        Instr::Special(Special::HALT()) => format!("HALT -- completely stop the emulator"),
     }
 }
 
