@@ -145,7 +145,7 @@ impl MMU {
             panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            println!("writing in VRAM {:04x}  {:x}", addr, val);
+            // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == LCDC_LCDCONTROL {
             println!("writing to turn on the LCD Display");

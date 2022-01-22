@@ -563,11 +563,42 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
     Ok(())
 }
 
+struct Bitmap {
+    data:Vec<u8>,
+    w: i32,
+    h: i32,
+}
+
+impl Bitmap {
+    pub(crate) fn set_pixel_rgb(&mut self, x: i32, y: i32, r: u8, g:u8, b:u8)  {
+        let n:usize = ((x + self.w*y)*4) as usize;
+        // println!("n is {}",n);
+        self.data[n+0] = r;
+        self.data[n+1] = g;
+        self.data[n+2] = b;
+        self.data[n+3] = 255;
+    }
+}
+
+impl Bitmap {
+    pub fn init(w:i32,h:i32) -> Bitmap {
+        let mut data:Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
+        data.resize((w * h * 4) as usize,255);
+        data.fill(255);
+        println!("Length is {}",data.len());
+        Bitmap {
+            w:w,
+            h:h,
+            data: data,
+        }
+    }
+}
+
 fn dump_vram(term: &Term, ctx: &Ctx) {
     let vram:&[u8] = ctx.mmu.fetch_tiledata_block3();
     const tile_count:usize = 127;
-    let mut buf:[u8;tile_count*8*8*4] = [255;tile_count*8*8*4];
-    println!("total buf count is {}",buf.len());
+    let mut buf = Bitmap::init(16*8,16);
+    // let mut buf:[u8;tile_count*8*8*4] = [255;tile_count*8*8*4];
 
     let mut tc = 0;
     for tile in vram.chunks_exact(16) {
@@ -576,27 +607,32 @@ fn dump_vram(term: &Term, ctx: &Ctx) {
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<String>();
-        term.write_line(&hex_tile);
+        // term.write_line(&hex_tile);
         let mut rc = 0;
-        let tw = 8;
-        let iw = 16*tw;
         for row in tile.chunks_exact(2) {
             let hex = format!("{:02x}{:02x}",row[0],row[1]);
             let pixels = pixel_row_to_string(row);
-            println!("row count {}", pixel_row_to_colors(row).len());
-            let n = (tc * tw + rc * iw)*4;
+            // println!("row count {}", pixel_row_to_colors(row).len());
+            // let n = ((tc * 8 + rc * buf.width())*4) as usize;
+            let mut pc = 0;
             for color in pixel_row_to_colors(row) {
+                let px = (tc*8+pc);
+                let py = rc;
                 match color {
-                    0 => buf[n+0] = 0,
-                    1 => buf[n+1] = 0,
-                    2 => buf[n+2] = 0,
-                    _ => {}
+                    0 => buf.set_pixel_rgb(px,py, 50,50,50),
+                    1 => buf.set_pixel_rgb(px,py,100,100,100),
+                    2 => buf.set_pixel_rgb(px,py,0,0,0),
+                    3 => buf.set_pixel_rgb(px,py,200,200,200),
+                    _ => {
+
+                    }
                 }
+                pc += 1;
             }
-            term.write_line(&format!("{}  {}",hex,pixels));
+            // term.write_line(&format!("{}  {}",hex,pixels));
             rc += 1;
         }
-        term.write_line(&"");
+        // term.write_line(&"");
         tc += 1;
     }
 
@@ -604,14 +640,13 @@ fn dump_vram(term: &Term, ctx: &Ctx) {
     let file = File::create(path).unwrap();
     let ref mut w = BufWriter::new(file);
 
-    let mut encoder = png::Encoder::new(w, 8, (tile_count * 8) as u32); // Width is 2 pixels and height is 1.
+    let mut encoder = png::Encoder::new(w, buf.w as u32, buf.h as u32);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
 
     let mut writer = encoder.write_header().unwrap();
-    println!("total bytes is {}", buf.len());
     println!("tile count is {}",tile_count);
-    writer.write_image_data(buf.as_slice()).unwrap();
+    writer.write_image_data(buf.data.as_slice()).unwrap();
     // let data = [255, 0, 0, 255, 0, 0, 0, 255]; // An array containing a RGBA sequence. First pixel is red and second pixel is black.
     // writer.write_image_data(&data).unwrap(); // Save
     println!("wrote out to 'vram.png'");
