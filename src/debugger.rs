@@ -7,7 +7,7 @@ use std::path::Path;
 use console::Color::{Black, White};
 use serde_json::Value;
 use crate::{Cli, common, fetch_opcode_from_memory, MMU, Z80};
-use crate::common::{Bitmap, RomFile};
+use crate::common::{Bitmap, get_bit, get_bit_as_bool, RomFile};
 use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
 use crate::opcodes::RegisterName::A;
 
@@ -91,6 +91,27 @@ impl Ctx {
             Math::XOR_A_r(r) => {
                 self.inc_pc(1);
                 let res = self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r);
+                self.cpu.r.zero_flag = res == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = false;
+                self.cpu.r.carry_flag = false;
+                self.cpu.r.set_u8reg(&A,res);
+            }
+            Math::XOR_A_u8(r) => {
+                self.inc_pc(1);
+                let n = self.mmu.read8(self.cpu.r.pc);
+                let res = self.cpu.r.get_u8reg(&A) ^ n;
+                self.cpu.r.zero_flag = res == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = false;
+                self.cpu.r.carry_flag = false;
+                self.cpu.r.set_u8reg(&A,res);
+            }
+            Math::XOR_A_addr(rr) => {
+                self.inc_pc(1);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let val = self.mmu.read8(addr);
+                let res = self.cpu.r.get_u8reg(&A) ^ val;
                 self.cpu.r.zero_flag = res == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = false;
@@ -320,6 +341,18 @@ impl Ctx {
                 self.cpu.r.zero_flag = (f_val == 0);
                 self.cpu.r.carry_flag = carry_flag;
                 self.cpu.r.set_u8reg(&A, f_val);
+            }
+            Math::SLA(r) => {
+                self.inc_pc(1);
+                let n = self.cpu.r.get_u8reg(r);
+                let v = self.cpu.r.get_u8reg(&A);
+                let (v2,carry) = v.overflowing_shl(n as u32);
+                self.cpu.r.set_u8reg(&A,v2);
+                self.cpu.r.zero_flag = (v2 == 0);
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = false;
+                self.cpu.r.carry_flag = carry;
+                self.inc_pc(1);
             }
         }
     }
@@ -829,6 +862,8 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
 
         Instr::Math(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
+        Instr::Math(Math::XOR_A_u8(r)) => format!("XOR A,u8  -- Xor A with immediate u8 store in A"),
+        Instr::Math(Math::XOR_A_addr(rr)) => format!("XOR A,(HL) {} -- XOR A with memory at address inside {}",rr,rr),
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
         Instr::Math(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}",r,r),
@@ -848,6 +883,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::RRC(r)) => format!("RRC {} -- Rotate {} right, Old bit 0 to carry flag. sets flags.",r,r),
         Instr::Math(Math::RR(r)) => format!("RR {} -- Rotate {} right through carry flag. sets flags",r,r),
         Instr::Math(Math::RLA()) => format!("RLA -- rotate A left through carry flag. Same as RL A"),
+        Instr::Math(Math::SLA(rr)) => format!("SLA {} -- shift A left through carry flag by {} bits",rr,rr),
         Instr::Math(Math::RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
         Instr::Math(Math::RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
         Instr::Math(Math::RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),

@@ -5,7 +5,7 @@ use Math::{ADD_R_R, AND_A_r, OR_A_r, SUB_R_R, XOR_A_r};
 use crate::{MMU, Z80};
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
-use crate::opcodes::Math::ADD_RR_RR;
+use crate::opcodes::Math::{ADD_RR_RR, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 
@@ -67,6 +67,8 @@ pub enum Math {
     ADD_RR_RR(DoubleRegister,DoubleRegister),
     SUB_R_R(RegisterName,RegisterName),
     XOR_A_r(RegisterName),
+    XOR_A_u8(RegisterName),
+    XOR_A_addr(DoubleRegister),
     OR_A_r(RegisterName),
     AND_A_r(RegisterName),
     Inc_r(RegisterName),
@@ -83,6 +85,7 @@ pub enum Math {
     RRA(),
     RRC(RegisterName),
     RRCA(),
+    SLA(RegisterName),
 }
 pub enum Instr {
     Load(Load),
@@ -296,7 +299,9 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xAB => Some(Instr::Math(XOR_A_r(E))),
         0xAC => Some(Instr::Math(XOR_A_r(H))),
         0xAD => Some(Instr::Math(XOR_A_r(L))),
+        0xAE => Some(Instr::Math(XOR_A_addr(HL))),
         0xAF => Some(Instr::Math(XOR_A_r(A))),
+        0xEE => Some(Instr::Math(XOR_A_u8(A))),
 
         0xB0 => Some(Instr::Math(OR_A_r(B))),
         0xB1 => Some(Instr::Math(OR_A_r(C))),
@@ -344,8 +349,16 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
 
         // bit manipulation
+        0xCB38 => Some(Instr::Math(Math::SLA(B))),
         0xCB7C => Some(Instr::Math(Math::BIT(7, H))),
         0xCB7E => Some(Instr::Math(Math::BITR2(7, HL))),
+        0xCB19 => Some(Instr::Math(Math::RR(C))),
+        0xCB1A => Some(Instr::Math(Math::RR(D))),
+        0xCB1B => Some(Instr::Math(Math::RR(E))),
+        0xCB1C => Some(Instr::Math(Math::RR(H))),
+        0xCB1D => Some(Instr::Math(Math::RR(L))),
+        0xCB1F => Some(Instr::Math(Math::RR(A))),
+
         0x07 => Some(Instr::Math(Math::RLCA())),
         0x17 => Some(Instr::Math(Math::RLA())),
         0x0F => Some(Instr::Math(Math::RRCA())),

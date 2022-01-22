@@ -207,7 +207,7 @@ fn dump_LCDC_bits(by: u8) {
             7 => format!("LCD Display Enable = {}",b),
             _ => format!("Unknown so far"),
         };
-        println!("foo {}",v);
+        println!("LCDC: {}",v);
     }
 }
 
