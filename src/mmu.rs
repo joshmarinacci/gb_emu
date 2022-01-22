@@ -180,7 +180,7 @@ impl MMU {
             //this is the background color palette
             //https://gbdev.gg8.se/wiki/articles/Video_Display#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only
             println!("writing to BGP LCD register {:0b}",val);
-
+            dump_BGP_bits(val);
         }
         if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
@@ -190,6 +190,24 @@ impl MMU {
             self.highest_used_iram = max(self.highest_used_iram,addr);
         }
         self.data[addr as usize] = val;
+    }
+}
+
+fn dump_BGP_bits(byt: u8) {
+    for n in 0..8 {
+        let b = get_bit(byt,n);
+        let v:String = match n {
+            0 => format!("data for dot data 00 = {}",b),
+            1 => format!("data for dot data 00 = {}",b),
+            2 => format!("data for dot data 01 = {}",b),
+            3 => format!("data for dot data 01 = {}",b),
+            4 => format!("data for dot data 10 = {}",b),
+            5 => format!("data for dot data 10 = {}",b),
+            6 => format!("data for dot data 11 = {}",b),
+            7 => format!("data for dot data 11 = {}",b),
+            _ => format!("Unknown so far"),
+        };
+        println!("LCDC: {}",v);
     }
 }
 

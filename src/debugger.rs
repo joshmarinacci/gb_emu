@@ -20,10 +20,11 @@ struct Ctx {
 }
 
 impl Ctx {
-    pub(crate) fn execute(&mut self, term: &mut Term) {
-        // term.write_line(&format!("PC at {:04x}", self.cpu.r.pc));
+    pub(crate) fn execute(&mut self, term: &mut Term, verbose: bool) {
         let (opcode, off) = fetch_opcode_from_memory(&mut self.cpu, &mut self.mmu);
-        // term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode));
+        if verbose {
+            term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode));
+        }
         if let Some(instr) = lookup_opcode(opcode) {
             self.execute_instruction(&instr);
         } else {
@@ -592,11 +593,11 @@ impl Ctx {
     }
 }
 
-pub fn start_debugger_loop(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
+pub fn start_debugger_loop(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32, verbose: bool) -> Result<()> {
     let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true};
     let mut term = Term::stdout();
     while ctx.running {
-        ctx.execute(&mut term);
+        ctx.execute(&mut term,verbose);
     }
     Ok(())
 }
@@ -607,7 +608,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
     let mut full_registers_visible = false;
 
     for n in 0..fast_forward {
-        ctx.execute(&mut term);
+        ctx.execute(&mut term, false);
     }
 
     let border = Style::new().bg(Color::Magenta).black();
@@ -696,11 +697,11 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         if ch == 'J' {
             term.write_line(&format!("doing 16 instructions"))?;
             for n in 0..16 {
-                ctx.execute(&mut term);
+                ctx.execute(&mut term, false);
             }
         }
         if ch == 'j' {
-            ctx.execute(&mut term)
+            ctx.execute(&mut term,false )
         }
         if ch == 'v' { dump_vram(&term,&ctx); }
         if ch == 's' { dump_screen(&term,&ctx); }

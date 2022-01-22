@@ -50,12 +50,12 @@ fn main() {
         if args.interactive {
             run_bootrom_interactive(&args);
         } else {
-            run_bootrom_new(&args);
+            run_bootrom_loop(&args);
         }
     }
 }
 
-fn run_bootrom_new(args: &Cli) {
+fn run_bootrom_loop(args: &Cli) {
     println!("running the bootrom");
     let mut cpu = Z80::init();
     let mut mmu = MMU::init_with_bootrom();
@@ -63,7 +63,7 @@ fn run_bootrom_new(args: &Cli) {
     cpu.r.pc = 0x00;
     let OPCODE_MAP = load_opcode_map();
     // start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
-    start_debugger_loop(cpu,mmu,OPCODE_MAP,None,args.fastforward);
+    start_debugger_loop(cpu,mmu,OPCODE_MAP,None,args.fastforward, args.verbose);
 
 }
 
@@ -93,7 +93,7 @@ fn run_romfile(cart: RomFile, interactive: bool, args:&Cli) {
     if interactive {
         start_debugger(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward);
     } else {
-        start_debugger_loop(cpu,mmu,OPCODE_MAP,Some(cart),args.fastforward);
+        start_debugger_loop(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward, args.verbose );
     }
 }
 
@@ -240,6 +240,8 @@ struct Cli {
     interactive:bool,
     #[structopt(long, default_value="0")]
     fastforward:u32,
+    #[structopt(long)]
+    verbose:bool,
 }
 
 fn init_setup() -> Cli {
