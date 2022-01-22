@@ -31,3 +31,5 @@ cargo run -- --interactive --fastforward=14575  ./resources/testroms/hello-world
 
 
 `Snake.gb` is from [here](https://donaldhays.com/projects/snake/) by 'Donald Hays'
+
+special thanks to [here](https://github.com/mvdnes/rboy/blob/master/src/cpu.rs) for the bit map in rust examples

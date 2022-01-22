@@ -5,6 +5,7 @@ use Math::{ADD_R_R, AND_A_r, OR_A_r, SUB_R_R, XOR_A_r};
 use crate::{MMU, Z80};
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
+use crate::opcodes::Math::ADD_RR_RR;
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 
@@ -63,6 +64,7 @@ pub enum Compare {
 pub enum Math {
     ADD_R_u8(RegisterName),
     ADD_R_R(RegisterName,RegisterName),
+    ADD_RR_RR(DoubleRegister,DoubleRegister),
     SUB_R_R(RegisterName,RegisterName),
     XOR_A_r(RegisterName),
     OR_A_r(RegisterName),
@@ -262,6 +264,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
 
 
+        0x39 => Some(Instr::Math(ADD_RR_RR(HL,SP))),
 
         0x80 => Some(Instr::Math(ADD_R_R(A, B))),
         0x81 => Some(Instr::Math(ADD_R_R(A, C))),

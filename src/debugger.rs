@@ -136,6 +136,17 @@ impl Ctx {
                 self.cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
                 self.cpu.r.set_u8reg(dst, result);
             }
+            Math::ADD_RR_RR(dst,src) => {
+                self.inc_pc(1);
+                let src_v = self.cpu.r.get_u16reg(src);
+                let dst_v = self.cpu.r.get_u16reg(dst);
+                let result = dst_v.wrapping_add(src_v);
+                self.cpu.r.subtract_n_flag = false;
+                //dont modify the zero flag
+                self.cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
+                self.cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
+                self.cpu.r.set_u16reg(dst,result);
+            }
             Math::SUB_R_R(dst, src) => {
                 self.inc_pc(1);
                 let dst_v = self.cpu.r.get_u8reg(dst);
@@ -822,6 +833,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
         Instr::Math(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}",r,r),
         Instr::Math(Math::ADD_R_R(dst,src)) => format!("ADD {} {} -- add {} to {}, store result in {}",dst,src,src,dst,dst),
+        Instr::Math(Math::ADD_RR_RR(dst, src)) => format!("ADD {} {}",dst,src),
         Instr::Math(Math::SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}",dst,src,src,dst,dst),
 
         Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}",rr,rr),
