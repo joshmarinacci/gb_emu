@@ -10,6 +10,7 @@ pub struct Hardware {
     pub WY:u8,
     pub WX:u8,
     pub LCDC:u8,
+    pub IME:u8,
 }
 
 impl Hardware {
@@ -21,7 +22,8 @@ impl Hardware {
             LYC: 0,
             WY: 0,
             WX: 0,
-            LCDC: 0
+            LCDC: 0,
+            IME: 0
         }
     }
     pub fn update(&mut self) {

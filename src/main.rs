@@ -50,9 +50,21 @@ fn main() {
         if args.interactive {
             run_bootrom_interactive(&args);
         } else {
-            run_bootrom(&args);
+            run_bootrom_new(&args);
         }
     }
+}
+
+fn run_bootrom_new(args: &Cli) {
+    println!("running the bootrom");
+    let mut cpu = Z80::init();
+    let mut mmu = MMU::init_with_bootrom();
+    cpu.reset();
+    cpu.r.pc = 0x00;
+    let OPCODE_MAP = load_opcode_map();
+    // start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
+    start_debugger_loop(cpu,mmu,OPCODE_MAP,None,args.fastforward);
+
 }
 
 fn run_bootrom_interactive(args: &Cli) {

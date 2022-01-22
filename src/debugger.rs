@@ -60,12 +60,16 @@ impl Ctx {
     fn execute_compare_instructions(&mut self, comp:&Compare) {
         match comp {
             Compare::CP_A_n() => {
-                let n = self.mmu.read8(self.cpu.r.pc + 1);
-                // println!("comparing A:{:x} to n:{:x}",self.cpu.r.a,n);
-                self.cpu.r.zero_flag = self.cpu.r.a == n;
-                self.cpu.r.carry_flag = self.cpu.r.a < n;
+                self.inc_pc(1);
+                let src_v = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+
+                let dst_v = self.cpu.r.get_u8reg(&A);
+                let result = src_v.wrapping_sub(dst_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
                 self.cpu.r.subtract_n_flag = true;
-                self.inc_pc(2);
+                self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
             }
             Compare::CP_A_r(r) => {
                 todo!()
@@ -75,12 +79,13 @@ impl Ctx {
     fn execute_math_instructions(&mut self, math: &Math) {
         match math {
             Math::XOR_A_r(r) => {
-                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r));
-                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
-                self.cpu.r.subtract_n_flag = false;
-                self.cpu.r.half_flag = true;
-                self.cpu.r.carry_flag = false;
                 self.inc_pc(1);
+                let res = self.cpu.r.get_u8reg(&A) ^ self.cpu.r.get_u8reg(r);
+                self.cpu.r.zero_flag = res == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = false;
+                self.cpu.r.carry_flag = false;
+                self.cpu.r.set_u8reg(&A,res);
             }
             Math::OR_A_r(r) => {
                 self.inc_pc(1);
@@ -102,31 +107,53 @@ impl Ctx {
                 self.inc_pc(1);
                 let v1 = self.cpu.r.get_u8reg(r);
                 let v2 = self.mmu.read8(self.cpu.r.pc);
-                let v3 = v1.wrapping_add(v2);
+                let result = v1.wrapping_add(v2);
                 self.inc_pc(1);
                 self.cpu.r.set_u8reg(r, v2);
-                self.cpu.r.zero_flag = v3 == 0;
+                self.cpu.r.zero_flag = result == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = ((v1 & 0xF) + (v2 & 0xF) > 0xFF);
                 self.cpu.r.carry_flag = ((v1 as u16) + (v2 as u16) > 0xFF);
             }
-            Math::Inc_r(r) => {
+            Math::ADD_R_R(dst, src) => {
                 self.inc_pc(1);
-                let mut val = self.cpu.r.get_u8reg(r);
-                val = val.wrapping_add(1);
-                self.cpu.r.set_u8reg(r, val);
-                self.cpu.r.zero_flag = val == 0;
+                let dst_v = self.cpu.r.get_u8reg(dst);
+                let src_v = self.cpu.r.get_u8reg(src);
+                let result = dst_v.wrapping_add(src_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) + (src_v & 0x0f) > 0xF;
                 self.cpu.r.subtract_n_flag = false;
-                self.cpu.r.half_flag = ((val & 0x0F) + 1 > 0x0F);
+                self.cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
+                self.cpu.r.set_u8reg(dst, result);
+            }
+            Math::SUB_R_R(dst, src) => {
+                self.inc_pc(1);
+                let dst_v = self.cpu.r.get_u8reg(dst);
+                let src_v = self.cpu.r.get_u8reg(src);
+                let result = dst_v.wrapping_sub(src_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+                self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+                self.cpu.r.set_u8reg(dst, result);
+            }
+            Math::Inc_r(dst_r) => {
+                self.inc_pc(1);
+                let src_v = self.cpu.r.get_u8reg(dst_r);
+                let result = src_v.wrapping_add(1);
+                self.cpu.r.set_u8reg(dst_r, result);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = ((result & 0x0F) + 1 > 0x0F);
+                self.cpu.r.subtract_n_flag = false;
             }
             Math::Dec_r(r) => {
                 self.inc_pc(1);
                 let mut val = self.cpu.r.get_u8reg(r);
-                val = val.wrapping_sub(1);
-                self.cpu.r.set_u8reg(r, val);
-                self.cpu.r.zero_flag = val == 0;
+                let result = val.wrapping_sub(1);
+                self.cpu.r.set_u8reg(r, result);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (result & 0x0F) == 0;
                 self.cpu.r.subtract_n_flag = true;
-                self.cpu.r.half_flag = (val & 0x0F) == 0;
             }
             Math::Inc_rr(rr) => {
                 self.inc_pc(1);
@@ -257,69 +284,39 @@ impl Ctx {
     fn execute_jump_instructions(&mut self, jump: &Jump) {
         match jump {
             Jump::JumpAbsolute_u16() => {
-                // println!("jumping to absolute address");
                 let addr = self.mmu.read16(self.cpu.r.pc + 1);
-                // println!("jumping to address {:04x}",addr);
                 self.set_pc(addr);
-            },
-            Jump::JumpRelative_i8() => {
-                self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
-                self.inc_pc(1);
-                let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-                self.set_pc(addr as u16);
             },
             Jump::JumpRelative_cond_carry_i8() => {
                 self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
+                let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 // println!("carry flag is set to {}",self.cpu.r.carry_flag);
-                if self.cpu.r.carry_flag {
-                    let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-                    self.set_pc(addr as u16);
-                } else {}
+                if self.cpu.r.carry_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             },
             Jump::JumpRelative_cond_notcarry_i8() => {
                 self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
+                let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
-                // println!("carry flag is set to {}",self.cpu.r.carry_flag);
-                if !self.cpu.r.carry_flag {
-                    let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-                    self.set_pc(addr as u16);
-                }
+                if !self.cpu.r.carry_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             }
             Jump::JumpRelative_cond_zero_i8() => {
                 self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
+                let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
-                let addr = (((self.cpu.r.pc) as i32) + (u8_as_i8(e) as i32));
-                if self.cpu.r.zero_flag {
-                    self.set_pc(addr as u16);
-                }
+                if self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             }
             Jump::JumpRelative_cond_notzero_i8() => {
                 self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
+                let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
-                let addr = (self.cpu.r.pc as i32) + (e as i8 as i32);
-                if !self.cpu.r.zero_flag {
-                    self.set_pc(addr as u16);
-                }
+                if !self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             },
             Jump::JumpRelative_i8() => {
                 self.inc_pc(1);
-                let e = self.mmu.read8(self.cpu.r.pc);
-                let addr = ((self.cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
-                println!("jumping by {}",u8_as_i8(e));
-                self.set_pc(addr as u16);
-                // ol.add(0x18,"JR e",0,3,|cpu,mmu|{
-                //     let e = mmu.read8(cpu.r.pc+1);
-                //     let addr = ((cpu.r.pc as i32) + (u8_as_i8(e)) as i32);
-                //     println!("jumping by {}",u8_as_i8(e));
-                //     cpu.r.pc = addr as u16;
-                // });
-
+                let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
+                self.inc_pc(1);
+                self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16);
             }
         }
     }
@@ -343,12 +340,11 @@ impl Ctx {
             }
             Load::Load_high_u8_r(r) => {
                 self.inc_pc(1);
-                let e =self.mmu.read8(self.cpu.r.pc);
-                let addr = (0xFF00 as u16) + (e as u16);
-                let v = self.cpu.r.get_u8reg(r);
-                // println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
-                self.mmu.write8(addr,v);
+                let e = self.mmu.read8(self.cpu.r.pc);
                 self.inc_pc(1);
+                let addr = (0xFF00 as u16) + (e as u16);
+                let val = self.cpu.r.get_u8reg(r);
+                self.mmu.write8(addr, val);
             },
             //LD (FF00+C),A    put contents of A into address 0xF00+C
             Load::Load_high_r_r(off,r) => {
@@ -368,8 +364,9 @@ impl Ctx {
             Load::Load_R2_u16(rr) => {
                 self.inc_pc(1);
                 let val = self.mmu.read16(self.cpu.r.pc);
+                self.inc_pc(1);
+                self.inc_pc(1);
                 self.cpu.r.set_u16reg(rr,val);
-                self.inc_pc(2);
                 // println!("copied immediate value {:04x} into register {}",val,rr)
             }
             Load::Load_R_addr_R2(r,rr) => {
@@ -424,26 +421,27 @@ impl Ctx {
     fn execute_special_instructions(&mut self, special: &Special) {
         match special {
             Special::DisableInterrupts() => {
-                println!("pretending to disable iterrupts");
                 self.inc_pc(1);
+                self.mmu.hardware.IME = 0;
             }
             Special::NOOP() => {
                 self.inc_pc(1);
             }
             Special::HALT() => {
+                self.inc_pc(1);
                 self.running = false;
             }
             Special::STOP() => {
                 self.inc_pc(1);
-                println!("stopping interrupts");
+                self.mmu.hardware.IME = 0;
             }
             Special::CALL_u16() => {
                 self.inc_pc(1);
                 let addr = self.mmu.read16(self.cpu.r.pc);
-                self.inc_pc(2);
-                let next = self.cpu.r.pc;
-                self.mmu.write16(self.cpu.r.sp, next);
+                self.inc_pc(1);
+                self.inc_pc(1);
                 self.dec_sp();
+                self.mmu.write16(self.cpu.r.sp, self.cpu.r.pc);
                 self.dec_sp();
                 self.set_pc(addr);
             }
@@ -466,6 +464,14 @@ impl Ctx {
                 self.inc_sp();
                 self.inc_sp();
                 self.set_pc(addr);
+            }
+            Special::RETI() => {
+                let addr = self.mmu.read16(self.cpu.r.sp);
+                self.inc_sp();
+                self.inc_sp();
+                self.set_pc(addr);
+                self.mmu.hardware.IME = 1;
+                println!("pretending to enable interrupts");
             }
         }
     }
@@ -758,6 +764,8 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
         Instr::Math(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}",r,r),
+        Instr::Math(Math::ADD_R_R(dst,src)) => format!("ADD {} {} -- add {} to {}, store result in {}",dst,src,src,dst,dst),
+        Instr::Math(Math::SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}",dst,src,src,dst,dst),
 
         Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}",rr,rr),
         Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}",rr,rr),
@@ -781,6 +789,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Special(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack",rr,rr),
         Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
         Instr::Special(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
+        Instr::Special(Special::RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
         Instr::Special(Special::HALT()) => format!("HALT -- completely stop the emulator"),
     }
 }
