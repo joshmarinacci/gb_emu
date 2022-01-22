@@ -3,7 +3,9 @@ use core::fmt::{Debug, Formatter};
 use std::collections::HashMap;
 use crate::bootrom::BOOT_ROM;
 use crate::{MMU};
+use crate::common::{get_bit, get_bit_as_bool, set_bit};
 use crate::opcodes::{DoubleRegister, RegisterName, setup_op_codes};
+use crate::opcodes::RegisterName::{A, F};
 
 #[derive(Debug)]
 pub struct Z80_registers {
@@ -43,17 +45,31 @@ impl Z80_registers {
             RegisterName::E => self.e,
             RegisterName::H => self.h,
             RegisterName::L => self.l,
+            F => {
+                let mut v = 0x00;
+                v = set_bit(v,7,self.zero_flag);
+                v = set_bit(v,6,self.subtract_n_flag);
+                v = set_bit(v,5,self.half_flag);
+                v = set_bit(v,4,self.carry_flag);
+                v
+            }
         }
     }
     pub(crate) fn set_u8reg(&mut self, reg: &RegisterName, val: u8) {
         match reg {
-            RegisterName::A => self.a = val,
-            RegisterName::B => self.b = val,
-            RegisterName::C => self.c = val,
-            RegisterName::D => self.d = val,
-            RegisterName::E => self.e = val,
-            RegisterName::H => self.h = val,
-            RegisterName::L => self.l = val,
+            A => self.a = val,
+            B => self.b = val,
+            C => self.c = val,
+            D => self.d = val,
+            E => self.e = val,
+            H => self.h = val,
+            L => self.l = val,
+            F => {
+                self.zero_flag = get_bit_as_bool(val,7);
+                self.subtract_n_flag = get_bit_as_bool(val,6);
+                self.half_flag = get_bit_as_bool(val,5);
+                self.carry_flag = get_bit_as_bool(val,4);
+            }
         }
     }
     pub(crate) fn get_u16reg(&self, reg: &DoubleRegister) -> u16 {
@@ -62,6 +78,7 @@ impl Z80_registers {
             DoubleRegister::DE => self.get_de(),
             DoubleRegister::HL => self.get_hl(),
             DoubleRegister::SP => self.get_sp(),
+            DoubleRegister::AF => self.get_af(),
         }
     }
     pub(crate) fn set_u16reg(&mut self, reg: &DoubleRegister, val: u16) {
@@ -70,6 +87,7 @@ impl Z80_registers {
             DoubleRegister::DE => self.set_de(val),
             DoubleRegister::HL => self.set_hl(val),
             DoubleRegister::SP => self.set_sp(val),
+            DoubleRegister::AF => self.set_af(val),
         }
     }
 }
@@ -100,6 +118,17 @@ impl Z80_registers {
     }
     pub fn set_sp(&mut self, val:u16) {
         self.sp = val;
+    }
+    pub fn get_af(&self) -> u16 {
+        let v1 = self.get_u8reg(&A);
+        let v2:u8 = self.get_u8reg(&F);
+        (v2 as u16) + (v1 as u16)
+    }
+    pub fn set_af(&mut self, val:u16) {
+        self.a = (val >>8 ) as u8;
+        let f = (0x00ff & val) as u8;
+        self.set_u8reg(&F,f)
+
     }
 }
 

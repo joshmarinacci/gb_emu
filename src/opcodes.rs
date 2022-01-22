@@ -4,7 +4,7 @@ use Compare::CP_A_r;
 use Math::{ADD_R_R, AND_A_r, OR_A_r, SUB_R_R, XOR_A_r};
 use crate::cpu::Op;
 use crate::{MMU, OpList, Z80};
-use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
+use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
@@ -252,10 +252,10 @@ pub fn u8_as_i8(v: u8) -> i8 {
 }
 
 pub enum RegisterName {
-    A,B,C,D,E,H,L
+    A,B,C,D,E,H,L,F,
 }
 pub enum DoubleRegister {
-    BC,DE,HL, SP,
+    BC,DE,HL,SP,AF,
 }
 pub enum Special {
     NOOP(),
@@ -339,6 +339,7 @@ impl Display for RegisterName {
             E => "E",
             H => "H",
             L => "L",
+            F => "F",
         })
     }
 }
@@ -346,37 +347,15 @@ impl Display for RegisterName {
 impl Display for DoubleRegister {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            DoubleRegister::BC => "BC",
-            DoubleRegister::DE => "DE",
-            DoubleRegister::HL => "HL",
+            BC => "BC",
+            DE => "DE",
+            HL => "HL",
             SP => "SP",
+            AF => "AF",
         })
     }
 }
 
-fn set_cpu_register_u8(cpu: &mut Z80, reg: &RegisterName, nv: u8) {
-    match reg {
-        RegisterName::A => cpu.r.a = nv,
-        RegisterName::B => cpu.r.b = nv,
-        RegisterName::C => cpu.r.c = nv,
-        RegisterName::D => cpu.r.d = nv,
-        RegisterName::E => cpu.r.e = nv,
-        RegisterName::H => cpu.r.h = nv,
-        RegisterName::L => cpu.r.l = nv,
-    }
-}
-
-fn get_cpu_register_u8(cpu: &mut Z80, reg: &RegisterName) -> u8 {
-    match reg {
-        RegisterName::A => cpu.r.a,
-        RegisterName::B => cpu.r.b,
-        RegisterName::C => cpu.r.c,
-        RegisterName::D => cpu.r.d,
-        RegisterName::E => cpu.r.e,
-        RegisterName::H => cpu.r.h,
-        RegisterName::L => cpu.r.l,
-    }
-}
 
 pub fn lookup_opcode(code:u16) -> Option<Instr> {
     return match code {
@@ -495,6 +474,9 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xD5 => Some(Instr::Special(PUSH(DE))),
         0xE1 => Some(Instr::Special(POP(HL))),
         0xE5 => Some(Instr::Special(PUSH(HL))),
+        0xF1 => Some(Instr::Special(POP(AF))),
+        0xF5 => Some(Instr::Special(PUSH(AF))),
+
         0xC8 => Some(Instr::Special(RETZ())),
         0xC9 => Some(Instr::Special(RET())),
         0xD9 => Some(Instr::Special(RETI())),
@@ -507,8 +489,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xDF => Some(Instr::Special(RST(0x18))),
         0xEF => Some(Instr::Special(RST(0x28))),
         0xFF => Some(Instr::Special(RST(0x38))),
-        // 0xF1 => Some(Instr::Special(POP(AF))),
-        // 0xF5 => Some(Instr::Special(PUSH(AF))),
 
         0xF0 => Some(Instr::Load(Load::Load_high_r_u8(A))),
 

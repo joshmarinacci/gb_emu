@@ -415,7 +415,8 @@ impl Ctx {
                 let val = self.mmu.read8(addr);
                 self.cpu.r.set_u8reg(&A,val);
                 // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
-                self.cpu.r.set_u16reg(rr,self.cpu.r.get_u16reg(rr)+1);
+                let (v2,bool) = self.cpu.r.get_u16reg(rr).overflowing_add(1);
+                self.cpu.r.set_u16reg(rr,v2);
             },
             Load::Load_addr_R2_A_inc(rr) => {
                 self.inc_pc(1);

@@ -7,8 +7,45 @@ pub struct RomFile {
     pub(crate) path:String,
 }
 
-pub fn get_bit(by:u8, n:i32) -> u8 {
+pub fn get_bit(by:u8, n:u8) -> u8 {
     if by & (1<<n) != 0 { 1 } else { 0 }
+}
+pub fn get_bit_as_bool(by:u8, n:u8) -> bool {
+    if by & (1<<n) != 0 { true } else { false }
+}
+pub fn set_bit(by:u8, n:u8, on:bool) -> u8 {
+    if on {
+        let mask = match n {
+            0 => 0b0000_0001,
+            1 => 0b0000_0010,
+            2 => 0b0000_0100,
+            3 => 0b0000_1000,
+            4 => 0b0001_0000,
+            5 => 0b0010_0000,
+            6 => 0b0100_0000,
+            7 => 0b1000_0000,
+            _ => {
+                panic!("we can't look at bits higher than 7")
+            }
+        };
+        by | mask
+    } else {
+        let mask = match n {
+            0 => 0b1111_1110,
+            1 => 0b1111_1101,
+            2 => 0b1111_1011,
+            3 => 0b1111_0111,
+            4 => 0b1110_1111,
+            5 => 0b1101_1111,
+            6 => 0b1011_1111,
+            7 => 0b0111_1111,
+            _ => {
+                panic!("we can't look at bits higher than 7")
+            }
+        };
+        by & mask
+    }
+
 }
 
 
