@@ -25,4 +25,7 @@ cargo run -- --interactive --fastforward=14575  ./resources/testroms/hello-world
 
 `hello-world.gb` is from [here](https://github.com/dusterherz/gb-hello-world) by 'dusterherz'.
 
+`GB-ticTacToe.gb` is from [here](https://gbhh.avivace.com/game/GB-Tic-Tac-Toe) by 'Norman Nithman'
+
+`vectroid.gbc` is from [here](https://gitlab.com/BonsaiDen/vectroid.gb) by 'Ivo Wetzel'
 
