@@ -5,7 +5,7 @@ use crate::{MMU, OpList, Z80};
 use crate::opcodes::DoubleRegister::{BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
-use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, STOP};
+use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, STOP};
 
 pub fn setup_op_codes() -> OpList {
     let mut ol = OpList::init();
@@ -264,6 +264,7 @@ pub enum Special {
     PUSH(DoubleRegister),
     POP(DoubleRegister),
     RET(),
+    RETZ(),
     RETI()
 }
 pub enum Load {
@@ -306,6 +307,7 @@ pub enum Math {
     Dec_r(RegisterName),
     Dec_rr(DoubleRegister),
     BIT(u8,RegisterName),
+    BITR2(u8,DoubleRegister),
     RL(RegisterName),
     RLA(),
     RLC(RegisterName),
@@ -488,6 +490,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xD5 => Some(Instr::Special(PUSH(DE))),
         0xE1 => Some(Instr::Special(POP(HL))),
         0xE5 => Some(Instr::Special(PUSH(HL))),
+        0xC8 => Some(Instr::Special(RETZ())),
         0xC9 => Some(Instr::Special(RET())),
         0xD9 => Some(Instr::Special(RETI())),
         // 0xF1 => Some(Instr::Special(POP(AF))),
@@ -563,6 +566,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
         // bit manipulation
         0xCB7C => Some(Instr::Math(Math::BIT(7, H))),
+        0xCB7E => Some(Instr::Math(Math::BITR2(7, HL))),
         0x07 => Some(Instr::Math(Math::RLCA())),
         0x17 => Some(Instr::Math(Math::RLA())),
         0x0F => Some(Instr::Math(Math::RRCA())),

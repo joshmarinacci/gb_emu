@@ -187,6 +187,27 @@ impl Ctx {
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
             }
+            Math::BITR2(b,r) => {
+                self.inc_pc(1);
+                let addr = self.cpu.r.get_u16reg(r);
+                let val = self.mmu.read16(addr);
+                let mask = match b {
+                    0 => 0b0000_0001,
+                    1 => 0b0000_0010,
+                    2 => 0b0000_0100,
+                    3 => 0b0000_1000,
+                    4 => 0b0001_0000,
+                    5 => 0b0010_0000,
+                    6 => 0b0100_0000,
+                    7 => 0b1000_0000,
+                    _ => {
+                        panic!("we can't look at bits higher than 7")
+                    }
+                };
+                self.cpu.r.zero_flag = !((val & mask) > 0);
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = true;
+            }
             Math::RLC(r) => {
                 self.inc_pc(1);
                 let r_val = self.cpu.r.get_u8reg(r);
@@ -460,18 +481,28 @@ impl Ctx {
                 self.cpu.r.set_u16reg(rr,value);
             }
             Special::RET() => {
+                self.inc_pc(1);
                 let addr = self.mmu.read16(self.cpu.r.sp);
                 self.inc_sp();
                 self.inc_sp();
                 self.set_pc(addr);
             }
             Special::RETI() => {
+                self.inc_pc(1);
                 let addr = self.mmu.read16(self.cpu.r.sp);
                 self.inc_sp();
                 self.inc_sp();
                 self.set_pc(addr);
                 self.mmu.hardware.IME = 1;
-                println!("pretending to enable interrupts");
+            }
+            Special::RETZ() => {
+                self.inc_pc(1);
+                if self.cpu.r.zero_flag {
+                    let addr = self.mmu.read16(self.cpu.r.sp);
+                    self.inc_sp();
+                    self.inc_sp();
+                    self.set_pc(addr);
+                }
             }
         }
     }
@@ -773,6 +804,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags",r,r),
 
         Instr::Math(Math::BIT(bit, r)) => format!("BIT {:0x}, {}",bit,r),
+        Instr::Math(Math::BITR2(bit, r)) => format!("BIT {:0x}, ({})",bit,r),
         Instr::Math(Math::RLC(r)) => format!("RLC {} --- rotate register {} .old bit 7 to carry flag. sets flags", r, r),
         Instr::Math(Math::RL(r)) => format!("RL {} -- Rotate {} left through Carry flag. sets flags",r,r),
         Instr::Math(Math::RRC(r)) => format!("RRC {} -- Rotate {} right, Old bit 0 to carry flag. sets flags.",r,r),
@@ -790,6 +822,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
         Instr::Special(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
         Instr::Special(Special::RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
+        Instr::Special(Special::RETZ()) => format!("RET Z  -- return of zflag is set"),
         Instr::Special(Special::HALT()) => format!("HALT -- completely stop the emulator"),
     }
 }
