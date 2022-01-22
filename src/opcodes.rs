@@ -507,8 +507,20 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         //increments and decrements
         0x04 => Some(Instr::Math(Math::Inc_r(B))),
         0x14 => Some(Instr::Math(Math::Inc_r(D))),
+        0x24 => Some(Instr::Math(Math::Inc_r(H))),
         0x05 => Some(Instr::Math(Math::Dec_r(B))),
         0x15 => Some(Instr::Math(Math::Dec_r(D))),
+        0x25 => Some(Instr::Math(Math::Dec_r(H))),
+
+        0x0c => Some(Instr::Math(Math::Inc_r(C))),
+        0x1c => Some(Instr::Math(Math::Inc_r(E))),
+        0x2c => Some(Instr::Math(Math::Inc_r(L))),
+        0x3c => Some(Instr::Math(Math::Inc_r(A))),
+
+        0x0d => Some(Instr::Math(Math::Dec_r(C))),
+        0x1d => Some(Instr::Math(Math::Dec_r(E))),
+        0x2d => Some(Instr::Math(Math::Dec_r(L))),
+        0x3d => Some(Instr::Math(Math::Dec_r(A))),
 
         0x03 => Some(Instr::Math(Math::Inc_rr(BC))),
         0x13 => Some(Instr::Math(Math::Inc_rr(DE))),
@@ -519,6 +531,35 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x1B => Some(Instr::Math(Math::Dec_rr(DE))),
         0x2B => Some(Instr::Math(Math::Dec_rr(HL))),
         0x3B => Some(Instr::Math(Math::Dec_rr(SP))),
+
+
+        // bit manipulation
+        0xCB7C => Some(Instr::Math(Math::BIT(7, H))),
+        0x07 => Some(Instr::Math(Math::RLCA())),
+        0x17 => Some(Instr::Math(Math::RLA())),
+        0x0F => Some(Instr::Math(Math::RRCA())),
+        0x1F => Some(Instr::Math(Math::RRA())),
+
+        0xCB00 => Some(Instr::Math(Math::RLC(B))),
+        0xCB01 => Some(Instr::Math(Math::RLC(C))),
+        0xCB02 => Some(Instr::Math(Math::RLC(D))),
+        0xCB03 => Some(Instr::Math(Math::RLC(E))),
+        0xCB04 => Some(Instr::Math(Math::RLC(H))),
+        0xCB05 => Some(Instr::Math(Math::RLC(L))),
+        0xCB07 => Some(Instr::Math(Math::RLC(A))),
+
+        0xCB08 => Some(Instr::Math(Math::RRC(B))),
+        0xCB09 => Some(Instr::Math(Math::RRC(C))),
+        0xCB0A => Some(Instr::Math(Math::RRC(D))),
+        0xCB0B => Some(Instr::Math(Math::RRC(E))),
+        0xCB0C => Some(Instr::Math(Math::RRC(H))),
+        0xCB0D => Some(Instr::Math(Math::RRC(L))),
+        0xCB0F => Some(Instr::Math(Math::RRC(A))),
+
+        0xCB11 => Some(Instr::Math(Math::RL(C))),
+
+
+
         _ => {
             println!("WARNING. can't lookup opcode {:04x}",code);
             None

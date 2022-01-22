@@ -100,18 +100,20 @@ impl Ctx {
             Math::Inc_r(r) => {
                 self.inc_pc(1);
                 let mut val = self.cpu.r.get_u8reg(r);
-                val += 1;
+                val = val.wrapping_add(1);
                 self.cpu.r.set_u8reg(r, val);
-                if val == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.zero_flag = val == 0;
                 self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = ((val & 0x0F) + 1 > 0x0F);
             }
             Math::Dec_r(r) => {
                 self.inc_pc(1);
                 let mut val = self.cpu.r.get_u8reg(r);
-                val -= 1;
+                val = val.wrapping_sub(1);
                 self.cpu.r.set_u8reg(r, val);
-                if val == 0 { self.cpu.r.zero_flag = true; }
+                self.cpu.r.zero_flag = val == 0;
                 self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.half_flag = (val & 0x0F) == 0;
             }
             Math::Inc_rr(rr) => {
                 self.inc_pc(1);
