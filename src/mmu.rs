@@ -10,6 +10,7 @@ pub struct Hardware {
     pub WY:u8,
     pub WX:u8,
     pub LCDC:u8,
+    pub STAT:u8,
     pub IME:u8,
     pub BGP:u8,
     pub OBP0:u8,
@@ -27,6 +28,7 @@ impl Hardware {
             WY: 0,
             WX: 0,
             LCDC: 0,
+            STAT: 0,
             IME: 0,
             BGP: 0,
             OBP0: 0,
@@ -78,6 +80,9 @@ impl MMU {
     }
     pub(crate) fn fetch_test_memory(&self) -> &[u8] {
         &self.data[(TEST_ADDR as usize) .. ((TEST_ADDR + 10) as usize)]
+    }
+    pub(crate) fn fetch_oram(&self) -> &[u8] {
+        &self.data[(0xFE00 as usize) .. ((0xFE9F) as usize)]
     }
 }
 
@@ -204,11 +209,16 @@ impl MMU {
             self.hardware.LCDC = val;
             // let b3 = get_bit(self.hardware.LCDC,3);
             // println!("bit 3 is now {}",b3);
-            dump_LCDC_bits(self.hardware.LCDC);
+            // dump_LCDC_bits(self.hardware.LCDC);
         }
         if addr == STAT_LCDCONTROL {
             println!("writing to STAT LCD register {:0b}",val);
+            self.hardware.STAT = val;
             // panic!("halting");
+        }
+        if addr == DMA {
+            println!("DMA requested!");
+            panic!("halting");
         }
         if addr == BGP {
             //this is the background color palette
@@ -224,7 +234,7 @@ impl MMU {
         if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
-            println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
+            // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);
             self.highest_used_iram = max(self.highest_used_iram,addr);
         }

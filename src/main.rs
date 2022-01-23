@@ -115,6 +115,20 @@ fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     println!("0x0149 RAM size {:02x}",data[0x0149]);
     println!("0x014A dest code {:02x}",data[0x014A]);
 
+    let cart_type = data[0x0147];
+    match cart_type {
+        0x0 => println!("ROM only. Great!"),
+        0x1..=0x3 => panic!("MBC1! Not supported!"),
+        0x5|0x6 => panic!("MBC2! Not supported!"),
+        0x12|0x13 => panic!("MBC3! Not supported!"),
+        0x19|0x1A|0x1B|0x1C|0x1D|0x1E => panic!("MBC5! Not supported!"),
+        0x1F => panic!("Bocket Camera, unsupported!"),
+        0xFD => panic!("Bocket Camera, unsupported!"),
+        0xFE|0xFF => panic!("Hudson HuC, unsupported!"),
+        _ => {
+            println!("trying anyway");
+        }
+    }
     Ok(RomFile {
         data:data,
         path: pth2,

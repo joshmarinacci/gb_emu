@@ -696,24 +696,35 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         let commands = Style::new().reverse();
         term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump")).to_string())?;
         let ch = term.read_char()?;
-        if ch == 'r' {
-            full_registers_visible = !full_registers_visible;
-        }
-        if ch == 'J' {
-            term.write_line(&format!("doing 16 instructions"))?;
-            for n in 0..16 {
-                ctx.execute(&mut term, false);
-            }
-        }
-        if ch == 'j' {
-            ctx.execute(&mut term,false )
-        }
-        if ch == 'v' { dump_vram(&term,&ctx); }
-        if ch == 's' { dump_screen(&term,&ctx); }
-        if ch == 't' { test_memory_visible = !test_memory_visible; }
+        match ch{
+            'r' => full_registers_visible = !full_registers_visible,
+            'j' => ctx.execute(&mut term,false ),
+            'J' => {
+                term.write_line(&format!("doing 16 instructions"))?;
+                for n in 0..16 {
+                    ctx.execute(&mut term, false);
+                }
+            },
+            'v' => dump_vram(&term, &ctx),
+            'o' => dump_oram(&term, &ctx),
+            's' => dump_screen(&term, &ctx),
+            't' => test_memory_visible = !test_memory_visible,
+            _ => {}
+        };
     }
 
     Ok(())
+}
+
+fn dump_oram(term: &Term, ctx: &Ctx) {
+    term.write_line(&"object memory");
+    let data = ctx.mmu.fetch_oram();
+    for line in data.chunks(32) {
+        let line_str:String = line.iter()
+            .map(|b|format!("{:02x}",b))
+            .collect();
+        term.write_line(&line_str);
+    }
 }
 
 fn show_test_memory(term: &Term, ctx: &Ctx) -> Result<()>{
@@ -852,6 +863,7 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     term.write_line(&format!("SCX  {}",ctx.mmu.hardware.SCX))?;
     term.write_line(&format!("SCY  {}",ctx.mmu.hardware.SCY))?;
     term.write_line(&format!("LCDC {:8b}",ctx.mmu.hardware.LCDC))?;
+    term.write_line(&format!("STAT {:8b}",ctx.mmu.hardware.STAT))?;
     term.write_line(&format!("BGP  {:8b}",ctx.mmu.hardware.BGP))?;
     term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
     term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
