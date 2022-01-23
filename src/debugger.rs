@@ -8,6 +8,7 @@ use console::Color::{Black, White};
 use serde_json::Value;
 use crate::{Cli, common, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::{Bitmap, get_bit, get_bit_as_bool, RomFile};
+use crate::mmu::TEST_ADDR;
 use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
 use crate::opcodes::RegisterName::A;
 
@@ -606,6 +607,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
     let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true};
     let mut term = Term::stdout();
     let mut full_registers_visible = false;
+    let mut test_memory_visible = false;
 
     for n in 0..fast_forward {
         ctx.execute(&mut term, false);
@@ -669,6 +671,9 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         if full_registers_visible {
             show_full_hardware_registers(&term,&ctx);
         }
+        if test_memory_visible {
+            show_test_memory(&term, &ctx);
+        }
 
         // print info about the next opcode
         let primary = Style::new().green().bold();
@@ -705,6 +710,20 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         }
         if ch == 'v' { dump_vram(&term,&ctx); }
         if ch == 's' { dump_screen(&term,&ctx); }
+        if ch == 't' { test_memory_visible = !test_memory_visible; }
+    }
+
+    Ok(())
+}
+
+fn show_test_memory(term: &Term, ctx: &Ctx) -> Result<()>{
+    term.write_line(&format!("memory at {:04X}",TEST_ADDR))?;
+    let data = ctx.mmu.fetch_test_memory();
+    for line in data.chunks(32) {
+        let line_str:String = line.iter()
+            .map(|b|format!("{:02x}",b))
+            .collect();
+        term.write_line(&line_str);
     }
 
     Ok(())
@@ -833,6 +852,11 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     term.write_line(&format!("SCX  {}",ctx.mmu.hardware.SCX))?;
     term.write_line(&format!("SCY  {}",ctx.mmu.hardware.SCY))?;
     term.write_line(&format!("LCDC {:8b}",ctx.mmu.hardware.LCDC))?;
+    term.write_line(&format!("BGP  {:8b}",ctx.mmu.hardware.BGP))?;
+    term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
+    term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
+    term.write_line(&format!("WY   {:8b}",ctx.mmu.hardware.WY))?;
+    term.write_line(&format!("WX   {:8b}",ctx.mmu.hardware.WX))?;
     Ok(())
 }
 

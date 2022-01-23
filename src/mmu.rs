@@ -11,6 +11,10 @@ pub struct Hardware {
     pub WX:u8,
     pub LCDC:u8,
     pub IME:u8,
+    pub BGP:u8,
+    pub OBP0:u8,
+    pub OBP1:u8,
+
 }
 
 impl Hardware {
@@ -23,7 +27,10 @@ impl Hardware {
             WY: 0,
             WX: 0,
             LCDC: 0,
-            IME: 0
+            IME: 0,
+            BGP: 0,
+            OBP0: 0,
+            OBP1: 0
         }
     }
     pub fn update(&mut self) {
@@ -68,6 +75,9 @@ impl MMU {
     }
     pub(crate) fn fetch_tiledata_block3(&self) -> &[u8] {
         &self.data[(0x9000 as usize)..(0x97FF as usize)]
+    }
+    pub(crate) fn fetch_test_memory(&self) -> &[u8] {
+        &self.data[(TEST_ADDR as usize) .. ((TEST_ADDR + 10) as usize)]
     }
 }
 
@@ -153,6 +163,10 @@ impl MMU {
         self.data[(addr + 1) as usize] = b2;
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
+        if addr < 0x8000 {
+            println!("trying to write outside of RW memory");
+            panic!("halting");
+        }
         if addr == SB_REGISTER {
             println!("wrote to the SB register {:04x}", val);
             panic!("halting");
@@ -161,27 +175,52 @@ impl MMU {
             println!("wrote to the SC register {:04x}", val);
             panic!("halting");
         }
+        if addr == DIV_REGISTER {
+            println!("wrote to the DIV register {:04x}", val);
+            panic!("halting");
+        }
+        if addr == TIMA_REGISTER {
+            println!("wrote to the TIMA register {:04x}", val);
+            panic!("halting");
+        }
+        if addr == TMA_REGISTER {
+            println!("wrote to the TMA register {:04x}", val);
+            panic!("halting");
+        }
+        if addr == TAC_REGISTER {
+            println!("wrote to the TAC register {:04x}", val);
+            panic!("halting");
+        }
+        if addr == IF_INTERRUPT_FLAG {
+            println!("wrote to the TAC register {:04x}", val);
+            panic!("halting");
+        }
         if addr >= VRAM_START  && addr <= VRAM_END {
             println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == LCDC_LCDCONTROL {
-            println!("writing to turn on the LCD Display");
+            // println!("writing to turn on the LCD Display");
             println!("writing to LCDC register {:0b}",val);
             self.hardware.LCDC = val;
-            let b3 = get_bit(self.hardware.LCDC,3);
-            println!("bit 3 is now {}",b3);
+            // let b3 = get_bit(self.hardware.LCDC,3);
+            // println!("bit 3 is now {}",b3);
             dump_LCDC_bits(self.hardware.LCDC);
         }
         if addr == STAT_LCDCONTROL {
-            println!("writing to stat the LCD Display");
             println!("writing to STAT LCD register {:0b}",val);
+            // panic!("halting");
         }
         if addr == BGP {
             //this is the background color palette
             //https://gbdev.gg8.se/wiki/articles/Video_Display#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only
             println!("writing to BGP LCD register {:0b}",val);
+            self.hardware.BGP = val;
             dump_BGP_bits(val);
         }
+        if addr == OBP0_ADDR  { self.hardware.OBP0 = val; }
+        if addr == OBP1_ADDR  { self.hardware.OBP1 = val; }
+        if addr == WX_ADDR  { self.hardware.WX = val; }
+        if addr == WY_ADDR  { self.hardware.WY = val; }
         if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
@@ -256,6 +295,11 @@ const STAT_LCDCONTROL:u16 = 0xFF41;
 
 const SCY_SCROLL_Y:u16 = 0xFF42;
 const SCX_SCROLL_X:u16 = 0xFF43;
+const WX_ADDR:u16 = 0xFF4A;
+const WY_ADDR:u16 = 0xFF4B;
+const OBP0_ADDR:u16 = 0xFF48;
+const OBP1_ADDR:u16 = 0xFF49;
+pub const TEST_ADDR:u16 = 0xA000;
 
 const LY_LCDC_Y_COORD:u16 = 0xFF44;
 const LYC_LCDC_Y_COMPARE:u16 = 0xFF45;

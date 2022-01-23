@@ -108,6 +108,12 @@ fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     }
     println!("");
     // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
+    println!("0x0143 color or not {:02x}",data[0x0143]);
+    println!("0x0146 SGB indicator {:02x}",data[0x0146]);
+    println!("0x0147 cart type {:02x}",data[0x0147]);
+    println!("0x0148 ROM size {:02x}",data[0x0148]);
+    println!("0x0149 RAM size {:02x}",data[0x0149]);
+    println!("0x014A dest code {:02x}",data[0x014A]);
 
     Ok(RomFile {
         data:data,
