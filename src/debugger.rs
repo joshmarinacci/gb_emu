@@ -247,20 +247,8 @@ impl Ctx {
             Math::BIT(b,r) => {
                 self.inc_pc(1);
                 let val = self.cpu.r.get_u8reg(r);
-                let mask = match b {
-                    0 => 0b0000_0001,
-                    1 => 0b0000_0010,
-                    2 => 0b0000_0100,
-                    3 => 0b0000_1000,
-                    4 => 0b0001_0000,
-                    5 => 0b0010_0000,
-                    6 => 0b0100_0000,
-                    7 => 0b1000_0000,
-                    _ => {
-                        panic!("we can't look at bits higher than 7")
-                    }
-                };
-                self.cpu.r.zero_flag = !((val & mask) > 0);
+                self.inc_pc(1);
+                self.cpu.r.zero_flag = !get_bit_as_bool(val, *b);
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
             }
@@ -753,11 +741,35 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
             's' => dump_screen(&term, &ctx),
             'i' => dump_interrupts(&term, &ctx),
             't' => test_memory_visible = !test_memory_visible,
+            'm' => dump_all_memory(&term,&ctx),
             _ => {}
         };
     }
 
     Ok(())
+}
+
+fn dump_all_memory(term: &Term, ctx: &Ctx)  {
+    for (n,chunk) in ctx.mmu.data.chunks(32*2).enumerate() {
+        let line_str:String = chunk.iter().map(|b|format!("{:02x}",b)).collect();
+        let addr:u32 = (n * 32 * 2) as u32;
+        // println!("addr {:04x}",addr);
+        match addr {
+            0x0000 => println!("start: cart fixed"),
+            0x4000 => println!("cart: switchable"),
+            0x8000 => println!("8 KiB Video RAM        (VRAM)"),
+            0xA000 => println!("8 KiB External RAM"),
+            0xC000 => println!("4 KiB Work RAM         (WRAM)"),
+            0xD000 => println!("4 KiB Work RAM         (WRAM)"),
+            0xE000 => println!("mirror of C000~DDFF"),
+            0xFE00 => println!("Sprite attribute table (OAM)"),
+            0xFEA0 => println!("not usable"),
+            0xFE00 => println!("I/O Registers"),
+            0xFF80 => println!("High RAM"),
+            _ => {}
+        }
+        println!("{:04x}  {}", addr, line_str);
+    }
 }
 
 fn dump_interrupts(term: &Term, ctx: &Ctx) {
@@ -798,16 +810,16 @@ fn dump_cart_rom(term: &Term, ctx: &Ctx)  {
 }
 
 fn dump_vram(term: &Term, ctx: &Ctx) {
-    let vram:&[u8] = ctx.mmu.fetch_tiledata_block3();
+    let vram:&[u8] = ctx.mmu.fetch_tiledata();
     println!("vram block3 len {}",vram.len());
     print_memory_to_console(vram,term,ctx);
 
     const tile_count:usize = 127;
-    let mut buf = Bitmap::init(16*8,16);
+    let mut buf = Bitmap::init(16*8,64);
 
     let mut tc = 0;
     for tile in vram.chunks_exact(16) {
-        // term.write_line(&format!("chunk is {}",chunk.len()));
+        // term.write_line(&format!("tile is {}",tile.len()));
         let hex_tile = tile
             .iter()
             .map(|b| format!("{:02x}", b))

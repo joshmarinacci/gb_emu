@@ -48,11 +48,6 @@ pub struct MMU {
     inbios:bool,
     bios:Vec<u8>,
     pub data:Vec<u8>,
-    // rom:Vec<u8>,
-    // wram:Vec<u8>,
-    // eram:Vec<u8>,
-    // zram:Vec<u8>,
-
     lowest_used_iram:u16,
     highest_used_iram:u16,
     pub hardware:Hardware,
@@ -116,7 +111,8 @@ impl MMU {
 
 impl MMU {
     pub fn init(rom:&Vec<u8>) -> MMU {
-        let mut data:Vec<u8> = vec![0; 0xFFFF];
+        let mut data:Vec<u8> = vec![0x12; 0xFFFF];
+        data.fill(0x12);
         let bios = Vec::from(BOOT_ROM);
         //copy over the cart rom
         let len = rom.len();
