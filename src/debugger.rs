@@ -10,7 +10,7 @@ use crate::{Cli, common, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::{Bitmap, get_bit, get_bit_as_bool, RomFile};
 use crate::mmu::TEST_ADDR;
 use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
-use crate::opcodes::RegisterName::A;
+use crate::opcodes::RegisterName::{A, D};
 
 struct Ctx {
     cpu:Z80,
@@ -18,6 +18,18 @@ struct Ctx {
     opcodes:Value,
     clock:u32,
     running:bool,
+}
+
+impl Ctx {
+    fn make_test_context(rom: &Vec<u8>) -> Ctx {
+        Ctx {
+            cpu:Z80::init(),
+            mmu: MMU::init(rom),
+            opcodes: Default::default(),
+            clock: 0,
+            running: true
+        }
+    }
 }
 
 impl Ctx {
@@ -36,6 +48,20 @@ impl Ctx {
         self.mmu.update();
         self.clock+=1;
     }
+    pub(crate) fn execute_test(&mut self) {
+        let (opcode, off) = fetch_opcode_from_memory(&mut self.cpu, &mut self.mmu);
+        if let Some(instr) = lookup_opcode(opcode) {
+            println!("executing {:02x}",opcode);
+            self.execute_instruction(&instr);
+        } else {
+            println!("current cycle {}", self.clock);
+            println!("unknown op code {:04x}",opcode);
+            panic!("unknown op code");
+        }
+        self.mmu.update();
+        self.clock+=1;
+    }
+
     fn execute_instruction(&mut self, inst: &Instr) {
         match inst {
             Instr::Special(special)  => self.execute_special_instructions(special),
@@ -57,9 +83,6 @@ impl Ctx {
         // println!("jumping to {:04x}",addr);
         self.cpu.r.pc = addr;
     }
-}
-
-impl Ctx {
     fn execute_compare_instructions(&mut self, comp:&Compare) {
         match comp {
             Compare::CP_A_n() => {
@@ -131,6 +154,16 @@ impl Ctx {
             Math::AND_A_r(r) => {
                 self.inc_pc(1);
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & self.cpu.r.get_u8reg(r));
+                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = true;
+                self.cpu.r.carry_flag = false;
+            }
+            Math::AND_A_u8() => {
+                self.inc_pc(1);
+                let n = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
+                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & n);
                 self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
@@ -388,6 +421,15 @@ impl Ctx {
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 if !self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
+            },
+            Jump::JumpAbsolute_cond_notzero_u16() => {
+                self.inc_pc(1);
+                let dst = self.mmu.read16(self.cpu.r.pc);
+                self.inc_pc(1);
+                self.inc_pc(1);
+                if !self.cpu.r.zero_flag {
+                    self.set_pc(dst);
+                }
             },
             Jump::JumpRelative_i8() => {
                 self.inc_pc(1);
@@ -694,7 +736,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
 
 
         let commands = Style::new().reverse();
-        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump")).to_string())?;
+        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump c=cart_dump o=objram dump")).to_string())?;
         let ch = term.read_char()?;
         match ch{
             'r' => full_registers_visible = !full_registers_visible,
@@ -705,9 +747,11 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
                     ctx.execute(&mut term, false);
                 }
             },
+            'c' => dump_cart_rom(&term, &ctx),
             'v' => dump_vram(&term, &ctx),
             'o' => dump_oram(&term, &ctx),
             's' => dump_screen(&term, &ctx),
+            'i' => dump_interrupts(&term, &ctx),
             't' => test_memory_visible = !test_memory_visible,
             _ => {}
         };
@@ -715,6 +759,13 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
 
     Ok(())
 }
+
+fn dump_interrupts(term: &Term, ctx: &Ctx) {
+    let reg = Style::new().bg(Color::Cyan).red().bold();
+    term.write_line(&reg.apply_to("INTERRUPTS").to_string());
+    term.write_line(&format!("vblank = {}",ctx.mmu.hardware.vblank_interrupt_enabled));
+}
+
 
 fn dump_oram(term: &Term, ctx: &Ctx) {
     term.write_line(&"object memory");
@@ -740,8 +791,17 @@ fn show_test_memory(term: &Term, ctx: &Ctx) -> Result<()>{
     Ok(())
 }
 
+fn dump_cart_rom(term: &Term, ctx: &Ctx)  {
+    term.write_line("cart rom starting at 0x0100").unwrap();
+    let rom = ctx.mmu.fetch_rom_bank_1();
+    print_memory_to_console(rom,term,ctx);
+}
+
 fn dump_vram(term: &Term, ctx: &Ctx) {
     let vram:&[u8] = ctx.mmu.fetch_tiledata_block3();
+    println!("vram block3 len {}",vram.len());
+    print_memory_to_console(vram,term,ctx);
+
     const tile_count:usize = 127;
     let mut buf = Bitmap::init(16*8,16);
 
@@ -794,6 +854,15 @@ fn dump_vram(term: &Term, ctx: &Ctx) {
     println!("tile count is {}",tile_count);
     writer.write_image_data(buf.data.as_slice()).unwrap();
     println!("wrote out to 'vram.png'");
+}
+
+fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) {
+    for line in mem.chunks(64) {
+        let line_str:String = line.iter()
+            .map(|b|format!("{:02x}",b))
+            .collect();
+        term.write_line(&line_str);
+    }
 }
 
 fn dump_screen(term: &Term, ctx: &Ctx) {
@@ -895,6 +964,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Jump(Jump::JumpRelative_cond_notcarry_i8()) => format!("JR NC,e -- Jump relative if not Carry flag set"),
         Instr::Jump(Jump::JumpRelative_cond_zero_i8()) => format!("JR Z,e -- Jump relative if Zero flag set"),
         Instr::Jump(Jump::JumpRelative_cond_notzero_i8()) => format!("JR NZ,e -- Jump relative if not Zero flag set"),
+        Instr::Jump(Jump::JumpAbsolute_cond_notzero_u16()) => format!("JR NZ,u16 -- Jump absolute if not Zero flag set"),
         Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
 
@@ -903,6 +973,7 @@ fn lookup_opcode_info(op: Instr) -> String {
         Instr::Math(Math::XOR_A_addr(rr)) => format!("XOR A,(HL) {} -- XOR A with memory at address inside {}",rr,rr),
         Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
         Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
+        Instr::Math(Math::AND_A_u8()) => format!("AND A, u8  -- AND A with immediate u8, store in A"),
         Instr::Math(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}",r,r),
         Instr::Math(Math::ADD_R_R(dst,src)) => format!("ADD {} {} -- add {} to {}, store result in {}",dst,src,src,dst,dst),
         Instr::Math(Math::ADD_RR_RR(dst, src)) => format!("ADD {} {}",dst,src),
@@ -950,4 +1021,27 @@ fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16,u16) {
     } else {
         (fb as u16, 1)
     }
+}
+
+
+#[test]
+fn test_write_register_A() {
+    let rom:[u8;2] = [0x3e,0x05]; // LD A, 0x05
+    let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
+    ctx.execute_test();
+    assert_eq!(ctx.cpu.r.get_u8reg(&A),0x05);
+}
+#[test]
+fn test_write_register_D() {
+    let rom:[u8;2] = [0x16,0x05]; // LD D, 0x05
+    let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
+    ctx.execute_test();
+    assert_eq!(ctx.cpu.r.get_u8reg(&D),0x05);
+}
+#[test]
+fn test_write_register_DE() {
+    let rom:[u8;2] = [0x16,0x05]; // LD D, 0x05
+    let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
+    ctx.execute_test();
+    assert_eq!(ctx.cpu.r.get_u8reg(&D),0x05);
 }

@@ -5,7 +5,7 @@ use crate::bootrom::BOOT_ROM;
 use crate::{MMU};
 use crate::common::{get_bit, get_bit_as_bool, set_bit};
 use crate::opcodes::{DoubleRegister, RegisterName};
-use crate::opcodes::RegisterName::{A, F};
+use crate::opcodes::RegisterName::{*};
 
 #[derive(Debug)]
 pub struct Z80_registers {

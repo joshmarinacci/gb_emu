@@ -35,3 +35,15 @@ cargo run -- --interactive --fastforward=14575  ./resources/testroms/hello-world
 special thanks to [here](https://github.com/mvdnes/rboy/blob/master/src/cpu.rs) for the bit map in rust examples
 
 [bootrom explanation](https://realboyemulator.wordpress.com/2013/01/03/a-look-at-the-game-boy-bootstrap-let-the-fun-begin/)
+
+
+# boot rom
+the bootrom is internal to the emulator. You can include it with --boot. When stepping through it you'll probably
+want to jump to certain interesting parts.  On startup it does a bunch of loops to clear memory and
+perform the CRC check.
+
+* 0  - start the whole process
+* 32770  the very end of the VRAM clearing process 
+* 32772  start audio init
+* 32786  start Nintendo Logo check
+

@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
-use crate::common::get_bit;
+use crate::common::{get_bit, get_bit_as_bool};
 
 pub struct Hardware {
     pub SCY:u8,
@@ -15,6 +15,7 @@ pub struct Hardware {
     pub BGP:u8,
     pub OBP0:u8,
     pub OBP1:u8,
+    pub vblank_interrupt_enabled:bool,
 
 }
 
@@ -32,7 +33,8 @@ impl Hardware {
             IME: 0,
             BGP: 0,
             OBP0: 0,
-            OBP1: 0
+            OBP1: 0,
+            vblank_interrupt_enabled: false
         }
     }
     pub fn update(&mut self) {
@@ -57,6 +59,9 @@ pub struct MMU {
 }
 
 impl MMU {
+    pub(crate) fn fetch_rom_bank_1(&self) -> &[u8] {
+        return &self.data[0x0100 .. 0x0200];
+    }
     pub(crate) fn get_current_bg_display_data(&self) -> &[u8] {
         let block = get_bit(self.hardware.LCDC,4);
         let (start,end) = match block {
@@ -66,9 +71,6 @@ impl MMU {
         };
         return &self.data[start .. end];
     }
-}
-
-impl MMU {
     pub(crate) fn fetch_vram(&self) -> &[u8] {
         &self.data[(VRAM_START as usize)..(VRAM_END as usize)]
     }
@@ -113,11 +115,13 @@ impl MMU {
 }
 
 impl MMU {
-    pub fn init_with_bootrom() -> MMU {
-        let mut data:Vec<u8> = vec![0; 66000];
+    pub fn init(rom:&Vec<u8>) -> MMU {
+        let mut data:Vec<u8> = vec![0; 0xFFFF];
         let bios = Vec::from(BOOT_ROM);
-        for i in 0..bios.len() {
-            data[i] = bios[i]
+        //copy over the cart rom
+        let len = rom.len();
+        for i in 0..len {
+            data[i] = rom[i];
         }
         MMU {
             inbios: true,
@@ -128,22 +132,28 @@ impl MMU {
             hardware: Hardware::init(),
         }
     }
-    pub fn init_with_rom_no_header(rom:&Vec<u8>) -> MMU {
-        let mut data:Vec<u8> = vec![0; 66000];
-        let len = rom.len();
-        for i in 0..len {
-            data[i] = rom[i];
-        }
-        let bios = Vec::from(BOOT_ROM);
-        MMU {
-            inbios:false,
-            bios:bios,
-            data:data,
-            lowest_used_iram: INTERNAL_RAM_END,
-            highest_used_iram: INTERNAL_RAM_START,
-            hardware: Hardware::init(),
+    pub(crate) fn overlay_boot(&mut self) {
+        //copy over the bios
+        for i in 0..self.bios.len() {
+            self.data[i] = self.bios[i];
         }
     }
+    // pub fn init_with_rom_no_header(rom:&Vec<u8>) -> MMU {
+    //     let mut data:Vec<u8> = vec![0; 0xFFFF];
+    //     let len = rom.len();
+    //     for i in 0..len {
+    //         data[i] = rom[i];
+    //     }
+    //     let bios = Vec::from(BOOT_ROM);
+    //     MMU {
+    //         inbios:false,
+    //         bios:bios,
+    //         data:data,
+    //         lowest_used_iram: INTERNAL_RAM_END,
+    //         highest_used_iram: INTERNAL_RAM_START,
+    //         hardware: Hardware::init(),
+    //     }
+    // }
     pub fn read8(&self, addr:u16) -> u8 {
         // println!("reading from bios at location {:04x}",addr);
         if addr >= VRAM_START  && addr <= VRAM_END {
@@ -153,6 +163,10 @@ impl MMU {
         if addr == LYC_LCDC_Y_COMPARE { return self.hardware.LYC; }
         if addr == SCX_SCROLL_X { return self.hardware.SCX; }
         if addr == SCY_SCROLL_Y { return self.hardware.SCY; }
+        if addr == STAT_LCDCONTROL {
+            println!("reading STAT_LCDCONTROL register");
+            return self.hardware.STAT;
+        }
         self.data[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
@@ -169,7 +183,7 @@ impl MMU {
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr < 0x8000 {
-            println!("trying to write outside of RW memory");
+            println!("trying to write outside of RW memory {:04x}",val);
             panic!("halting");
         }
         if addr == SB_REGISTER {
@@ -219,6 +233,14 @@ impl MMU {
         if addr == DMA {
             println!("DMA requested!");
             panic!("halting");
+        }
+        if addr == INTERRUPT_ENABLE {
+            println!("setting interrupt enable to {:08b}",val);
+            if get_bit_as_bool(val,0) {
+                println!("enabled vblank");
+                self.hardware.vblank_interrupt_enabled = true;
+            }
+            return;
         }
         if addr == BGP {
             //this is the background color palette

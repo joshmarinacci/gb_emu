@@ -5,7 +5,7 @@ use Math::{ADD_R_R, AND_A_r, OR_A_r, SUB_R_R, XOR_A_r};
 use crate::{MMU, Z80};
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::Load_r_u8;
-use crate::opcodes::Math::{ADD_RR_RR, XOR_A_addr, XOR_A_u8};
+use crate::opcodes::Math::{ADD_RR_RR, AND_A_u8, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 
@@ -56,6 +56,7 @@ pub enum Jump {
     JumpRelative_cond_notcarry_i8(),
     JumpRelative_cond_zero_i8(),
     JumpRelative_cond_notzero_i8(),
+    JumpAbsolute_cond_notzero_u16(),
 }
 pub enum Compare {
     CP_A_r(RegisterName),
@@ -71,6 +72,7 @@ pub enum Math {
     XOR_A_addr(DoubleRegister),
     OR_A_r(RegisterName),
     AND_A_r(RegisterName),
+    AND_A_u8(),
     Inc_r(RegisterName),
     Inc_rr(DoubleRegister),
     Dec_r(RegisterName),
@@ -263,6 +265,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x28 => Some(Instr::Jump(Jump::JumpRelative_cond_zero_i8())), //2 bytes, if zero, relative signed
         0x30 => Some(Instr::Jump(Jump::JumpRelative_cond_notcarry_i8())), //2 bytes, if not carry, realtive signed
         0x38 => Some(Instr::Jump(Jump::JumpRelative_cond_carry_i8())), //2 bytes, if carry, relative signed
+        0xC2 => Some(Instr::Jump(Jump::JumpAbsolute_cond_notzero_u16())),
         0xC3 => Some(Instr::Jump(Jump::JumpAbsolute_u16())),
         0xFE => Some(Instr::Compare(Compare::CP_A_n())),
 
@@ -292,6 +295,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xA4 => Some(Instr::Math(AND_A_r(H))),
         0xA5 => Some(Instr::Math(AND_A_r(L))),
         0xA7 => Some(Instr::Math(AND_A_r(A))),
+        0xE6 => Some(Instr::Math(AND_A_u8())),
 
         0xA8 => Some(Instr::Math(XOR_A_r(B))),
         0xA9 => Some(Instr::Math(XOR_A_r(C))),

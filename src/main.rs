@@ -44,53 +44,59 @@ fn main() {
     if let Some(ref pth) = args.romfile {
         println!("loading the romfile {:?}", pth.as_path());
         if let Ok(cart) = load_romfile(pth) {
-            run_romfile(cart, args.interactive, &args);
+            run_romfile(cart, &args);
         }
     } else {
-        if args.interactive {
-            run_bootrom_interactive(&args);
-        } else {
-            run_bootrom_loop(&args);
-        }
+        println!("you must specify a rom file");
+        // if args.interactive {
+        //     run_bootrom_interactive(&args);
+        // } else {
+        //     run_bootrom_loop(&args);
+        // }
     }
 }
 
-fn run_bootrom_loop(args: &Cli) {
-    println!("running the bootrom");
-    let mut cpu = Z80::init();
-    let mut mmu = MMU::init_with_bootrom();
-    cpu.reset();
-    cpu.r.pc = 0x00;
-    let OPCODE_MAP = load_opcode_map();
-    // start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
-    start_debugger_loop(cpu,mmu,OPCODE_MAP,None,args.fastforward, args.verbose);
-
-}
-
-fn run_bootrom_interactive(args: &Cli) {
-    println!("running the bootrom");
-    let mut cpu = Z80::init();
-    let mut mmu = MMU::init_with_bootrom();
-    cpu.reset();
-    cpu.r.pc = 0x00;
-    let OPCODE_MAP = load_opcode_map();
-    start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
-}
+// fn run_bootrom_loop(args: &Cli) {
+//     println!("running the bootrom");
+//     let mut cpu = Z80::init();
+//     let mut mmu = MMU::init();
+//     cpu.reset();
+//     cpu.r.pc = 0x00;
+//     let OPCODE_MAP = load_opcode_map();
+//     // start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
+//     start_debugger_loop(cpu,mmu,OPCODE_MAP,None,args.fastforward, args.verbose);
+//
+// }
+//
+// fn run_bootrom_interactive(args: &Cli) {
+//     println!("running the bootrom");
+//     let mut cpu = Z80::init();
+//     let mut mmu = MMU::init_with_bootrom();
+//     cpu.reset();
+//     cpu.r.pc = 0x00;
+//     let OPCODE_MAP = load_opcode_map();
+//     start_debugger(cpu,mmu,OPCODE_MAP, None,args.fastforward);
+// }
 
 fn load_opcode_map() -> serde_json::Value {
     let raw= read_to_string(Path::new("./resources/opcodes.json")).unwrap();
     return serde_json::from_str(&raw).unwrap();
 }
 
-fn run_romfile(cart: RomFile, interactive: bool, args:&Cli) {
+fn run_romfile(cart: RomFile, args:&Cli) {
     println!("running the cart {:?}", cart.data.len());
-    let mut cpu = Z80::init();
-    let mut mmu = MMU::init_with_rom_no_header(&cart.data);
-    cpu.reset();
-    cpu.r.pc = 0x100;
     let OPCODE_MAP = load_opcode_map();
+    let mut cpu = Z80::init();
+    let mut mmu = MMU::init(&cart.data);
+    cpu.reset();
+    if args.boot {
+        mmu.overlay_boot();
+        cpu.r.pc = 0x0000;
+    } else {
+        cpu.r.pc = 0x100;
+    }
 
-    if interactive {
+    if args.interactive {
         start_debugger(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward);
     } else {
         start_debugger_loop(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward, args.verbose );
@@ -118,13 +124,13 @@ fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     let cart_type = data[0x0147];
     match cart_type {
         0x0 => println!("ROM only. Great!"),
-        0x1..=0x3 => panic!("MBC1! Not supported!"),
-        0x5|0x6 => panic!("MBC2! Not supported!"),
-        0x12|0x13 => panic!("MBC3! Not supported!"),
-        0x19|0x1A|0x1B|0x1C|0x1D|0x1E => panic!("MBC5! Not supported!"),
-        0x1F => panic!("Bocket Camera, unsupported!"),
-        0xFD => panic!("Bocket Camera, unsupported!"),
-        0xFE|0xFF => panic!("Hudson HuC, unsupported!"),
+        0x1..=0x3 => println!("MBC1! Not supported!"),
+        0x5|0x6 => println!("MBC2! Not supported!"),
+        0x12|0x13 => println!("MBC3! Not supported!"),
+        0x19|0x1A|0x1B|0x1C|0x1D|0x1E => println!("MBC5! Not supported!"),
+        0x1F => println!("Bocket Camera, unsupported!"),
+        0xFD => println!("Bocket Camera, unsupported!"),
+        0xFE|0xFF => println!("Hudson HuC, unsupported!"),
         _ => {
             println!("trying anyway");
         }
@@ -135,38 +141,8 @@ fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     })
 }
 
-fn to_ascii(v: u8) -> &'static str {
-    match v {
-        0x41 => "A",
-        0x42 => "B",
-        0x43 => "C",
-        0x44 => "D",
-        0x45 => "E",
-        0x46 => "F",
-        0x47 => "G",
-        0x48 => "H",
-        0x49 => "I",
-        0x4A => "J",
-        0x4B => "K",
-        0x4C => "L",
-        0x4D => "M",
-        0x4E => "N",
-        0x4F => "O",
-        0x50 => "P",
-        0x51 => "Q",
-        0x52 => "R",
-        0x53 => "S",
-        0x54 => "T",
-        0x55 => "U",
-        0x56 => "V",
-        0x57 => "W",
-        0x58 => "X",
-        0x59 => "Y",
-        0x5A => "Z",
-        0x2D => "-",
-        0x00 => " ",
-        _ => "?"
-    }
+fn to_ascii(v: u8) -> char{
+    return char::from_u32(v as u32).unwrap();
 }
 
 // fn run_bootrom(x: &Cli) {
