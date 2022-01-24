@@ -86,16 +86,16 @@ impl MMU {
         &self.data[(VRAM_START as usize)..(VRAM_END as usize)]
     }
     pub(crate) fn fetch_tiledata(&self) -> &[u8] {
-        &self.data[(0x8000 as usize)..(0x97FF as usize)]
+        &self.data[0x8000 .. 0x97FF]
     }
     pub(crate) fn fetch_tiledata_block3(&self) -> &[u8] {
-        &self.data[(0x9000 as usize)..(0x97FF as usize)]
+        &self.data[0x9000 .. 0x97FF]
     }
     pub(crate) fn fetch_test_memory(&self) -> &[u8] {
         &self.data[(TEST_ADDR as usize) .. ((TEST_ADDR + 10) as usize)]
     }
     pub(crate) fn fetch_oram(&self) -> &[u8] {
-        &self.data[(0xFE00 as usize) .. ((0xFE9F) as usize)]
+        &self.data[0xFE00 .. 0xFE9F]
     }
 }
 
@@ -150,22 +150,6 @@ impl MMU {
             self.data[i] = self.bios[i];
         }
     }
-    // pub fn init_with_rom_no_header(rom:&Vec<u8>) -> MMU {
-    //     let mut data:Vec<u8> = vec![0; 0xFFFF];
-    //     let len = rom.len();
-    //     for i in 0..len {
-    //         data[i] = rom[i];
-    //     }
-    //     let bios = Vec::from(BOOT_ROM);
-    //     MMU {
-    //         inbios:false,
-    //         bios:bios,
-    //         data:data,
-    //         lowest_used_iram: INTERNAL_RAM_END,
-    //         highest_used_iram: INTERNAL_RAM_START,
-    //         hardware: Hardware::init(),
-    //     }
-    // }
     pub fn read8(&self, addr:u16) -> u8 {
         // println!("reading from memory at location {:04x}",addr);
         if addr >= VRAM_START  && addr <= VRAM_END {
@@ -260,7 +244,7 @@ impl MMU {
             //https://gbdev.gg8.se/wiki/articles/Video_Display#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only
             println!("writing to BGP LCD register {:0b}",val);
             self.hardware.BGP = val;
-            dump_BGP_bits(val);
+            dump_bgp_bits(val);
         }
         if addr == OBP0_ADDR  { self.hardware.OBP0 = val; }
         if addr == OBP1_ADDR  { self.hardware.OBP1 = val; }
@@ -277,7 +261,7 @@ impl MMU {
     }
 }
 
-fn dump_BGP_bits(byt: u8) {
+fn dump_bgp_bits(byt: u8) {
     for n in 0..8 {
         let b = get_bit(byt,n);
         let v:String = match n {
@@ -289,13 +273,13 @@ fn dump_BGP_bits(byt: u8) {
             5 => format!("data for dot data 10 = {}",b),
             6 => format!("data for dot data 11 = {}",b),
             7 => format!("data for dot data 11 = {}",b),
-            _ => format!("Unknown so far"),
+            _ => "Unknown so far".to_string(),
         };
         println!("LCDC: {}",v);
     }
 }
 
-fn dump_LCDC_bits(by: u8) {
+fn dump_lcdc_bits(by: u8) {
     for n in 0..8 {
         let b = get_bit(by,n);
         let v:String = match n {
@@ -307,7 +291,7 @@ fn dump_LCDC_bits(by: u8) {
             5 => format!("Window Display Enable = {}",b),
             6 => format!("Window Tile Map Display Select = {}",b),
             7 => format!("LCD Display Enable = {}",b),
-            _ => format!("Unknown so far"),
+            _ => "Unknown so far".to_string(),
         };
         println!("LCDC: {}",v);
     }

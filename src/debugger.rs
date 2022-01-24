@@ -1,12 +1,9 @@
 use std::io;
 use console::{Color, Style, Term};
 use io::Result;
-use std::fs::File;
-use std::io::{BufWriter};
-use std::path::Path;
-use console::Color::{White};
-use serde_json::Value;
-use crate::{common, fetch_opcode_from_memory, MMU, Z80};
+use console::Color::White;
+use Load::Load_R_u8;
+use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
 use crate::mmu::TEST_ADDR;
 use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
@@ -424,7 +421,7 @@ impl Ctx {
     }
     fn execute_load_instructions(&mut self, load: &Load) {
         match load {
-            Load::Load_r_u8(r) => {
+            Load_R_u8(r) => {
                 // load immediate u8 into the register
                 self.inc_pc(1);
                 let val = self.mmu.read8(self.cpu.r.pc);
@@ -432,7 +429,7 @@ impl Ctx {
                 self.inc_pc(1);
             }
             // put the memory address 0xFF00 + n into register r
-            Load::Load_high_r_u8(r) => {
+            Load::Load_HI_R_U8(r) => {
                 // println!("running LDH");
                 let n = self.mmu.read8(self.cpu.r.pc+1);
                 let addr = 0xFF00 + (n as u16);
@@ -440,7 +437,7 @@ impl Ctx {
                 // println!("assigned content of mem:{:x} value {:x}, to A",addr,self.cpu.r.a);
                 self.inc_pc(2);
             }
-            Load::Load_high_u8_r(r) => {
+            Load::Load_HI_U8_R(r) => {
                 self.inc_pc(1);
                 let e = self.mmu.read8(self.cpu.r.pc);
                 self.inc_pc(1);
@@ -449,7 +446,7 @@ impl Ctx {
                 self.mmu.write8(addr, val);
             },
             //LD (FF00+C),A    put contents of A into address 0xF00+C
-            Load::Load_high_r_r(off,r) => {
+            Load::Load_HI_R_R(off, r) => {
                 self.inc_pc(1);
                 let v = self.cpu.r.get_u8reg(r);
                 let addr = 0xFF00 + (self.cpu.r.get_u8reg(off) as u16);
@@ -457,13 +454,13 @@ impl Ctx {
                 self.mmu.write8(addr,v);
                 self.inc_pc(1);
             }
-            Load::Load_r_r(dst, src) => {
+            Load::Load_R_R(dst, src) => {
                 self.inc_pc(1);
                 let val = self.cpu.r.get_u8reg(src);
                 self.cpu.r.set_u8reg(dst,val);
             }
 
-            Load::Load_R2_u16(rr) => {
+            Load::Load_R2_U16(rr) => {
                 self.inc_pc(1);
                 let val = self.mmu.read16(self.cpu.r.pc);
                 self.inc_pc(1);
@@ -471,7 +468,7 @@ impl Ctx {
                 self.cpu.r.set_u16reg(rr,val);
                 // println!("copied immediate value {:04x} into register {}",val,rr)
             }
-            Load::Load_R_addr_R2(r,rr) => {
+            Load::Load_R_addr_R2(r, rr) => {
                 // load to the 8bit register A, data from the address in the 16 bit register
                 self.inc_pc(1);
                 let addr = self.cpu.r.get_u16reg(rr);
@@ -728,7 +725,7 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term)  -> Result<()>{
         term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
                                                    ctx.cpu.r.pc,
                                                    bold.apply_to(format!("{:02X}",opcode)),
-                                                   italic.apply_to(lookup_opcode_info(ld)),
+                                                   italic.apply_to(opcodes::lookup_opcode_info(ld)),
         )).to_string())?;
     } else {
         println!("current cycle {}", ctx.clock);
@@ -854,17 +851,7 @@ fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()>{
         }
     }
 
-    let path = Path::new(r"vram.png");
-    let file = File::create(path).unwrap();
-    let ref mut w = BufWriter::new(file);
-
-    let mut encoder = png::Encoder::new(w, buf.w as u32, buf.h as u32);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-
-    let mut writer = encoder.write_header().unwrap();
-    term.write_line(&format!("tile count is {}",tile_count))?;
-    writer.write_image_data(buf.data.as_slice()).unwrap();
+    buf.write_to_file("vram.png");
     println!("wrote out to 'vram.png'");
     Ok(())
 }
@@ -942,74 +929,6 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     term.write_line(&format!("WY   {:8b}",ctx.mmu.hardware.WY))?;
     term.write_line(&format!("WX   {:8b}",ctx.mmu.hardware.WX))?;
     Ok(())
-}
-
-fn lookup_opcode_info(op: Instr) -> String {
-    match op {
-        Instr::LoadInstr(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8", r),
-        Instr::LoadInstr(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High: put contents of 0xFF00 + u8 into register {}", r, r),
-        Instr::LoadInstr(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}", r, r),
-        Instr::LoadInstr(Load::Load_high_r_r(off, src)) => format!("LD (FF00 + {},{}  -- Load High: put contents of register {} into memory of 0xFF00 + {} ", off, src, src, off),
-        Instr::LoadInstr(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}", rr, rr),
-        Instr::LoadInstr(Load::Load_R_addr_R2(r, rr)) => format!("LD {}, ({}) -- load data pointed to by {} into {}", r, rr, rr, r),
-        Instr::LoadInstr(Load::Load_addr_R2_A(rr, r)) => format!("LD ({}),{} -- load contents of {} into memory pointed to by {}", rr, r, r, rr),
-        Instr::LoadInstr(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}", rr, rr, rr),
-        Instr::LoadInstr(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}", rr, rr, rr),
-        Instr::LoadInstr(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}", rr, rr),
-        Instr::LoadInstr(Load::Load_r_r(dst, src)) => format!("LD {},{} -- copy {} to {}", dst, src, src, dst),
-        Instr::LoadInstr(Load::Load_addr_u16_A()) => format!("LD (nn),A -- load A into memory at address from immediate u16"),
-        Instr::LoadInstr(Load::Load_addr_u16_R2(rr)) => format!("LD (nn),{} -- load {} into memory at address from immediate u16", rr, rr),
-
-        Instr::JumpInstr(Jump::Absolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
-        Instr::JumpInstr(Jump::Relative_i8()) => format!("JR e --   Jump relative to signed offset"),
-        Instr::JumpInstr(Jump::Relative_cond_carry_i8()) => format!("JR C,e -- Jump relative if Carry Flag set"),
-        Instr::JumpInstr(Jump::Relative_cond_notcarry_i8()) => format!("JR NC,e -- Jump relative if not Carry flag set"),
-        Instr::JumpInstr(Jump::Relative_cond_zero_i8()) => format!("JR Z,e -- Jump relative if Zero flag set"),
-        Instr::JumpInstr(Jump::Relative_cond_notzero_i8()) => format!("JR NZ,e -- Jump relative if not Zero flag set"),
-        Instr::JumpInstr(Jump::Absolute_cond_notzero_u16()) => format!("JR NZ,u16 -- Jump absolute if not Zero flag set"),
-        Instr::CompareInst(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
-        Instr::CompareInst(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags", r, r),
-
-        Instr::MathInst(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
-        Instr::MathInst(Math::XOR_A_u8()) => format!("XOR A,u8  -- Xor A with immediate u8 store in A"),
-        Instr::MathInst(Math::XOR_A_addr(rr)) => format!("XOR A,(HL) {} -- XOR A with memory at address inside {}", rr, rr),
-        Instr::MathInst(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A", r, r),
-        Instr::MathInst(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A", r, r),
-        Instr::MathInst(Math::AND_A_u8()) => format!("AND A, u8  -- AND A with immediate u8, store in A"),
-        Instr::MathInst(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}", r, r),
-        Instr::MathInst(Math::ADD_R_R(dst, src)) => format!("ADD {} {} -- add {} to {}, store result in {}", dst, src, src, dst, dst),
-        Instr::MathInst(Math::ADD_RR_RR(dst, src)) => format!("ADD {} {}", dst, src),
-        Instr::MathInst(Math::SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}", dst, src, src, dst, dst),
-
-        Instr::MathInst(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}", rr, rr),
-        Instr::MathInst(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}", rr, rr),
-        Instr::MathInst(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags", r, r),
-        Instr::MathInst(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags", r, r),
-
-        Instr::MathInst(Math::BIT(bit, r)) => format!("BIT {:0x}, {}", bit, r),
-        Instr::MathInst(Math::BITR2(bit, r)) => format!("BIT {:0x}, ({})", bit, r),
-        Instr::MathInst(Math::RLC(r)) => format!("RLC {} --- rotate register {} .old bit 7 to carry flag. sets flags", r, r),
-        Instr::MathInst(Math::RL(r)) => format!("RL {} -- Rotate {} left through Carry flag. sets flags", r, r),
-        Instr::MathInst(Math::RRC(r)) => format!("RRC {} -- Rotate {} right, Old bit 0 to carry flag. sets flags.", r, r),
-        Instr::MathInst(Math::RR(r)) => format!("RR {} -- Rotate {} right through carry flag. sets flags", r, r),
-        Instr::MathInst(Math::RLA()) => format!("RLA -- rotate A left through carry flag. Same as RL A"),
-        Instr::MathInst(Math::SLA(rr)) => format!("SLA {} -- shift A left through carry flag by {} bits", rr, rr),
-        Instr::MathInst(Math::RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
-        Instr::MathInst(Math::RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
-        Instr::MathInst(Math::RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
-
-        Instr::SpecialInstr(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
-        Instr::SpecialInstr(Special::NOOP()) => format!("NOOP -- do nothing"),
-        Instr::SpecialInstr(Special::STOP()) => format!("STOP -- stop interrupts?"),
-        Instr::SpecialInstr(Special::CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
-        Instr::SpecialInstr(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack", rr, rr),
-        Instr::SpecialInstr(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}", rr, rr),
-        Instr::SpecialInstr(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
-        Instr::SpecialInstr(Special::RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
-        Instr::SpecialInstr(Special::RST(h)) => format!("RST {:02x} -- put present address onto stack, jump to address {:02x}", h, h),
-        Instr::SpecialInstr(Special::RETZ()) => format!("RET Z  -- return of zflag is set"),
-        Instr::SpecialInstr(Special::HALT()) => format!("HALT -- completely stop the emulator"),
-    }
 }
 
 fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16,u16) {
