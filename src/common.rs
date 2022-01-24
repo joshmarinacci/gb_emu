@@ -11,7 +11,7 @@ pub fn get_bit(by:u8, n:u8) -> u8 {
     if by & (1<<n) != 0 { 1 } else { 0 }
 }
 pub fn get_bit_as_bool(by:u8, n:u8) -> bool {
-    if by & (1<<n) != 0 { true } else { false }
+    by & (1<<n) != 0
 }
 pub fn set_bit(by:u8, n:u8, on:bool) -> u8 {
     if on {
@@ -69,7 +69,7 @@ impl Bitmap {
     pub(crate) fn write_to_file(&self, filename: &str) {
         let path = Path::new(filename);
         let file = File::create(path).unwrap();
-        let ref mut w = BufWriter::new(file);
+        let w = BufWriter::new(file);
 
         let mut encoder = png::Encoder::new(w, self.w as u32, self.h as u32);
         encoder.set_color(png::ColorType::Rgba);
@@ -98,9 +98,9 @@ impl Bitmap {
         data.fill(255);
         println!("Length is {}",data.len());
         Bitmap {
-            w:w,
-            h:h,
-            data: data,
+            w,
+            h,
+            data,
         }
     }
 }

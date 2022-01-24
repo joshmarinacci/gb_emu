@@ -70,9 +70,9 @@ pub struct MMU {
 
 impl MMU {
     pub(crate) fn fetch_rom_bank_1(&self) -> &[u8] {
-        return &self.data[0x0100 .. 0x0200];
+        &self.data[0x0100 .. 0x0200]
     }
-    pub(crate) fn get_stack_16(&self) -> &[u8] { return &self.data[0xFFF0 .. 0xFFFE]; }
+    pub(crate) fn get_stack_16(&self) -> &[u8] { &self.data[0xFFF0 .. 0xFFFE] }
     pub(crate) fn get_current_bg_display_data(&self) -> &[u8] {
         let block = get_bit(self.hardware.LCDC,4);
         let (start,end) = match block {
@@ -80,7 +80,7 @@ impl MMU {
             1 => (0x9C00, 0x9FFF),
             _ => panic!("bad window tile map display select value")
         };
-        return &self.data[start .. end];
+        &self.data[start .. end]
     }
     pub(crate) fn fetch_vram(&self) -> &[u8] {
         &self.data[(VRAM_START as usize)..(VRAM_END as usize)]
@@ -137,8 +137,8 @@ impl MMU {
         }
         MMU {
             inbios: true,
-            bios: bios,
-            data: data,
+            bios,
+            data,
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
             hardware: Hardware::init(),
@@ -185,7 +185,7 @@ impl MMU {
         // println!("reading from bios at loca{tion {:04x}",addr);
         let hi = self.data[(addr + 1) as usize] as u16;
         let lo = self.data[(addr + 0) as usize] as u16;
-        return (hi << 8) + lo;
+        (hi << 8) + lo
     }
     pub fn write16(&mut self, addr:u16, data:u16) {
         // println!("writing to memory at location {:04x}",addr);

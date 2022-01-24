@@ -59,11 +59,11 @@ impl Ctx {
 
     fn execute_instruction(&mut self, inst: &Instr) {
         match inst {
-            Instr::Special(special)  => self.execute_special_instructions(special),
-            Instr::Load(load)         => self.execute_load_instructions(load),
-            Instr::Compare(comp)   => self.execute_compare_instructions(comp),
-            Instr::Math(math)         => self.execute_math_instructions(math),
-            Instr::Jump(jump)         => self.execute_jump_instructions(jump),
+            Instr::SpecialInstr(special)  => self.execute_special_instructions(special),
+            Instr::LoadInstr(load)         => self.execute_load_instructions(load),
+            Instr::CompareInst(comp)   => self.execute_compare_instructions(comp),
+            Instr::MathInst(math)         => self.execute_math_instructions(math),
+            Instr::JumpInstr(jump)         => self.execute_jump_instructions(jump),
         }
     }
     fn inc_pc(&mut self, n: i32) {
@@ -173,7 +173,7 @@ impl Ctx {
                 self.cpu.r.set_u8reg(r, v2);
                 self.cpu.r.zero_flag = result == 0;
                 self.cpu.r.subtract_n_flag = false;
-                self.cpu.r.half_flag = ((v1 & 0xF) + (v2 & 0xF) > 0xFF);
+                self.cpu.r.half_flag = (v1 & 0xF) + (v2 & 0xF) > 0xFF;
                 self.cpu.r.carry_flag = (v1 as u16) + (v2 as u16) > 0xFF;
             }
             Math::ADD_R_R(dst, src) => {
@@ -376,36 +376,36 @@ impl Ctx {
     }
     fn execute_jump_instructions(&mut self, jump: &Jump) {
         match jump {
-            Jump::JumpAbsolute_u16() => {
+            Jump::Absolute_u16() => {
                 let addr = self.mmu.read16(self.cpu.r.pc + 1);
                 self.set_pc(addr);
             },
-            Jump::JumpRelative_cond_carry_i8() => {
+            Jump::Relative_cond_carry_i8() => {
                 self.inc_pc(1);
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 // println!("carry flag is set to {}",self.cpu.r.carry_flag);
                 if self.cpu.r.carry_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             },
-            Jump::JumpRelative_cond_notcarry_i8() => {
+            Jump::Relative_cond_notcarry_i8() => {
                 self.inc_pc(1);
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 if !self.cpu.r.carry_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             }
-            Jump::JumpRelative_cond_zero_i8() => {
+            Jump::Relative_cond_zero_i8() => {
                 self.inc_pc(1);
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 if self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             }
-            Jump::JumpRelative_cond_notzero_i8() => {
+            Jump::Relative_cond_notzero_i8() => {
                 self.inc_pc(1);
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 if !self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             },
-            Jump::JumpAbsolute_cond_notzero_u16() => {
+            Jump::Absolute_cond_notzero_u16() => {
                 self.inc_pc(1);
                 let dst = self.mmu.read16(self.cpu.r.pc);
                 self.inc_pc(1);
@@ -414,7 +414,7 @@ impl Ctx {
                     self.set_pc(dst);
                 }
             },
-            Jump::JumpRelative_i8() => {
+            Jump::Relative_i8() => {
                 self.inc_pc(1);
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
@@ -946,70 +946,69 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
 
 fn lookup_opcode_info(op: Instr) -> String {
     match op {
-        Instr::Load(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8",r),
-        Instr::Load(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High: put contents of 0xFF00 + u8 into register {}",r,r),
-        Instr::Load(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}",r,r),
-        Instr::Load(Load::Load_high_r_r(off, src)) => format!("LD (FF00 + {},{}  -- Load High: put contents of register {} into memory of 0xFF00 + {} ",off,src,src,off),
-        Instr::Load(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}",rr,rr),
-        Instr::Load(Load::Load_R_addr_R2(r,rr)) => format!("LD {}, ({}) -- load data pointed to by {} into {}",r,rr,rr,r),
-        Instr::Load(Load::Load_addr_R2_A(rr,r)) => format!("LD ({}),{} -- load contents of {} into memory pointed to by {}",rr,r,r,rr),
-        Instr::Load(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}",rr,rr,rr),
-        Instr::Load(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}",rr,rr,rr),
-        Instr::Load(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}",rr,rr),
-        Instr::Load(Load::Load_r_r(dst,src)) => format!("LD {},{} -- copy {} to {}",dst,src,src,dst),
-        Instr::Load(Load::Load_addr_u16_A()) => format!("LD (nn),A -- load A into memory at address from immediate u16"),
-        Instr::Load(Load::Load_addr_u16_R2(rr)) => format!("LD (nn),{} -- load {} into memory at address from immediate u16",rr,rr),
+        Instr::LoadInstr(Load::Load_r_u8(r)) => format!("LD {},n -- Load register from immediate u8", r),
+        Instr::LoadInstr(Load::Load_high_r_u8(r)) => format!("LDH {},(n) -- Load High: put contents of 0xFF00 + u8 into register {}", r, r),
+        Instr::LoadInstr(Load::Load_high_u8_r(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}", r, r),
+        Instr::LoadInstr(Load::Load_high_r_r(off, src)) => format!("LD (FF00 + {},{}  -- Load High: put contents of register {} into memory of 0xFF00 + {} ", off, src, src, off),
+        Instr::LoadInstr(Load::Load_R2_u16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}", rr, rr),
+        Instr::LoadInstr(Load::Load_R_addr_R2(r, rr)) => format!("LD {}, ({}) -- load data pointed to by {} into {}", r, rr, rr, r),
+        Instr::LoadInstr(Load::Load_addr_R2_A(rr, r)) => format!("LD ({}),{} -- load contents of {} into memory pointed to by {}", rr, r, r, rr),
+        Instr::LoadInstr(Load::Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}", rr, rr, rr),
+        Instr::LoadInstr(Load::Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}", rr, rr, rr),
+        Instr::LoadInstr(Load::Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}", rr, rr),
+        Instr::LoadInstr(Load::Load_r_r(dst, src)) => format!("LD {},{} -- copy {} to {}", dst, src, src, dst),
+        Instr::LoadInstr(Load::Load_addr_u16_A()) => format!("LD (nn),A -- load A into memory at address from immediate u16"),
+        Instr::LoadInstr(Load::Load_addr_u16_R2(rr)) => format!("LD (nn),{} -- load {} into memory at address from immediate u16", rr, rr),
 
+        Instr::JumpInstr(Jump::Absolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
+        Instr::JumpInstr(Jump::Relative_i8()) => format!("JR e --   Jump relative to signed offset"),
+        Instr::JumpInstr(Jump::Relative_cond_carry_i8()) => format!("JR C,e -- Jump relative if Carry Flag set"),
+        Instr::JumpInstr(Jump::Relative_cond_notcarry_i8()) => format!("JR NC,e -- Jump relative if not Carry flag set"),
+        Instr::JumpInstr(Jump::Relative_cond_zero_i8()) => format!("JR Z,e -- Jump relative if Zero flag set"),
+        Instr::JumpInstr(Jump::Relative_cond_notzero_i8()) => format!("JR NZ,e -- Jump relative if not Zero flag set"),
+        Instr::JumpInstr(Jump::Absolute_cond_notzero_u16()) => format!("JR NZ,u16 -- Jump absolute if not Zero flag set"),
+        Instr::CompareInst(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
+        Instr::CompareInst(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags", r, r),
 
-        Instr::Jump(Jump::JumpAbsolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),
-        Instr::Jump(Jump::JumpRelative_i8()) => format!("JR e --   Jump relative to signed offset"),
-        Instr::Jump(Jump::JumpRelative_cond_carry_i8()) => format!("JR C,e -- Jump relative if Carry Flag set"),
-        Instr::Jump(Jump::JumpRelative_cond_notcarry_i8()) => format!("JR NC,e -- Jump relative if not Carry flag set"),
-        Instr::Jump(Jump::JumpRelative_cond_zero_i8()) => format!("JR Z,e -- Jump relative if Zero flag set"),
-        Instr::Jump(Jump::JumpRelative_cond_notzero_i8()) => format!("JR NZ,e -- Jump relative if not Zero flag set"),
-        Instr::Jump(Jump::JumpAbsolute_cond_notzero_u16()) => format!("JR NZ,u16 -- Jump absolute if not Zero flag set"),
-        Instr::Compare(Compare::CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
-        Instr::Compare(Compare::CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags",r,r),
+        Instr::MathInst(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
+        Instr::MathInst(Math::XOR_A_u8()) => format!("XOR A,u8  -- Xor A with immediate u8 store in A"),
+        Instr::MathInst(Math::XOR_A_addr(rr)) => format!("XOR A,(HL) {} -- XOR A with memory at address inside {}", rr, rr),
+        Instr::MathInst(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A", r, r),
+        Instr::MathInst(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A", r, r),
+        Instr::MathInst(Math::AND_A_u8()) => format!("AND A, u8  -- AND A with immediate u8, store in A"),
+        Instr::MathInst(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}", r, r),
+        Instr::MathInst(Math::ADD_R_R(dst, src)) => format!("ADD {} {} -- add {} to {}, store result in {}", dst, src, src, dst, dst),
+        Instr::MathInst(Math::ADD_RR_RR(dst, src)) => format!("ADD {} {}", dst, src),
+        Instr::MathInst(Math::SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}", dst, src, src, dst, dst),
 
-        Instr::Math(Math::XOR_A_r(r)) => format!("XOR A, {}  -- Xor A with {}, store in A", r, r),
-        Instr::Math(Math::XOR_A_u8()) => format!("XOR A,u8  -- Xor A with immediate u8 store in A"),
-        Instr::Math(Math::XOR_A_addr(rr)) => format!("XOR A,(HL) {} -- XOR A with memory at address inside {}",rr,rr),
-        Instr::Math(Math::OR_A_r(r))  => format!("OR A, {}   -- OR A with {}, store in A",r,r),
-        Instr::Math(Math::AND_A_r(r)) => format!("AND A, {}  -- AND A with {}, store in A",r,r),
-        Instr::Math(Math::AND_A_u8()) => format!("AND A, u8  -- AND A with immediate u8, store in A"),
-        Instr::Math(Math::ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}",r,r),
-        Instr::Math(Math::ADD_R_R(dst,src)) => format!("ADD {} {} -- add {} to {}, store result in {}",dst,src,src,dst,dst),
-        Instr::Math(Math::ADD_RR_RR(dst, src)) => format!("ADD {} {}",dst,src),
-        Instr::Math(Math::SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}",dst,src,src,dst,dst),
+        Instr::MathInst(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}", rr, rr),
+        Instr::MathInst(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}", rr, rr),
+        Instr::MathInst(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags", r, r),
+        Instr::MathInst(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags", r, r),
 
-        Instr::Math(Math::Inc_rr(rr)) => format!("INC {} -- Increment register {}",rr,rr),
-        Instr::Math(Math::Dec_rr(rr)) => format!("DEC {} -- Decrement register {}",rr,rr),
-        Instr::Math(Math::Inc_r(r)) => format!("INC {} -- Increment register {}. sets flags",r,r),
-        Instr::Math(Math::Dec_r(r)) => format!("DEC {} -- Decrement register {}. sets flags",r,r),
+        Instr::MathInst(Math::BIT(bit, r)) => format!("BIT {:0x}, {}", bit, r),
+        Instr::MathInst(Math::BITR2(bit, r)) => format!("BIT {:0x}, ({})", bit, r),
+        Instr::MathInst(Math::RLC(r)) => format!("RLC {} --- rotate register {} .old bit 7 to carry flag. sets flags", r, r),
+        Instr::MathInst(Math::RL(r)) => format!("RL {} -- Rotate {} left through Carry flag. sets flags", r, r),
+        Instr::MathInst(Math::RRC(r)) => format!("RRC {} -- Rotate {} right, Old bit 0 to carry flag. sets flags.", r, r),
+        Instr::MathInst(Math::RR(r)) => format!("RR {} -- Rotate {} right through carry flag. sets flags", r, r),
+        Instr::MathInst(Math::RLA()) => format!("RLA -- rotate A left through carry flag. Same as RL A"),
+        Instr::MathInst(Math::SLA(rr)) => format!("SLA {} -- shift A left through carry flag by {} bits", rr, rr),
+        Instr::MathInst(Math::RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
+        Instr::MathInst(Math::RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
+        Instr::MathInst(Math::RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
 
-        Instr::Math(Math::BIT(bit, r)) => format!("BIT {:0x}, {}",bit,r),
-        Instr::Math(Math::BITR2(bit, r)) => format!("BIT {:0x}, ({})",bit,r),
-        Instr::Math(Math::RLC(r)) => format!("RLC {} --- rotate register {} .old bit 7 to carry flag. sets flags", r, r),
-        Instr::Math(Math::RL(r)) => format!("RL {} -- Rotate {} left through Carry flag. sets flags",r,r),
-        Instr::Math(Math::RRC(r)) => format!("RRC {} -- Rotate {} right, Old bit 0 to carry flag. sets flags.",r,r),
-        Instr::Math(Math::RR(r)) => format!("RR {} -- Rotate {} right through carry flag. sets flags",r,r),
-        Instr::Math(Math::RLA()) => format!("RLA -- rotate A left through carry flag. Same as RL A"),
-        Instr::Math(Math::SLA(rr)) => format!("SLA {} -- shift A left through carry flag by {} bits",rr,rr),
-        Instr::Math(Math::RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
-        Instr::Math(Math::RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
-        Instr::Math(Math::RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
-
-        Instr::Special(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
-        Instr::Special(Special::NOOP()) => format!("NOOP -- do nothing"),
-        Instr::Special(Special::STOP()) => format!("STOP -- stop interrupts?"),
-        Instr::Special(Special::CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
-        Instr::Special(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack",rr,rr),
-        Instr::Special(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}",rr,rr),
-        Instr::Special(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
-        Instr::Special(Special::RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
-        Instr::Special(Special::RST(h)) => format!("RST {:02x} -- put present address onto stack, jump to address {:02x}", h, h),
-        Instr::Special(Special::RETZ()) => format!("RET Z  -- return of zflag is set"),
-        Instr::Special(Special::HALT()) => format!("HALT -- completely stop the emulator"),
+        Instr::SpecialInstr(Special::DisableInterrupts()) => format!("DI -- disable interrupts"),
+        Instr::SpecialInstr(Special::NOOP()) => format!("NOOP -- do nothing"),
+        Instr::SpecialInstr(Special::STOP()) => format!("STOP -- stop interrupts?"),
+        Instr::SpecialInstr(Special::CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
+        Instr::SpecialInstr(Special::PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack", rr, rr),
+        Instr::SpecialInstr(Special::POP(rr)) => format!("POP {} -- pop off stack, back to register {}", rr, rr),
+        Instr::SpecialInstr(Special::RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
+        Instr::SpecialInstr(Special::RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
+        Instr::SpecialInstr(Special::RST(h)) => format!("RST {:02x} -- put present address onto stack, jump to address {:02x}", h, h),
+        Instr::SpecialInstr(Special::RETZ()) => format!("RET Z  -- return of zflag is set"),
+        Instr::SpecialInstr(Special::HALT()) => format!("HALT -- completely stop the emulator"),
     }
 }
 
