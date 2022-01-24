@@ -1,9 +1,5 @@
-use core::default::Default;
-use core::fmt::{Debug, Formatter};
-use std::collections::HashMap;
-use crate::bootrom::BOOT_ROM;
-use crate::{MMU};
-use crate::common::{get_bit, get_bit_as_bool, set_bit};
+use core::fmt::{Debug};
+use crate::common::{get_bit_as_bool, set_bit};
 use crate::opcodes::{DoubleRegister, RegisterName};
 use crate::opcodes::RegisterName::{*};
 
@@ -31,7 +27,6 @@ pub struct Z80_registers {
 
     m:u8,
     t:u8,
-    ime:u8,
 }
 
 
@@ -134,19 +129,12 @@ impl Z80_registers {
 
 #[derive(Debug)]
 pub struct Z80 {
-    clock_m: u16,
-    clock_t: u16,
     pub r: Z80_registers,
-    halt: bool,
 }
 
 impl Z80 {
     pub(crate) fn init() -> Z80 {
         Z80 {
-            clock_m:0,
-            clock_t:0,
-            halt:false,
-            // stop:0,
             r: Z80_registers {
                 a: 0,
                 b: 0,
@@ -163,7 +151,6 @@ impl Z80 {
                 sp: 0,
                 m: 0,
                 t: 0,
-                ime: 0
             },
         }
     }

@@ -68,7 +68,7 @@ pub enum Math {
     ADD_RR_RR(DoubleRegister,DoubleRegister),
     SUB_R_R(RegisterName,RegisterName),
     XOR_A_r(RegisterName),
-    XOR_A_u8(RegisterName),
+    XOR_A_u8(),
     XOR_A_addr(DoubleRegister),
     OR_A_r(RegisterName),
     AND_A_r(RegisterName),
@@ -305,7 +305,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xAD => Some(Instr::Math(XOR_A_r(L))),
         0xAE => Some(Instr::Math(XOR_A_addr(HL))),
         0xAF => Some(Instr::Math(XOR_A_r(A))),
-        0xEE => Some(Instr::Math(XOR_A_u8(A))),
+        0xEE => Some(Instr::Math(XOR_A_u8())),
 
         0xB0 => Some(Instr::Math(OR_A_r(B))),
         0xB1 => Some(Instr::Math(OR_A_r(C))),

@@ -86,7 +86,6 @@ fn load_opcode_map() -> serde_json::Value {
 
 fn run_romfile(cart: RomFile, args:&Cli) {
     println!("running the cart {:?}", cart.data.len());
-    let OPCODE_MAP = load_opcode_map();
     let mut cpu = Z80::init();
     let mut mmu = MMU::init(&cart.data);
     cpu.reset();
@@ -98,9 +97,9 @@ fn run_romfile(cart: RomFile, args:&Cli) {
     }
 
     if args.interactive {
-        start_debugger(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward);
+        start_debugger(cpu, mmu, Some(cart), args.fastforward);
     } else {
-        start_debugger_loop(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward, args.verbose, args.breakpoint);
+        start_debugger_loop(cpu, mmu, Some(cart), args.fastforward, args.verbose, args.breakpoint);
     }
 }
 
@@ -113,7 +112,7 @@ fn load_romfile(pth: &PathBuf) -> Result<RomFile,Error> {
     for ch in 0x0134 .. 0x0142 {
         print!("{}",to_ascii(data[ch]));
     }
-    println!("");
+    println!("   ");
     // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
     println!("0x0143 color or not {:02x}",data[0x0143]);
     println!("0x0146 SGB indicator {:02x}",data[0x0146]);
