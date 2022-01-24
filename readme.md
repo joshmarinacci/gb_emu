@@ -43,7 +43,6 @@ want to jump to certain interesting parts.  On startup it does a bunch of loops 
 perform the CRC check.
 
 * 0  - start the whole process
-* 32770  the very end of the VRAM clearing process 
-* 32772  start audio init
-* 32786  start Nintendo Logo check
+* 24574  the very end of the VRAM clearing process, start audio init
+* 24594  start Nintendo Logo check
 

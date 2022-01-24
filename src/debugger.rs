@@ -10,7 +10,8 @@ use crate::{Cli, common, fetch_opcode_from_memory, MMU, Z80};
 use crate::common::{Bitmap, get_bit, get_bit_as_bool, RomFile};
 use crate::mmu::TEST_ADDR;
 use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
-use crate::opcodes::RegisterName::{A, D};
+use crate::opcodes::DoubleRegister::BC;
+use crate::opcodes::RegisterName::{A, B, C, D};
 
 struct Ctx {
     cpu:Z80,
@@ -51,7 +52,7 @@ impl Ctx {
     pub(crate) fn execute_test(&mut self) {
         let (opcode, off) = fetch_opcode_from_memory(&mut self.cpu, &mut self.mmu);
         if let Some(instr) = lookup_opcode(opcode) {
-            println!("executing {:02x}",opcode);
+            println!("executing  {:02x}   PC {:04x}  SP {:04x} ",opcode, self.cpu.r.pc, self.cpu.r.sp);
             self.execute_instruction(&instr);
         } else {
             println!("current cycle {}", self.clock);
@@ -557,22 +558,25 @@ impl Ctx {
                 self.inc_pc(1);
                 self.inc_pc(1);
                 self.dec_sp();
-                self.mmu.write16(self.cpu.r.sp, self.cpu.r.pc);
                 self.dec_sp();
+                self.mmu.write16(self.cpu.r.sp, self.cpu.r.pc);
                 self.set_pc(addr);
             }
             Special::PUSH(rr) => {
                 self.inc_pc(1);
+                self.dec_sp();
+                self.dec_sp();
                 let value = self.cpu.r.get_u16reg(rr);
+                // println!("pushing {:04x}",value);
                 self.mmu.write16(self.cpu.r.sp, value);
-                self.dec_sp();
-                self.dec_sp();
             }
             Special::POP(rr) => {
                 self.inc_pc(1);
                 let value = self.mmu.read16(self.cpu.r.sp);
                 self.inc_sp();
                 self.inc_sp();
+                // println!("popped {:04x}",value);
+                // println!("sp is {:04x}",self.cpu.r.sp);
                 self.cpu.r.set_u16reg(rr,value);
             }
             Special::RET() => {
@@ -672,7 +676,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>,
         {
             // print the registers
             let reg_style = Style::new().bg(White).red().underlined();
-            term.write_line(&format!("PC: {:04x}", ctx.cpu.r.pc))?;
+            term.write_line(&format!("PC: {:04x}  SP:{:04x}", ctx.cpu.r.pc, ctx.cpu.r.sp))?;
             let regs_u8 = format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
                                   ctx.cpu.r.a,
                                   ctx.cpu.r.b,
@@ -1056,4 +1060,52 @@ fn test_write_register_DE() {
     let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
     ctx.execute_test();
     assert_eq!(ctx.cpu.r.get_u8reg(&D),0x05);
+}
+
+#[test]
+fn test_push_pop() {
+    let rom:[u8;10] = [
+        0x31, 0xfe, 0xff, // LD SP u16, set the stack pointer to fffe
+        0x06, 0x04, // LD B, 04
+        0xC5, // PUSH BC
+        0xCB, 0x11, // RL C
+        0x17,// RLA
+        0xC1, // POP BC
+    ];
+    let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
+
+    println!("stack {:?} ",ctx.mmu.get_stack_16());
+    ctx.execute_test(); // set SP to fffe
+    ctx.execute_test(); // LD B, 04
+    println!("stack {:?} ",ctx.mmu.get_stack_16());
+    assert_eq!(ctx.cpu.r.sp,0xfffe);
+    println!("BC {:04x}",ctx.cpu.r.get_u16reg(&BC));
+    println!("B {:02x}",ctx.cpu.r.get_u8reg(&B));
+    println!("C {:02x}",ctx.cpu.r.get_u8reg(&C));
+    assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
+    assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
+    assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
+    // println!("stack {:?} ",ctx.mmu.get_stack_16());
+    println!("B {:02x} C {:02x} BC {:04x}",ctx.cpu.r.get_u8reg(&B), ctx.cpu.r.get_u8reg(&C), ctx.cpu.r.get_u16reg(&BC));
+
+    println!("pushing BC");
+    ctx.execute_test(); // PUSH BC
+    assert_eq!(ctx.cpu.r.sp,0xfffe-2);
+    assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
+    assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
+    assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
+    println!("stack {:?} ",ctx.mmu.get_stack_16());
+
+    ctx.execute_test(); // RL C
+    ctx.execute_test(); // RLA
+
+    println!("POPPING BC");
+    ctx.execute_test(); // POP BC
+    println!("stack {:?} ",ctx.mmu.get_stack_16());
+    println!("B {:02x} C {:02x} BC {:04x}",ctx.cpu.r.get_u8reg(&B), ctx.cpu.r.get_u8reg(&C), ctx.cpu.r.get_u16reg(&BC));
+    assert_eq!(ctx.cpu.r.sp,0xfffe);
+    assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
+    assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
+    assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
+
 }

@@ -25,7 +25,7 @@ use crate::debugger::{start_debugger, start_debugger_loop};
 use crate::mmu::MMU;
 
 
-fn fetch_opcode_from_memory(cpu:&mut Z80, mmu:&mut MMU) -> (u16,u16) {
+fn fetch_opcode_from_memory(cpu:&Z80, mmu:&MMU) -> (u16,u16) {
     let pc = cpu.r.pc;
     // println!("pc is {}",pc);
     let fb:u8 = mmu.read8(pc);

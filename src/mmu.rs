@@ -57,6 +57,7 @@ impl MMU {
     pub(crate) fn fetch_rom_bank_1(&self) -> &[u8] {
         return &self.data[0x0100 .. 0x0200];
     }
+    pub(crate) fn get_stack_16(&self) -> &[u8] { return &self.data[0xFFF0 .. 0xFFFE]; }
     pub(crate) fn get_current_bg_display_data(&self) -> &[u8] {
         let block = get_bit(self.hardware.LCDC,4);
         let (start,end) = match block {
@@ -151,9 +152,9 @@ impl MMU {
     //     }
     // }
     pub fn read8(&self, addr:u16) -> u8 {
-        // println!("reading from bios at location {:04x}",addr);
+        // println!("reading from memory at location {:04x}",addr);
         if addr >= VRAM_START  && addr <= VRAM_END {
-            println!("reading from vram {:04x}",addr);
+            // println!("reading from vram {:04x}",addr);
         }
         if addr == LY_LCDC_Y_COORD { return self.hardware.LY; }
         if addr == LYC_LCDC_Y_COMPARE { return self.hardware.LYC; }
@@ -166,16 +167,17 @@ impl MMU {
         self.data[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
-        // println!("reading from bios at location {:04x}",addr);
-        let b1 = self.read8(addr)   as u16;
-        let b2 = self.read8(addr+1) as u16;
-        return b1 + (b2 << 8);
+        // println!("reading from bios at loca{tion {:04x}",addr);
+        let hi = self.data[(addr + 1) as usize] as u16;
+        let lo = self.data[(addr + 0) as usize] as u16;
+        return (hi << 8) + lo;
     }
     pub fn write16(&mut self, addr:u16, data:u16) {
-        let b1 = ((data & 0xFF00) >> 8) as u8;
-        let b2 = ((data & 0x00FF) >> 0) as u8;
-        self.data[(addr + 0) as usize] = b1;
-        self.data[(addr + 1) as usize] = b2;
+        // println!("writing to memory at location {:04x}",addr);
+        let hi = ((data & 0xFF00) >> 8) as u8;
+        let lo = ((data & 0x00FF) >> 0) as u8;
+        self.data[(addr + 1) as usize] = hi;
+        self.data[(addr + 0) as usize] = lo;
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr < 0x8000 {
