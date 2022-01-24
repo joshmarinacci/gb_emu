@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, thread};
 use std::fs::read_to_string;
 use std::io::Error;
+use std::num::ParseIntError;
 use std::time::Duration;
 use log4rs::append::file::FileAppender;
 use log4rs::Config;
@@ -99,7 +100,7 @@ fn run_romfile(cart: RomFile, args:&Cli) {
     if args.interactive {
         start_debugger(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward);
     } else {
-        start_debugger_loop(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward, args.verbose );
+        start_debugger_loop(cpu, mmu, OPCODE_MAP, Some(cart), args.fastforward, args.verbose, args.breakpoint);
     }
 }
 
@@ -265,6 +266,10 @@ fn to_ascii(v: u8) -> char{
 //     //start the cartridge at 0x0100
 // }
 
+fn parse_hex(src:&str) -> Result<u16, ParseIntError> {
+    u16::from_str_radix(src,16)
+}
+
 #[derive(StructOpt, Debug)]
 #[structopt(name = "gbemu", about = "gb emulator")]
 struct Cli {
@@ -280,6 +285,8 @@ struct Cli {
     fastforward:u32,
     #[structopt(long)]
     verbose:bool,
+    #[structopt(long, parse(try_from_str = parse_hex))]
+    breakpoint:u16,
 }
 
 fn init_setup() -> Cli {

@@ -17,6 +17,7 @@ pub struct Hardware {
     pub OBP1:u8,
     pub vblank_interrupt_enabled:bool,
 
+    pub clock: i32,
 }
 
 impl Hardware {
@@ -34,13 +35,27 @@ impl Hardware {
             BGP: 0,
             OBP0: 0,
             OBP1: 0,
-            vblank_interrupt_enabled: false
+            vblank_interrupt_enabled: false,
+            clock: 0,
         }
     }
     pub fn update(&mut self) {
-        self.LY = self.LY + 1;
+        self.clock += 1;
+        if self.clock % 20 == 0 {
+            self.LY = self.LY + 1;
+        }
         if self.LY > 153 {
             self.LY = 0
+        }
+        const screen_refresh_time: i32 = 70224;
+        if self.clock %  screen_refresh_time == 0 {
+            println!("screen refresh");
+        }
+        if self.clock % screen_refresh_time == (screen_refresh_time - 4560) {
+            println!("entering the vblank period");
+        }
+        if self.clock % screen_refresh_time == screen_refresh_time -1 {
+            println!("exiting vblank period");
         }
     }
 }
@@ -213,7 +228,7 @@ impl MMU {
             panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            println!("writing in VRAM {:04x}  {:x}", addr, val);
+            // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr == LCDC_LCDCONTROL {
             // println!("writing to turn on the LCD Display");

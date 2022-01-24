@@ -19,6 +19,10 @@ struct Ctx {
     opcodes:Value,
     clock:u32,
     running:bool,
+    interactive:bool,
+    cart: Option<RomFile>,
+    full_registers_visible: bool,
+    test_memory_visible: bool,
 }
 
 impl Ctx {
@@ -28,7 +32,11 @@ impl Ctx {
             mmu: MMU::init(rom),
             opcodes: Default::default(),
             clock: 0,
-            running: true
+            running: true,
+            interactive: false,
+            cart: None,
+            full_registers_visible: false,
+            test_memory_visible: false
         }
     }
 }
@@ -628,129 +636,146 @@ impl Ctx {
     }
 }
 
-pub fn start_debugger_loop(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32, verbose: bool) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true};
+pub fn start_debugger_loop(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32, verbose: bool, breakpoint: u16) -> Result<()> {
+    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true, interactive:false, cart:cart, test_memory_visible:false, full_registers_visible:false };
     let mut term = Term::stdout();
+    println!("going to the breakpoint {:02x}",breakpoint);
     while ctx.running {
-        ctx.execute(&mut term,verbose);
+        if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
+            println!("done hit the breakpoint");
+            ctx.interactive = true;
+        }
+        if ctx.interactive {
+            step_forward(&mut ctx, &mut term)
+        } else {
+            ctx.execute(&mut term, verbose);
+        }
     }
     Ok(())
 }
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, opcodes: Value, cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true};
+    let mut ctx = Ctx { cpu, mmu, opcodes, clock:0, running:true, interactive:true, cart:cart,
+        full_registers_visible:false,
+        test_memory_visible: false,
+    };
     let mut term = Term::stdout();
-    let mut full_registers_visible = false;
-    let mut test_memory_visible = false;
 
     for n in 0..fast_forward {
         ctx.execute(&mut term, false);
     }
-
-    let border = Style::new().bg(Color::Magenta).black();
     loop {
-        // term.clear_screen()?;
-        if let Some(cart) = &cart {
-            term.write_line(&format!("executing rom {}", cart.path))?;
-        }
-        term.write_line(&format!("clock {}",&ctx.clock))?;
-        term.write_line(&border.apply_to("========================================").to_string())?;
+        step_forward(&mut ctx, &mut term);
+    }
+    Ok(())
+}
 
-        // print the current memory
-        let start = ctx.cpu.r.pc;
-        let back:i32 = 2;
-        for n in 0..5 {
-            let iv = (start as i32) + n - back;
-            // println!("n is {} {}",n,iv);
-            if iv < 0 {
-                term.write_line("----")?;
-                continue;
-            }
-            let addr = iv as u16;
-            // println!("address is {:04x}",addr);
-            let prefix = if(addr == start) { " *"} else {"  "};
-            let data = ctx.mmu.read8(addr);
-            term.write_line(&format!("{} {:04x}  {:02x}",prefix,addr,data));
-        }
+fn step_forward(ctx: &mut Ctx, term: &mut Term) {
+    let border = Style::new().bg(Color::Magenta).black();
+    // term.clear_screen()?;
+    if let Some(cart) = &ctx.cart {
+        term.write_line(&format!("executing rom {}", cart.path));
+    }
+    term.write_line(&format!("clock {}",&ctx.clock));
+    term.write_line(&border.apply_to("========================================").to_string());
 
-        {
-            // print the registers
-            let reg_style = Style::new().bg(White).red().underlined();
-            term.write_line(&format!("PC: {:04x}  SP:{:04x}", ctx.cpu.r.pc, ctx.cpu.r.sp))?;
-            let regs_u8 = format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
-                                  ctx.cpu.r.a,
-                                  ctx.cpu.r.b,
-                                  ctx.cpu.r.c,
-                                  ctx.cpu.r.d,
-                                  ctx.cpu.r.e,
-                                  ctx.cpu.r.h,
-                                  ctx.cpu.r.l,
-            );
-            term.write_line(&reg_style.apply_to(regs_u8).to_string())?;
-            let regs_u16 = format!("BC:{:04x}  DE:{:04x}  HL:{:04x}",
-                                   ctx.cpu.r.get_bc(),
-                                   ctx.cpu.r.get_de(),
-                                   ctx.cpu.r.get_hl(),
-            );
-            term.write_line(&regs_u16)?;
-            let flag_style = Style::new().blue();
-            term.write_line(&format!("flags Z:{}   N:{}  H:{}  C:{}",
-                                     flag_style.apply_to(ctx.cpu.r.zero_flag),
-                                     flag_style.apply_to(ctx.cpu.r.subtract_n_flag),
-                                     flag_style.apply_to(ctx.cpu.r.half_flag),
-                                     flag_style.apply_to(ctx.cpu.r.carry_flag),
-            ))?;
-            // term.write_line(&format!(" Screen: LY {:02x}",ctx.mmu.hardware.LY))?;
+    // print the current memory
+    let start = ctx.cpu.r.pc;
+    let back:i32 = 2;
+    for n in 0..5 {
+        let iv = (start as i32) + n - back;
+        // println!("n is {} {}",n,iv);
+        if iv < 0 {
+            term.write_line("----");
+            continue;
         }
-        if full_registers_visible {
-            show_full_hardware_registers(&term,&ctx);
-        }
-        if test_memory_visible {
-            show_test_memory(&term, &ctx);
-        }
-
-        // print info about the next opcode
-        let primary = Style::new().green().bold();
-        let bold = Style::new().reverse().red();
-        let italic = Style::new().italic();
-        let (opcode, instr_len) = fetch_opcode(&mut ctx.cpu, &mut ctx.mmu);
-        let op = lookup_opcode(opcode);
-        if let Some(ld) = op {
-            term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
-                                                       ctx.cpu.r.pc,
-                                                       bold.apply_to(format!("{:02X}",opcode)),
-                                                       italic.apply_to(lookup_opcode_info(ld)),
-            )).to_string())?;
-        } else {
-            println!("current cycle {}", ctx.clock);
-            panic!("unknown op code")
-        }
-
-
-        let commands = Style::new().reverse();
-        term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump c=cart_dump o=objram dump")).to_string())?;
-        let ch = term.read_char()?;
-        match ch{
-            'r' => full_registers_visible = !full_registers_visible,
-            'j' => ctx.execute(&mut term,false ),
-            'J' => {
-                term.write_line(&format!("doing 16 instructions"))?;
-                for n in 0..16 {
-                    ctx.execute(&mut term, false);
-                }
-            },
-            'c' => dump_cart_rom(&term, &ctx),
-            'v' => dump_vram(&term, &ctx),
-            'o' => dump_oram(&term, &ctx),
-            's' => dump_screen(&term, &ctx),
-            'i' => dump_interrupts(&term, &ctx),
-            't' => test_memory_visible = !test_memory_visible,
-            'm' => dump_all_memory(&term,&ctx),
-            _ => {}
-        };
+        let addr = iv as u16;
+        // println!("address is {:04x}",addr);
+        let prefix = if(addr == start) { " *"} else {"  "};
+        let data = ctx.mmu.read8(addr);
+        term.write_line(&format!("{} {:04x}  {:02x}",prefix,addr,data));
     }
 
-    Ok(())
+    {
+        // print the registers
+        let reg_style = Style::new().bg(White).red().underlined();
+        term.write_line(&format!("PC: {:04x}  SP:{:04x}", ctx.cpu.r.pc, ctx.cpu.r.sp));
+        let regs_u8 = format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
+                              ctx.cpu.r.a,
+                              ctx.cpu.r.b,
+                              ctx.cpu.r.c,
+                              ctx.cpu.r.d,
+                              ctx.cpu.r.e,
+                              ctx.cpu.r.h,
+                              ctx.cpu.r.l,
+        );
+        term.write_line(&reg_style.apply_to(regs_u8).to_string());
+        let regs_u16 = format!("BC:{:04x}  DE:{:04x}  HL:{:04x}",
+                               ctx.cpu.r.get_bc(),
+                               ctx.cpu.r.get_de(),
+                               ctx.cpu.r.get_hl(),
+        );
+        term.write_line(&regs_u16);
+        let flag_style = Style::new().blue();
+        term.write_line(&format!("flags Z:{}   N:{}  H:{}  C:{}",
+                                 flag_style.apply_to(ctx.cpu.r.zero_flag),
+                                 flag_style.apply_to(ctx.cpu.r.subtract_n_flag),
+                                 flag_style.apply_to(ctx.cpu.r.half_flag),
+                                 flag_style.apply_to(ctx.cpu.r.carry_flag),
+        ));
+        // term.write_line(&format!(" Screen: LY {:02x}",ctx.mmu.hardware.LY))?;
+    }
+    if ctx.full_registers_visible {
+        show_full_hardware_registers(&term,&ctx);
+    }
+    if ctx.test_memory_visible {
+        show_test_memory(&term, &ctx);
+    }
+
+    // print info about the next opcode
+    let primary = Style::new().green().bold();
+    let bold = Style::new().reverse().red();
+    let italic = Style::new().italic();
+    let (opcode, instr_len) = fetch_opcode(&mut ctx.cpu, &mut ctx.mmu);
+    let op = lookup_opcode(opcode);
+    if let Some(ld) = op {
+        term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
+                                                   ctx.cpu.r.pc,
+                                                   bold.apply_to(format!("{:02X}",opcode)),
+                                                   italic.apply_to(lookup_opcode_info(ld)),
+        )).to_string());
+    } else {
+        println!("current cycle {}", ctx.clock);
+        panic!("unknown op code")
+    }
+
+
+    let commands = Style::new().reverse();
+    term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump c=cart_dump o=objram dump")).to_string());
+    let ch = term.read_char().unwrap();
+    match ch{
+        'r' => ctx.full_registers_visible = !ctx.full_registers_visible,
+        'j' => ctx.execute(term,false ),
+        'J' => {
+            term.write_line(&format!("doing 16 instructions"));
+            for n in 0..16 {
+                ctx.execute(term, false);
+            }
+        },
+        'c' => dump_cart_rom(&term, &ctx),
+        'v' => dump_vram(&term, &ctx),
+        'o' => dump_oram(&term, &ctx),
+        's' => dump_screen(&term, &ctx),
+        'i' => dump_interrupts(&term, &ctx),
+        't' => ctx.test_memory_visible = !ctx.test_memory_visible,
+        'm' => dump_all_memory(&term,&ctx),
+        'b' => {
+            ctx.interactive = false;
+            ctx.execute(term,false);
+        },
+        _ => {}
+    };
+
 }
 
 fn dump_all_memory(term: &Term, ctx: &Ctx)  {
@@ -943,7 +968,7 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
 fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
     term.write_line(&format!("registers are {} ",reg.apply_to("cool")));
-    term.write_line(&reg.apply_to(&format!("LY   {}",ctx.mmu.hardware.LY)).to_string())?;
+    term.write_line(&reg.apply_to(&format!("LY   {:02x}",ctx.mmu.hardware.LY)).to_string())?;
     term.write_line(&format!("LYC  {}",ctx.mmu.hardware.LYC))?;
     term.write_line(&format!("SCX  {}",ctx.mmu.hardware.SCX))?;
     term.write_line(&format!("SCY  {}",ctx.mmu.hardware.SCY))?;

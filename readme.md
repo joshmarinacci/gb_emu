@@ -45,4 +45,6 @@ perform the CRC check.
 * 0  - start the whole process
 * 24574  the very end of the VRAM clearing process, start audio init
 * 24594  start Nintendo Logo check
+* 28674  end of the logo check, starting to fill VRAM with tilemap
+* 28806 start scrolling  
 
