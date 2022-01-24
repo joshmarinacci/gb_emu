@@ -88,7 +88,13 @@ impl MMU {
     pub(crate) fn fetch_tiledata(&self) -> &[u8] {
         &self.data[0x8000 .. 0x97FF]
     }
-    pub(crate) fn fetch_tiledata_block3(&self) -> &[u8] {
+    pub(crate) fn fetch_tiledata_block0(&self) -> &[u8] {
+        &self.data[0x8000 .. 0x87FF]
+    }
+    pub(crate) fn fetch_tiledata_block1(&self) -> &[u8] {
+        &self.data[0x8800 .. 0x8FFF]
+    }
+    pub(crate) fn fetch_tiledata_block2(&self) -> &[u8] {
         &self.data[0x9000 .. 0x97FF]
     }
     pub(crate) fn fetch_test_memory(&self) -> &[u8] {

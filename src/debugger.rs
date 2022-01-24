@@ -657,14 +657,25 @@ impl Ctx {
                 }
             }
 
-            let img = &self.backbuffer;
+            self.backbuffer.clear_with(0,0,0);
+            let vram = self.mmu.get_current_bg_display_data();
+            let tiledata = self.mmu.fetch_tiledata_block2();
+            for (y,row) in vram.chunks_exact(32).enumerate() {
+                for (x, tile_id) in row.iter().enumerate() {
+                    draw_tile_at(&mut self.backbuffer, x*8, y*8, tile_id, tiledata);
+                }
+                let hex_tile = row.iter().map(|b| format!("{:02x} ", b)).collect::<String>();
+                println!("{}",hex_tile);
+            }
+
             screen.canvas.with_texture_canvas(&mut screen.texture, |can| {
-                for i in 0..img.w {
-                    for j in 0..img.h {
-                        let n: usize = ((j * img.w + i) * 4) as usize;
+                for i in 0..self.backbuffer.w {
+                    for j in 0..self.backbuffer.h {
+                        let n: usize = ((j * self.backbuffer.w + i) * 4) as usize;
                         //let px = img.get_pixel_32argb(i,j);
                         // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
-                        let (r, g, b) = img.get_pixel_rgb(i, j);
+                        let (r, g, b) = self.backbuffer.get_pixel_rgb(i, j);
+                        // println!("rgb {},{},{}",r,g,b);
                         // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
                         can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
                         can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
@@ -672,8 +683,8 @@ impl Ctx {
                 }
             }).unwrap();
 
-            screen.canvas.set_draw_color(sdl2::pixels::Color::RED);
-            screen.canvas.fill_rect(Rect::new(0,0,20,20));
+            screen.canvas.copy(&screen.texture, None,
+                               Rect::new(0, 0, (self.backbuffer.w * 2) as u32, (self.backbuffer.h * 2) as u32));
 
             screen.canvas.present();
             ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
@@ -724,7 +735,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u
     if screen {
         let sdl_context = sdl2::init().unwrap();
         let window = sdl_context.video().unwrap()
-            .window("rust-sdl2 demo: Video", 512 * 2, 320 * 2)
+            .window("rust-sdl2 demo: Video", 256 * 2, 256 * 2)
             .position_centered()
             .opengl()
             .build()
@@ -862,7 +873,9 @@ fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
         match addr {
             0x0000 => println!("start: cart fixed"),
             0x4000 => println!("cart: switchable"),
-            0x8000 => println!("8 KiB Video RAM        (VRAM)"),
+            0x8000 => println!("8 KiB Video RAM        (VRAM)\n  Tile Data Block 0"),
+            0x8800 => println!("8 KiB Video RAM        (VRAM)\n  Tile Data Block 1"),
+            0x9000 => println!("8 KiB Video RAM        (VRAM)\n  Tile Data Block 2"),
             0xA000 => println!("8 KiB External RAM"),
             0xC000 => println!("4 KiB Work RAM         (WRAM)"),
             0xD000 => println!("4 KiB Work RAM         (WRAM)"),
@@ -920,7 +933,10 @@ fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()>  {
 fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()>{
     let vram:&[u8] = ctx.mmu.fetch_tiledata();
     term.write_line(&format!("vram block3 len {}",vram.len()))?;
-    print_memory_to_console(vram,term,ctx)?;
+    for chunk in vram.chunks(0x0800) {
+        println!("chunk");
+        print_memory_to_console(chunk, term, ctx)?;
+    }
 
     const tile_count:usize = 127;
     let mut buf = Bitmap::init(16*8,64);
@@ -963,7 +979,7 @@ fn dump_screen(term: &Term, ctx: &Ctx) -> Result<()>{
     let mut buf = Bitmap::init(32*8,32*8); // actual window buffer is 256x256
     buf.clear_with(0,0,0);
     let vram:&[u8] = ctx.mmu.get_current_bg_display_data();
-    let tiledata:&[u8] = ctx.mmu.fetch_tiledata_block3();
+    let tiledata:&[u8] = ctx.mmu.fetch_tiledata_block2();
     // println!("vram len is {}",vram.len());
     for (y,row) in vram.chunks_exact(32).enumerate() {
         for (x, tile_id) in row.iter().enumerate() {
