@@ -89,6 +89,10 @@ impl Bitmap {
         self.data[n+2] = b;
         self.data[n+3] = 255;
     }
+    pub(crate) fn get_pixel_rgb(&self, x: i32, y: i32) -> (u8,u8,u8) {
+        let n:usize = ((x + self.w*y)*4) as usize;
+        (self.data[n+0],self.data[n+1],self.data[n+2])
+    }
 }
 
 impl Bitmap {

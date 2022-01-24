@@ -60,9 +60,9 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
     }
 
     if args.interactive {
-        start_debugger(cpu, mmu, Some(cart), args.fastforward)?
+        start_debugger(cpu, mmu, Some(cart), args.fastforward, args.screen)?
     } else {
-        start_debugger_loop(cpu, mmu, Some(cart), args.fastforward, args.verbose, args.breakpoint)?
+        start_debugger_loop(cpu, mmu, Some(cart), args.fastforward, args.verbose, args.breakpoint, args.screen)?
     }
     Ok(())
 }
@@ -128,8 +128,10 @@ struct Cli {
     fastforward:u32,
     #[structopt(long)]
     verbose:bool,
-    #[structopt(long, parse(try_from_str = parse_hex))]
+    #[structopt(long, parse(try_from_str = parse_hex), default_value="0")]
     breakpoint:u16,
+    #[structopt(long)]
+    screen:bool,
 }
 
 fn init_setup() -> Cli {

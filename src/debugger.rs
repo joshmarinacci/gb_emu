@@ -1,7 +1,15 @@
 use std::io;
 use console::{Color, Style, Term};
 use io::Result;
+use std::borrow::BorrowMut;
+use std::time::Duration;
 use console::Color::White;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::PixelFormatEnum;
+use sdl2::rect::Rect;
+use sdl2::render::{Texture, TextureAccess, WindowCanvas};
+use sdl2::Sdl;
 use Load::Load_R_u8;
 use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
@@ -19,6 +27,8 @@ struct Ctx {
     cart: Option<RomFile>,
     full_registers_visible: bool,
     test_memory_visible: bool,
+    backbuffer:Bitmap,
+    screen:Option<Screen>,
 }
 
 impl Ctx {
@@ -31,7 +41,9 @@ impl Ctx {
             interactive: false,
             cart: None,
             full_registers_visible: false,
-            test_memory_visible: false
+            test_memory_visible: false,
+            backbuffer: Bitmap::init(256,256),
+            screen: None
         }
     }
 }
@@ -49,7 +61,12 @@ impl Ctx {
             println!("unknown op code {:04x}",opcode);
             panic!("unknown op code");
         }
+        let old_ly = self.mmu.hardware.LY;
         self.mmu.update();
+        if old_ly != 0 && self.mmu.hardware.LY == 0 {
+            println!("vsync");
+            self.draw_screen();
+        }
         self.clock+=1;
         Ok(())
     }
@@ -617,10 +634,62 @@ impl Ctx {
         }
         self.cpu.r.sp = sp;
     }
+    fn draw_screen(&mut self) {
+        if let Some(screen) = self.screen.borrow_mut() {
+            //handle any pending inputs
+            while true {
+                if let Some(event) = screen.context.event_pump().unwrap().poll_event() {
+                    match event {
+                        Event::Quit { .. }
+                        | Event::KeyDown {
+                            keycode: Some(Keycode::Escape),
+                            ..
+                        } => {
+                            println!("quitting");
+                        },
+                        _ => {
+                            println!("othe event {:?}", event);
+                        }
+                    }
+                } else {
+                    println!("done with events");
+                    break;
+                }
+            }
+
+            let img = &self.backbuffer;
+            screen.canvas.with_texture_canvas(&mut screen.texture, |can| {
+                for i in 0..img.w {
+                    for j in 0..img.h {
+                        let n: usize = ((j * img.w + i) * 4) as usize;
+                        //let px = img.get_pixel_32argb(i,j);
+                        // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
+                        let (r, g, b) = img.get_pixel_rgb(i, j);
+                        // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
+                        can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
+                        can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
+                    }
+                }
+            }).unwrap();
+
+            screen.canvas.set_draw_color(sdl2::pixels::Color::RED);
+            screen.canvas.fill_rect(Rect::new(0,0,20,20));
+
+            screen.canvas.present();
+            ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+
+        }
+    }
 }
 
-pub fn start_debugger_loop(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u32, verbose: bool, breakpoint: u16) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, clock:0, running:true, interactive:false, cart, test_memory_visible:false, full_registers_visible:false };
+struct Screen {
+    canvas:WindowCanvas,
+    texture:Texture,
+    context: Sdl,
+}
+
+pub fn start_debugger_loop(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u32, verbose: bool, breakpoint: u16, screen: bool) -> Result<()> {
+    let mut ctx = Ctx { cpu, mmu, clock:0, running:true, interactive:false, cart, test_memory_visible:false, backbuffer: Bitmap::init(256,256), full_registers_visible:false, screen: None };
     let mut term = Term::stdout();
     println!("going to the breakpoint {:02x}",breakpoint);
     while ctx.running {
@@ -637,15 +706,36 @@ pub fn start_debugger_loop(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forwa
     Ok(())
 }
 
-pub fn start_debugger(cpu: Z80, mmu: MMU,  cart: Option<RomFile>, fast_forward: u32) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, clock:0, running:true, interactive:true, cart,
+pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u32, screen: bool) -> Result<()> {
+    let mut ctx = Ctx {
+        cpu, mmu, clock:0, running:true, interactive:true, cart,
         full_registers_visible:false,
         test_memory_visible: false,
+        backbuffer: Bitmap::init(256,256),
+        screen:None,
     };
     let mut term = Term::stdout();
 
+    println!("fast forwarding: {}",fast_forward);
     for n in 0..fast_forward {
         ctx.execute(&mut term, false)?;
+    }
+
+    if screen {
+        let sdl_context = sdl2::init().unwrap();
+        let window = sdl_context.video().unwrap()
+            .window("rust-sdl2 demo: Video", 512 * 2, 320 * 2)
+            .position_centered()
+            .opengl()
+            .build()
+            .map_err(|e| e.to_string()).unwrap();
+        let canvas:WindowCanvas = window.into_canvas().software().build().map_err(|e| e.to_string()).unwrap();
+        let tex = canvas.texture_creator().create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, ctx.backbuffer.w as u32, ctx.backbuffer.h as u32).unwrap();
+        ctx.screen = Some(Screen {
+            context:sdl_context,
+            canvas,
+            texture:tex,
+        });
     }
     loop {
         step_forward(&mut ctx, &mut term)?;
@@ -758,6 +848,9 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term)  -> Result<()>{
         },
         _ => {}
     };
+    if let Some(screen) = &mut ctx.screen {
+        ctx.draw_screen();
+    }
     Ok(())
 }
 
