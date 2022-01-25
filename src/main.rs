@@ -19,7 +19,7 @@ use log::{info, LevelFilter};
 use structopt::StructOpt;
 use common::RomFile;
 use crate::cpu::{Z80};
-use crate::debugger::{start_debugger, start_debugger_loop};
+use crate::debugger::{start_debugger};
 use crate::mmu::MMU;
 
 
@@ -60,11 +60,7 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
         cpu.r.pc = 0x100;
     }
 
-    if args.interactive {
-        start_debugger(cpu, mmu, Some(cart), args.fastforward, args.screen)?
-    } else {
-        start_debugger_loop(cpu, mmu, Some(cart), args.fastforward, args.verbose, args.breakpoint, args.screen)?
-    }
+    start_debugger(cpu, mmu, Some(cart), args.fastforward, args.screen, args.breakpoint, args.verbose, args.interactive)?;
     Ok(())
 }
 

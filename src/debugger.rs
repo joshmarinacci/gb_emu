@@ -1,15 +1,7 @@
 use std::io;
 use console::{Color, Style, Term};
 use io::Result;
-use std::borrow::BorrowMut;
-use std::time::Duration;
 use console::Color::White;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::PixelFormatEnum;
-use sdl2::rect::Rect;
-use sdl2::render::{Texture, TextureAccess, WindowCanvas};
-use sdl2::Sdl;
 use Load::Load_R_u8;
 use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
@@ -639,32 +631,25 @@ impl Ctx {
         self.backbuffer.clear_with(0,0,0);
         self.draw_vram();
         if let Some(screen) = &mut self.screen {
-            screen.update_screen(&self.backbuffer);
+            let should_continue = screen.update_screen(&self.backbuffer);
+            if !should_continue {
+                self.running = false;
+            }
         }
     }
 }
 
-pub fn start_debugger_loop(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u32, verbose: bool, breakpoint: u16, screen: bool) -> Result<()> {
-    let mut ctx = Ctx { cpu, mmu, clock:0, running:true, interactive:false, cart, test_memory_visible:false, backbuffer: Bitmap::init(256,256), full_registers_visible:false, screen: None };
-    let mut term = Term::stdout();
-    println!("going to the breakpoint {:02x}",breakpoint);
-    while ctx.running {
-        if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
-            println!("done hit the breakpoint");
-            ctx.interactive = true;
-        }
-        if ctx.interactive {
-            step_forward(&mut ctx, &mut term)?;
-        } else {
-            ctx.execute(&mut term, verbose)?;
-        }
-    }
-    Ok(())
-}
-
-pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u32, screen: bool) -> Result<()> {
+pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
+                      fast_forward: u32,
+                      screen: bool,
+                      breakpoint:u16,
+                      verbose:bool,
+                      interactive:bool) -> Result<()> {
     let mut ctx = Ctx {
-        cpu, mmu, clock:0, running:true, interactive:true, cart,
+        cpu, mmu, clock:0,
+        running:true,
+        interactive,
+        cart,
         full_registers_visible:false,
         test_memory_visible: false,
         backbuffer: Bitmap::init(256,256),
@@ -680,8 +665,16 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u
     if screen {
         ctx.screen = Some(Screen::init(256,256))
     }
-    loop {
-        step_forward(&mut ctx, &mut term)?;
+    while ctx.running {
+        if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
+            println!("done hit the breakpoint");
+            ctx.interactive = true;
+        }
+        if ctx.interactive {
+            step_forward(&mut ctx, &mut term)?;
+        } else {
+            ctx.execute(&mut term, verbose)?;
+        }
     }
     Ok(())
 }

@@ -30,7 +30,7 @@ impl Screen {
             texture:tex,
         }
     }
-    pub fn update_screen(&mut self, backbuffer:&Bitmap) {
+    pub fn update_screen(&mut self, backbuffer:&Bitmap) -> bool {
         //handle any pending inputs
         while true {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
@@ -41,6 +41,7 @@ impl Screen {
                         ..
                     } => {
                         println!("quitting");
+                        return false;
                     },
                     _ => {
                         println!("othe event {:?}", event);
@@ -73,6 +74,7 @@ impl Screen {
                                      (backbuffer.h * 2) as u32));
 
         self.canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        ::std::thread::sleep(Duration::from_millis(100));
+        return true;
     }
 }
