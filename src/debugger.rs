@@ -103,8 +103,17 @@ impl Ctx {
             Compare::CP_A_r(r) => {
                 self.inc_pc(1);
                 let src_v = self.cpu.r.get_u8reg(r);
+                let dst_v = self.cpu.r.get_u8reg(&A);
+                let result = dst_v.wrapping_sub(src_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+                self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+            }
+            Compare::CP_A_addr(r) => {
                 self.inc_pc(1);
-
+                let addr = self.cpu.r.get_u16reg(r);
+                let src_v = self.mmu.read8(addr);
                 let dst_v = self.cpu.r.get_u8reg(&A);
                 let result = dst_v.wrapping_sub(src_v);
                 self.cpu.r.zero_flag = result == 0;
@@ -154,6 +163,16 @@ impl Ctx {
                 self.cpu.r.half_flag = false;
                 self.cpu.r.carry_flag = false;
             }
+            Math::OR_A_addr(rr) => {
+                self.inc_pc(1);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let val = self.mmu.read8(addr);
+                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) | val);
+                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = false;
+                self.cpu.r.carry_flag = false;
+            }
             Math::AND_A_r(r) => {
                 self.inc_pc(1);
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & self.cpu.r.get_u8reg(r));
@@ -167,6 +186,16 @@ impl Ctx {
                 let n = self.mmu.read8(self.cpu.r.pc);
                 self.inc_pc(1);
                 self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & n);
+                self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.half_flag = true;
+                self.cpu.r.carry_flag = false;
+            }
+            Math::AND_A_addr(rr) => {
+                self.inc_pc(1);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let val = self.mmu.read8(addr);
+                self.cpu.r.set_u8reg(&A, self.cpu.r.get_u8reg(&A) & val);
                 self.cpu.r.zero_flag = self.cpu.r.get_u8reg(&A) == 0;
                 self.cpu.r.subtract_n_flag = false;
                 self.cpu.r.half_flag = true;
@@ -206,6 +235,18 @@ impl Ctx {
                 self.cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
                 self.cpu.r.set_u16reg(dst,result);
             }
+            Math::ADD_A_addr(rr) => {
+                self.inc_pc(1);
+                let dst_v = self.cpu.r.get_u8reg(&A);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let src_v = self.mmu.read8(addr);
+                let result = dst_v.wrapping_add(src_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) + (src_v & 0x0f) > 0xF;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
+                self.cpu.r.set_u8reg(&A, result);
+            }
             Math::SUB_R_R(dst, src) => {
                 self.inc_pc(1);
                 let dst_v = self.cpu.r.get_u8reg(dst);
@@ -216,6 +257,18 @@ impl Ctx {
                 self.cpu.r.subtract_n_flag = true;
                 self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
                 self.cpu.r.set_u8reg(dst, result);
+            }
+            Math::SUB_A_addr(rr) => {
+                self.inc_pc(1);
+                let dst_v = self.cpu.r.get_u8reg(&A);
+                let addr = self.cpu.r.get_u16reg(rr);
+                let src_v = self.mmu.read8(addr);
+                let result = dst_v.wrapping_sub(src_v);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+                self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+                self.cpu.r.set_u8reg(&A, result);
             }
             Math::Inc_r(dst_r) => {
                 self.inc_pc(1);
@@ -463,6 +516,13 @@ impl Ctx {
                 let addr = 0xFF00 + (self.cpu.r.get_u8reg(off) as u16);
                 // println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
                 self.mmu.write8(addr,v);
+                self.inc_pc(1);
+            }
+            Load::Load_R_HI_R(dst, src) => {
+                self.inc_pc(1);
+                let addr = 0xFF00 + (self.cpu.r.get_u8reg(src) as u16);
+                let v = self.mmu.read8(addr);
+                self.cpu.r.set_u8reg(dst,v);
                 self.inc_pc(1);
             }
             Load::Load_R_R(dst, src) => {
