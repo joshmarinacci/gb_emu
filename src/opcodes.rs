@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use Compare::{CP_A_n, CP_A_r};
 use Instr::{CompareInst, JumpInstr, LoadInstr, MathInst, SpecialInstr};
 use Jump::{Absolute_cond_notzero_u16, Absolute_u16, Relative_cond_carry_i8, Relative_cond_notcarry_i8, Relative_cond_notzero_i8, Relative_cond_zero_i8, Relative_i8};
-use Load::{Load_A_addr_R2_inc, Load_addr_R2_r, Load_addr_R2_A_dec, Load_addr_R2_A_inc, Load_addr_u16_A, Load_addr_u16_R2, Load_HI_R_R, Load_HI_R_U8, Load_HI_U8_R, Load_R2_U16, Load_R_addr_R2, Load_R_R};
+use Load::{Load_A_addr_R2_inc, Load_addr_R2_A_dec, Load_addr_R2_A_inc, Load_addr_R2_r, Load_addr_u16_A, Load_addr_u16_R2, Load_HI_R_R, Load_HI_R_U8, Load_HI_U8_R, Load_R2_U16, Load_R_addr_R2, Load_R_R};
 use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BITR2, Dec_r, Dec_rr, Inc_r, Inc_rr, OR_A_r, RL, RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SLA, SUB_R_R, XOR_A_r};
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
@@ -10,6 +10,7 @@ use crate::opcodes::Load::{Load_A_addr_u16, Load_addr_R2_u8, Load_R_HI_R, Load_R
 use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
+use crate::{MMU, Z80};
 
 pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
@@ -499,5 +500,219 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         SpecialInstr(RST(h)) => format!("RST {:02x} -- put present address onto stack, jump to address {:02x}", h, h),
         SpecialInstr(RETZ()) => format!("RET Z  -- return of zflag is set"),
         SpecialInstr(HALT()) => format!("HALT -- completely stop the emulator"),
+    }
+}
+
+pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Special) {
+    match special {
+        Special::DisableInterrupts() => {
+            cpu.inc_pc();
+            mmu.hardware.IME = 0;
+        }
+        Special::EnableInterrupts() => {
+            cpu.inc_pc();
+            mmu.hardware.IME = 1;
+        }
+        Special::NOOP() => {
+            cpu.inc_pc();
+        }
+        Special::HALT() => {
+            cpu.inc_pc();
+            // self.running = false;
+        }
+        Special::STOP() => {
+            cpu.inc_pc();
+            mmu.hardware.IME = 0;
+        }
+        Special::CALL_u16() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.r.pc);
+            cpu.inc_pc();
+            cpu.inc_pc();
+            cpu.dec_sp();
+            cpu.dec_sp();
+            mmu.write16(cpu.r.sp, cpu.r.pc);
+            cpu.set_pc(addr);
+        }
+        Special::PUSH(rr) => {
+            cpu.inc_pc();
+            cpu.dec_sp();
+            cpu.dec_sp();
+            let value = cpu.r.get_u16reg(rr);
+            // println!("pushing {:04x}",value);
+            mmu.write16(cpu.r.sp, value);
+        }
+        Special::POP(rr) => {
+            cpu.inc_pc();
+            let value = mmu.read16(cpu.r.sp);
+            cpu.inc_sp();
+            cpu.inc_sp();
+            // println!("popped {:04x}",value);
+            // println!("sp is {:04x}",self.cpu.r.sp);
+            cpu.r.set_u16reg(rr,value);
+        }
+        Special::RET() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.r.sp);
+            cpu.inc_sp();
+            cpu.inc_sp();
+            cpu.set_pc(addr);
+        }
+        Special::RETI() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.r.sp);
+            cpu.inc_sp();
+            cpu.inc_sp();
+            cpu.set_pc(addr);
+            mmu.hardware.IME = 1;
+            // println!("returned from interrupt handler. going back to {:04x}",self.cpu.get_pc());
+        }
+        Special::RETZ() => {
+            cpu.inc_pc();
+            if cpu.r.zero_flag {
+                let addr = mmu.read16(cpu.r.sp);
+                cpu.inc_sp();
+                cpu.inc_sp();
+                cpu.set_pc(addr);
+            }
+        }
+        Special::RST(h) => {
+            cpu.inc_pc();
+            mmu.write16(cpu.r.sp, cpu.r.pc);
+            cpu.set_pc((0x0000 | h) as u16);
+        }
+    }
+}
+
+pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
+    match load {
+        Load_R_u8(r) => {
+            // load immediate u8 into the register
+            cpu.inc_pc();
+            let val = mmu.read8(cpu.r.pc);
+            cpu.r.set_u8reg(r, val);
+            cpu.inc_pc();
+        }
+        // put the memory address 0xFF00 + n into register r
+        Load::Load_HI_R_U8(r) => {
+            // println!("running LDH");
+            let n = mmu.read8(cpu.r.pc+1);
+            let addr = 0xFF00 + (n as u16);
+            cpu.r.set_u8reg(&r,mmu.read8(addr));
+            // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
+            cpu.inc_pc();
+            cpu.inc_pc();
+        }
+        Load::Load_HI_U8_R(r) => {
+            cpu.inc_pc();
+            let e = mmu.read8(cpu.r.pc);
+            cpu.inc_pc();
+            let addr = 0xFF00 + (e as u16);
+            let val = cpu.r.get_u8reg(r);
+            mmu.write8(addr, val);
+        },
+        //LD (FF00+C),A    put contents of A into address 0xF00+C
+        Load::Load_HI_R_R(off, r) => {
+            cpu.inc_pc();
+            let v = cpu.r.get_u8reg(r);
+            let addr = 0xFF00 + (cpu.r.get_u8reg(off) as u16);
+            // println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
+            mmu.write8(addr,v);
+            cpu.inc_pc();
+        }
+        Load::Load_R_HI_R(dst, src) => {
+            cpu.inc_pc();
+            let addr = 0xFF00 + (cpu.r.get_u8reg(src) as u16);
+            let v = mmu.read8(addr);
+            cpu.r.set_u8reg(dst,v);
+            cpu.inc_pc();
+        }
+        Load::Load_R_R(dst, src) => {
+            cpu.inc_pc();
+            let val = cpu.r.get_u8reg(src);
+            cpu.r.set_u8reg(dst,val);
+        }
+
+        Load::Load_R2_U16(rr) => {
+            cpu.inc_pc();
+            let val = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
+            cpu.r.set_u16reg(rr,val);
+            // println!("copied immediate value {:04x} into register {}",val,rr)
+        }
+        Load::Load_R_addr_R2(r, rr) => {
+            // load to the 8bit register A, data from the address in the 16 bit register
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(rr);
+            let val = mmu.read8(addr);
+            cpu.r.set_u8reg(r,val);
+            // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
+        }
+        Load::Load_A_addr_R2_inc(rr) => {
+            // load to the 8bit register A, data from the address in the 16 bit register, then increment that register
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(rr);
+            let val = mmu.read8(addr);
+            cpu.r.set_u8reg(&A,val);
+            // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
+            let (v2,_bool) = cpu.r.get_u16reg(rr).overflowing_add(1);
+            cpu.r.set_u16reg(rr,v2);
+        },
+        Load::Load_addr_R2_A_inc(rr) => {
+            cpu.inc_pc();
+            let val = cpu.r.get_u8reg(&A);
+            let addr = cpu.r.get_u16reg(rr);
+            mmu.write8(addr,val);
+            cpu.r.set_hl(cpu.r.get_hl()+1);
+        }
+        Load::Load_addr_R2_A_dec(rr) => {
+            cpu.inc_pc();
+            let val = cpu.r.get_u8reg(&A);
+            let addr = cpu.r.get_u16reg(rr);
+            mmu.write8(addr,val);
+            cpu.r.set_hl(cpu.r.get_hl()-1);
+        }
+
+        Load::Load_addr_R2_r(rr, r) => {
+            //copy contents of R to memory pointed to by RR
+            cpu.inc_pc();
+            let val = cpu.r.get_u8reg(r);
+            let addr = cpu.r.get_u16reg(rr);
+            mmu.write8(addr,val);
+        }
+        Load::Load_addr_R2_u8(rr) => {
+            cpu.inc_pc();
+            let val = mmu.read8(cpu.r.pc);
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(rr);
+            mmu.write8(addr,val);
+        }
+
+        Load::Load_addr_u16_A() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.r.pc);
+            let val = cpu.r.get_u8reg(&A);
+            mmu.write8(addr,val);
+            cpu.inc_pc();
+            cpu.inc_pc();
+        }
+        Load::Load_A_addr_u16() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.r.pc);
+            cpu.inc_pc();
+            cpu.inc_pc();
+            let val = mmu.read8(addr);
+            cpu.r.set_u8reg(&A,val);
+        }
+
+        Load::Load_addr_u16_R2(rr) => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.r.pc);
+            let val = cpu.r.get_u16reg(rr);
+            mmu.write16(addr,val);
+            cpu.inc_pc();
+            cpu.inc_pc();
+        }
     }
 }
