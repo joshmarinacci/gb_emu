@@ -17,6 +17,7 @@ use crate::mmu::TEST_ADDR;
 use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
 use crate::opcodes::DoubleRegister::BC;
 use crate::opcodes::RegisterName::{A, B, C, D};
+use crate::screen::Screen;
 
 struct Ctx {
     cpu:Z80,
@@ -638,56 +639,9 @@ impl Ctx {
         self.backbuffer.clear_with(0,0,0);
         self.draw_vram();
         if let Some(screen) = &mut self.screen {
-            //handle any pending inputs
-            while true {
-                if let Some(event) = screen.context.event_pump().unwrap().poll_event() {
-                    match event {
-                        Event::Quit { .. }
-                        | Event::KeyDown {
-                            keycode: Some(Keycode::Escape),
-                            ..
-                        } => {
-                            println!("quitting");
-                        },
-                        _ => {
-                            println!("othe event {:?}", event);
-                        }
-                    }
-                } else {
-                    println!("done with events");
-                    break;
-                }
-            }
-
-            screen.canvas.with_texture_canvas(&mut screen.texture, |can| {
-                for i in 0..self.backbuffer.w {
-                    for j in 0..self.backbuffer.h {
-                        let n: usize = ((j * self.backbuffer.w + i) * 4) as usize;
-                        //let px = img.get_pixel_32argb(i,j);
-                        // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
-                        let (r, g, b) = self.backbuffer.get_pixel_rgb(i, j);
-                        // println!("rgb {},{},{}",r,g,b);
-                        // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
-                        can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
-                        can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
-                    }
-                }
-            }).unwrap();
-
-            screen.canvas.copy(&screen.texture, None,
-                               Rect::new(0, 0, (self.backbuffer.w * 2) as u32, (self.backbuffer.h * 2) as u32));
-
-            screen.canvas.present();
-            ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-
+            screen.update_screen(&self.backbuffer);
         }
     }
-}
-
-struct Screen {
-    canvas:WindowCanvas,
-    texture:Texture,
-    context: Sdl,
 }
 
 pub fn start_debugger_loop(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u32, verbose: bool, breakpoint: u16, screen: bool) -> Result<()> {
@@ -724,20 +678,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>, fast_forward: u
     }
 
     if screen {
-        let sdl_context = sdl2::init().unwrap();
-        let window = sdl_context.video().unwrap()
-            .window("rust-sdl2 demo: Video", 256 * 2, 256 * 2)
-            .position_centered()
-            .opengl()
-            .build()
-            .map_err(|e| e.to_string()).unwrap();
-        let canvas:WindowCanvas = window.into_canvas().software().build().map_err(|e| e.to_string()).unwrap();
-        let tex = canvas.texture_creator().create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, ctx.backbuffer.w as u32, ctx.backbuffer.h as u32).unwrap();
-        ctx.screen = Some(Screen {
-            context:sdl_context,
-            canvas,
-            texture:tex,
-        });
+        ctx.screen = Some(Screen::init(256,256))
     }
     loop {
         step_forward(&mut ctx, &mut term)?;

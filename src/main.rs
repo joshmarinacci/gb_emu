@@ -4,6 +4,7 @@ mod mmu;
 mod opcodes;
 mod debugger;
 mod common;
+mod screen;
 
 use std::fmt::{Debug};
 use std::path::{PathBuf};
