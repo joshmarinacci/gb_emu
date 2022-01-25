@@ -132,6 +132,44 @@ pub struct Z80 {
     pub r: Z80_registers,
 }
 
+
+impl Z80 {
+    pub(crate) fn set_pc(&mut self, addr: u16) {
+        self.r.pc = addr;
+    }
+    pub(crate) fn get_pc(&self) -> u16 {
+        self.r.pc
+    }
+    pub(crate) fn inc_pc(&mut self) {
+        let (pc, overflowed) = self.r.pc.overflowing_add(1);
+        if overflowed {
+            // self.mmu.print_cram();
+            panic!("PC overflowed memory");
+        }
+        self.r.pc = pc;
+    }
+    pub(crate) fn get_sp(&self) -> u16 {
+        self.r.sp
+    }
+    pub(crate) fn inc_sp(&mut self) {
+        let (sp, overflowed) = self.r.sp.overflowing_add(1);
+        if overflowed {
+            // self.mmu.print_cram();
+            panic!("SPC overflowed memory");
+        }
+        self.r.sp = sp;
+    }
+    pub(crate) fn dec_sp(&mut self) {
+        println!("dec sp {:04x}",self.r.sp);
+        let (sp, overflowed) = self.r.sp.overflowing_sub(1);
+        if overflowed {
+            println!("sp is now {:04x}",sp);
+            panic!("SPC overflowed memory");
+        }
+        self.r.sp = sp;
+    }
+}
+
 impl Z80 {
     pub(crate) fn init() -> Z80 {
         Z80 {

@@ -1,6 +1,7 @@
 use std::cmp::{max, min};
 use crate::bootrom::BOOT_ROM;
 use crate::common::{get_bit, get_bit_as_bool};
+use crate::Z80;
 
 pub struct Hardware {
     pub SCY:u8,
@@ -18,6 +19,7 @@ pub struct Hardware {
     pub vblank_interrupt_enabled:bool,
 
     pub clock: i32,
+    pub interrupt_ready: bool,
 }
 
 impl Hardware {
@@ -37,6 +39,7 @@ impl Hardware {
             OBP1: 0,
             vblank_interrupt_enabled: false,
             clock: 0,
+            interrupt_ready: false
         }
     }
     pub fn update(&mut self) {
@@ -45,17 +48,7 @@ impl Hardware {
             self.LY = self.LY + 1;
         }
         if self.LY > 153 {
-            self.LY = 0
-        }
-        const screen_refresh_time: i32 = 70224;
-        if self.clock %  screen_refresh_time == 0 {
-            println!("screen refresh");
-        }
-        if self.clock % screen_refresh_time == (screen_refresh_time - 4560) {
-            println!("entering the vblank period");
-        }
-        if self.clock % screen_refresh_time == screen_refresh_time -1 {
-            println!("exiting vblank period");
+            self.LY = 0;
         }
     }
 }
@@ -106,8 +99,22 @@ impl MMU {
 }
 
 impl MMU {
-    pub(crate) fn update(&mut self) {
+    pub(crate) fn update(&mut self, cpu: &mut Z80) {
+        let old_LY = self.hardware.LY;
         self.hardware.update();
+        if old_LY > 0 && self.hardware.LY == 0 {
+            // println!("firing vblank interrupt {} {}",old_LY, self.hardware.LY);
+            if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
+                println!("really firing the vblank interrupt");
+                cpu.inc_pc();
+                cpu.dec_sp();
+                cpu.dec_sp();
+                println!("writing pc {:04x} to sp {:04x} ",cpu.r.pc, cpu.r.sp);
+                self.write16(cpu.r.sp, cpu.r.pc);
+                cpu.set_pc(VBLANK_INTERRUPT_ADDR);
+                println!("Jumping to handler at addr {:04x}", cpu.get_pc());
+            }
+        }
     }
 }
 
@@ -217,6 +224,7 @@ impl MMU {
             println!("wrote to the IF register {:08b}", val);
             if get_bit_as_bool(val,0) {
                 println!("enabling vblank");
+                self.hardware.vblank_interrupt_enabled = true;
             }
             // panic!("halting");
         }
@@ -349,3 +357,4 @@ const OBP1:u16 = 0xFF49; // Object Palette 1 Data (R/W)
 
 const INTERRUPT_ENABLE:u16 = 0xffff;
 
+const VBLANK_INTERRUPT_ADDR:u16 = 0x40;

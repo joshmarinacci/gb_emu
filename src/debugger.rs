@@ -7,8 +7,10 @@ use Load::Load_R_u8;
 use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
 use crate::mmu::TEST_ADDR;
-use crate::opcodes::{Compare, Instr, Jump, Load, lookup_opcode, Math, Special, u8_as_i8};
+use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
+use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
+use crate::opcodes::Instr::{LoadInstr, SpecialInstr};
 use crate::opcodes::RegisterName::{A, B, C, D};
 use crate::screen::Screen;
 
@@ -55,7 +57,7 @@ impl Ctx {
             panic!("unknown op code");
         }
         let old_ly = self.mmu.hardware.LY;
-        self.mmu.update();
+        self.mmu.update(&mut self.cpu);
         if old_ly != 0 && self.mmu.hardware.LY == 0 {
             println!("vsync");
             self.needs_redraw = true;
@@ -461,7 +463,7 @@ impl Ctx {
                 if self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
             }
             Jump::Relative_cond_notzero_i8() => {
-                self.inc_pc(1);
+                self.cpu.inc_pc();
                 let e = u8_as_i8(self.mmu.read8(self.cpu.r.pc));
                 self.inc_pc(1);
                 if !self.cpu.r.zero_flag { self.set_pc((((self.cpu.r.pc) as i32) + e as i32) as u16); }
@@ -532,10 +534,10 @@ impl Ctx {
             }
 
             Load::Load_R2_U16(rr) => {
-                self.inc_pc(1);
-                let val = self.mmu.read16(self.cpu.r.pc);
-                self.inc_pc(1);
-                self.inc_pc(1);
+                self.cpu.inc_pc();
+                let val = self.mmu.read16(self.cpu.get_pc());
+                self.cpu.inc_pc();
+                self.cpu.inc_pc();
                 self.cpu.r.set_u16reg(rr,val);
                 // println!("copied immediate value {:04x} into register {}",val,rr)
             }
@@ -573,7 +575,7 @@ impl Ctx {
             }
 
             Load::Load_addr_R2_r(rr, r) => {
-                //copy contents of A to memory pointed to by RR
+                //copy contents of R to memory pointed to by RR
                 self.inc_pc(1);
                 let val = self.cpu.r.get_u8reg(r);
                 let addr = self.cpu.r.get_u16reg(rr);
@@ -662,9 +664,9 @@ impl Ctx {
             Special::RETI() => {
                 self.inc_pc(1);
                 let addr = self.mmu.read16(self.cpu.r.sp);
-                self.inc_sp();
-                self.inc_sp();
-                self.set_pc(addr);
+                self.cpu.inc_sp();
+                self.cpu.inc_sp();
+                self.cpu.set_pc(addr);
                 self.mmu.hardware.IME = 1;
             }
             Special::RETZ() => {
@@ -1085,16 +1087,26 @@ impl Ctx {
     pub(crate) fn execute_test(&mut self) {
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if let Some(instr) = lookup_opcode(opcode) {
-            println!("executing  {:02x}   PC {:04x}  SP {:04x} ",opcode, self.cpu.r.pc, self.cpu.r.sp);
+            println!("executing {}  PC {:04x}  SP {:04x}  {:02x}  {:?}",  self.clock,
+                     self.cpu.r.pc, self.cpu.r.sp, opcode, instr);
             self.execute_instruction(&instr);
+            print_registers(&self.cpu, &self.mmu);
         } else {
             println!("current cycle {}", self.clock);
             println!("unknown op code {:04x}",opcode);
             panic!("unknown op code");
         }
-        self.mmu.update();
+        self.mmu.update(&mut self.cpu);
         self.clock+=1;
     }
+}
+
+fn print_registers(cpu: &Z80, mmu:&MMU) {
+    println!("A {:02x}", cpu.r.get_u8reg(&RegisterName::A));
+    println!("B {:02x}", cpu.r.get_u8reg(&RegisterName::B));
+    println!("LY {:02x} ", mmu.hardware.LY);
+    println!("PC {:02x} ", cpu.get_pc());
+    println!("SP {:02x} ", cpu.get_sp());
 }
 
 #[test]
@@ -1165,4 +1177,85 @@ fn test_push_pop() {
     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
 
+}
+
+#[test]
+fn test_vblank_interrupt() {
+    let mut rom = vec![
+        // start at 0x0000
+        op(Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::SP))), // LD SP 16 init SP to 0xFFFE
+        0xFE, 0xFF,
+        //register handler?
+        //enable interrupts
+
+        // enable vblank interrupts by setting 0xFFF0 to 0x01
+        op(Instr::LoadInstr(Load_R_u8(B))), // LD B, 0x01
+        0x01,
+        // LD HL, 0xFF0F
+        op(Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::HL))),
+        0x0F,
+        0xFF,
+        op(Instr::LoadInstr(Load::Load_addr_R2_r(DoubleRegister::HL,RegisterName::B))), // write 0x01 to the IE register
+
+        //turn on interrupts
+        op(Instr::SpecialInstr(Special::EnableInterrupts())), // EI code
+
+        // set B to 65
+        op(Instr::LoadInstr(Load_R_u8(B))), // LD B 0x65
+        0x65, //02
+
+        op(Instr::LoadInstr(Load::Load_R_R(RegisterName::A,RegisterName::B))), //copy B to A
+        op(Instr::CompareInst(Compare::CP_A_n())), //spin loop looking for A is 66
+        0x66, // u8 66
+        op(Instr::JumpInstr(Jump::Relative_cond_notzero_i8())),// JR NZ jump back two spaces if not zero yet//05
+        0xfb, // -2
+
+
+        op(Instr::LoadInstr(Load_R_u8(B))), //if got here then test is over, set B to 67
+        0x67,
+    ];
+
+    println!("length is {}",rom.len());
+    for i in rom.len() .. 0x40 {
+        rom.push(op(Instr::SpecialInstr(Special::NOOP())));
+    }
+    println!("length is {}",rom.len());
+    // add the vblank handler
+    rom.push(op(Instr::LoadInstr(Load_R_u8(B)))); // set B to 66
+    rom.push(0x66);
+    rom.push(op(Instr::SpecialInstr(Special::RETI())));
+    println!("length is {}",rom.len());
+
+
+    // test loops until B is 67
+    let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
+    print_registers(&ctx.cpu, &ctx.mmu);
+    while ctx.cpu.r.get_u8reg(&B) != 0x67 {
+        ctx.execute_test();
+        // if instruction counter reaches some high number then we clearly got stuck
+        if ctx.clock > 3090 {
+            panic!("stuck inside a loop!");
+        }
+        // if ctx.mmu.hardware.LY == 0x99 {
+        //     panic!("hit the vblank");
+        // }
+    }
+    println!("reached the end");
+}
+
+fn op(ins: Instr) -> u8 {
+    println!("lookup opcode for instruction {:?}",ins);
+    match ins {
+        Instr::LoadInstr(Load::Load_R_u8(RegisterName::B)) => 0x06,
+        Instr::LoadInstr(Load::Load_R_R(RegisterName::A,RegisterName::B)) => 0x78,
+        Instr::CompareInst(Compare::CP_A_n()) => 0xFE,
+        Instr::JumpInstr(Jump::Relative_cond_notzero_i8()) => 0x20,
+        Instr::SpecialInstr(Special::EnableInterrupts()) => 0xFB,
+        Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::HL)) => 0x21,
+        Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::SP)) => 0x31,
+        Instr::LoadInstr(Load::Load_addr_R2_r(DoubleRegister::HL, B)) => 0x70,
+        Instr::SpecialInstr(Special::NOOP()) => 0x00,
+        Instr::SpecialInstr(Special::RETI()) => 0xD9,
+        _ => panic!("unknown instruction to parse"),
+    }
 }

@@ -15,12 +15,15 @@ pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
 }
 
+#[derive(Debug)]
 pub enum RegisterName {
     A,B,C,D,E,H,L,F,
 }
+#[derive(Debug)]
 pub enum DoubleRegister {
     BC,DE,HL,SP,AF,
 }
+#[derive(Debug)]
 pub enum Special {
     NOOP(),
     STOP(),
@@ -35,6 +38,7 @@ pub enum Special {
     RETI(),
     RST(u8),
 }
+#[derive(Debug)]
 pub enum Load {
     Load_R_u8(RegisterName),
     Load_R_R(RegisterName, RegisterName),
@@ -53,6 +57,7 @@ pub enum Load {
     Load_addr_u16_A(), // Load (nn), A
     Load_addr_u16_R2(DoubleRegister),
 }
+#[derive(Debug)]
 pub enum Jump {
     Absolute_u16(),
     Relative_i8(),
@@ -62,11 +67,13 @@ pub enum Jump {
     Relative_cond_notzero_i8(),
     Absolute_cond_notzero_u16(),
 }
+#[derive(Debug)]
 pub enum Compare {
     CP_A_r(RegisterName),
     CP_A_addr(DoubleRegister),
     CP_A_n()
 }
+#[derive(Debug)]
 pub enum Math {
     ADD_R_u8(RegisterName),
     ADD_R_R(RegisterName,RegisterName),
@@ -98,6 +105,7 @@ pub enum Math {
     RRCA(),
     SLA(RegisterName),
 }
+#[derive(Debug)]
 pub enum Instr {
     LoadInstr(Load),
     SpecialInstr(Special),
