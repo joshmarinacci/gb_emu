@@ -635,7 +635,9 @@ impl Ctx {
         self.cpu.r.sp = sp;
     }
     fn draw_screen(&mut self) {
-        if let Some(screen) = self.screen.borrow_mut() {
+        self.backbuffer.clear_with(0,0,0);
+        self.draw_vram();
+        if let Some(screen) = &mut self.screen {
             //handle any pending inputs
             while true {
                 if let Some(event) = screen.context.event_pump().unwrap().poll_event() {
@@ -655,17 +657,6 @@ impl Ctx {
                     println!("done with events");
                     break;
                 }
-            }
-
-            self.backbuffer.clear_with(0,0,0);
-            let vram = self.mmu.get_current_bg_display_data();
-            let tiledata = self.mmu.fetch_tiledata_block2();
-            for (y,row) in vram.chunks_exact(32).enumerate() {
-                for (x, tile_id) in row.iter().enumerate() {
-                    draw_tile_at(&mut self.backbuffer, x*8, y*8, tile_id, tiledata);
-                }
-                let hex_tile = row.iter().map(|b| format!("{:02x} ", b)).collect::<String>();
-                // println!("{}",hex_tile);
             }
 
             screen.canvas.with_texture_canvas(&mut screen.texture, |can| {
@@ -930,51 +921,52 @@ fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()>  {
     Ok(())
 }
 
-fn draw_vram(ctx:&mut Ctx) -> Result<()>{
-    let lcdc = ctx.mmu.hardware.LCDC;
-    println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
-    println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
-    println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
-    println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
-    println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
-    println!("window enable? {}",get_bit_as_bool(lcdc,5));
-    println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
-    println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
+impl Ctx {
+    fn draw_vram(&mut self) -> Result<()> {
+        let lcdc = self.mmu.hardware.LCDC;
+        // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
+        // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
+        // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
+        // println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
+        // println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
+        // println!("window enable? {}",get_bit_as_bool(lcdc,5));
+        // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
+        // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
-    let screen_on = get_bit_as_bool(lcdc,7);
-    let window_enabled = get_bit_as_bool(lcdc,5);
-    let bg_enabled = true; //bg is always enabled
-    let bg_tilemap = if get_bit_as_bool(lcdc, 3) { &ctx.mmu.data[0x9C00 .. 0x9FFF]} else { &ctx.mmu.data[0x9800 .. 0x9BFF]};
+        let screen_on = get_bit_as_bool(lcdc, 7);
+        let window_enabled = get_bit_as_bool(lcdc, 5);
+        let bg_enabled = true; //bg is always enabled
+        let bg_tilemap = if get_bit_as_bool(lcdc, 3) { &self.mmu.data[0x9C00..0x9FFF] } else { &self.mmu.data[0x9800..0x9BFF] };
 
-    let mut low_data_start = 0x9000;
-    let mut low_data_end   = 0x97FF;
-    if get_bit_as_bool(lcdc,4) {
-        low_data_start = 0x8000;
-        low_data_end   = 0x87FF;
-    }
-    let lo_data = &ctx.mmu.data[low_data_start .. low_data_end];
+        let mut low_data_start = 0x9000;
+        let mut low_data_end = 0x97FF;
+        if get_bit_as_bool(lcdc, 4) {
+            low_data_start = 0x8000;
+            low_data_end = 0x87FF;
+        }
+        let lo_data = &self.mmu.data[low_data_start..low_data_end];
 
-    if screen_on {
-        if bg_enabled {
-            // println!("low data {:04x} {:04x}",low_data_start, low_data_end);
-            // println!("draw background. tilemap = {:?}", bg_tilemap);
-            // println!("tiledata = {:?}",lo_data);
-            for (y,row) in bg_tilemap.chunks_exact(32).enumerate() {
-                for (x, tile_id) in row.iter().enumerate() {
-                    if *tile_id > 0 {
-                        println!("tile id is {}", tile_id);
+        if screen_on {
+            if bg_enabled {
+                // println!("low data {:04x} {:04x}",low_data_start, low_data_end);
+                // println!("draw background. tilemap = {:?}", bg_tilemap);
+                // println!("tiledata = {:?}",lo_data);
+                for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
+                    for (x, tile_id) in row.iter().enumerate() {
+                        if *tile_id > 0 {
+                            // println!("tile id is {}", tile_id);
+                        }
+                        draw_tile_at(&mut self.backbuffer, x * 8, y * 8, tile_id, lo_data);
                     }
-                    draw_tile_at(&mut ctx.backbuffer,x*8,y*8,tile_id,lo_data);
                 }
             }
         }
+        Ok(())
     }
-    Ok(())
 }
 
-
 fn dump_vram(term: &Term, ctx: &mut Ctx) -> Result<()>{
-    draw_vram(ctx);
+    ctx.draw_vram();
     ctx.backbuffer.write_to_file("vram.png");
     Ok(())
 }
