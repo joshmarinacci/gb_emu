@@ -160,7 +160,7 @@ impl Z80 {
         self.r.sp = sp;
     }
     pub(crate) fn dec_sp(&mut self) {
-        println!("dec sp {:04x}",self.r.sp);
+        // println!("dec sp {:04x}",self.r.sp);
         let (sp, overflowed) = self.r.sp.overflowing_sub(1);
         if overflowed {
             println!("sp is now {:04x}",sp);

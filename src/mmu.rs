@@ -105,13 +105,13 @@ impl MMU {
         if old_LY > 0 && self.hardware.LY == 0 {
             // println!("firing vblank interrupt {} {}",old_LY, self.hardware.LY);
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
-                println!("really firing the vblank interrupt");
+                // println!("really firing the vblank interrupt");
                 cpu.dec_sp();
                 cpu.dec_sp();
-                println!("writing pc {:04x} to sp {:04x} ",cpu.r.pc, cpu.r.sp);
+                // println!("writing pc {:04x} to sp {:04x} ",cpu.r.pc, cpu.r.sp);
                 self.write16(cpu.r.sp, cpu.r.pc);
                 cpu.set_pc(VBLANK_INTERRUPT_ADDR);
-                println!("Jumping to handler at addr {:04x}", cpu.get_pc());
+                // println!("Jumping to handler at addr {:04x}", cpu.get_pc());
             }
         }
     }
@@ -266,7 +266,10 @@ impl MMU {
         if addr == OBP1_ADDR  { self.hardware.OBP1 = val; }
         if addr == WX_ADDR  { self.hardware.WX = val; }
         if addr == WY_ADDR  { self.hardware.WY = val; }
-        if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
+        if addr == SCX_SCROLL_X {
+            println!("writing to scroll x");
+            self.hardware.SCX = val;
+        }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
