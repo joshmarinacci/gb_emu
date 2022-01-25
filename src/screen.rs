@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::time::Duration;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -30,7 +31,7 @@ impl Screen {
             texture:tex,
         }
     }
-    pub fn update_screen(&mut self, backbuffer:&Bitmap) -> bool {
+    pub fn update_screen(&mut self, backbuffer_m: &Mutex<Bitmap>) -> bool {
         //handle any pending inputs
         while true {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
@@ -44,37 +45,41 @@ impl Screen {
                         return false;
                     },
                     _ => {
-                        println!("othe event {:?}", event);
+                        // println!("othe event {:?}", event);
                     }
                 }
             } else {
-                println!("done with events");
+                // println!("done with events");
                 break;
             }
         }
 
-        self.canvas.with_texture_canvas(&mut self.texture, |can| {
-            for i in 0..backbuffer.w {
-                for j in 0..backbuffer.h {
-                    let n: usize = ((j * backbuffer.w + i) * 4) as usize;
-                    //let px = img.get_pixel_32argb(i,j);
-                    // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
-                    let (r, g, b) = backbuffer.get_pixel_rgb(i, j);
-                    // println!("rgb {},{},{}",r,g,b);
-                    // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
-                    can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
-                    can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
+        {
+            let backbuffer = backbuffer_m.lock().unwrap();
+            self.canvas.with_texture_canvas(&mut self.texture, |can| {
+                for i in 0..backbuffer.w {
+                    for j in 0..backbuffer.h {
+                        let n: usize = ((j * backbuffer.w + i) * 4) as usize;
+                        //let px = img.get_pixel_32argb(i,j);
+                        // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
+                        let (r, g, b) = backbuffer.get_pixel_rgb(i, j);
+                        // println!("rgb {},{},{}",r,g,b);
+                        // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
+                        can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
+                        can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
+                    }
                 }
-            }
-        }).unwrap();
+            }).unwrap();
 
-        self.canvas.copy(&self.texture, None,
-                           Rect::new(0, 0,
-                                     (backbuffer.w * 2) as u32,
-                                     (backbuffer.h * 2) as u32));
 
+            self.canvas.copy(&self.texture, None,
+                               Rect::new(0, 0,
+                                         (backbuffer.w * 2) as u32,
+                                         (backbuffer.h * 2) as u32));
+
+        }
         self.canvas.present();
-        ::std::thread::sleep(Duration::from_millis(100));
+        ::std::thread::sleep(Duration::from_millis(10));
         return true;
     }
 }

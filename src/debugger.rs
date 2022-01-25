@@ -1,6 +1,7 @@
-use std::io;
+use std::{io, thread};
 use console::{Color, Style, Term};
 use io::Result;
+use std::sync::{Arc, Mutex, MutexGuard};
 use console::Color::White;
 use Load::Load_R_u8;
 use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
@@ -20,8 +21,7 @@ struct Ctx {
     cart: Option<RomFile>,
     full_registers_visible: bool,
     test_memory_visible: bool,
-    backbuffer:Bitmap,
-    screen:Option<Screen>,
+    needs_redraw:bool,
 }
 
 impl Ctx {
@@ -35,14 +35,14 @@ impl Ctx {
             cart: None,
             full_registers_visible: false,
             test_memory_visible: false,
-            backbuffer: Bitmap::init(256,256),
-            screen: None
+            needs_redraw: false,
         }
     }
 }
 
 impl Ctx {
     pub(crate) fn execute(&mut self, term: &mut Term, verbose: bool) -> Result<()>{
+        self.needs_redraw = false;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if verbose {
             term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode))?;
@@ -58,7 +58,8 @@ impl Ctx {
         self.mmu.update();
         if old_ly != 0 && self.mmu.hardware.LY == 0 {
             println!("vsync");
-            self.draw_screen();
+            self.needs_redraw = true;
+            // self.draw_screen();
         }
         self.clock+=1;
         Ok(())
@@ -627,15 +628,10 @@ impl Ctx {
         }
         self.cpu.r.sp = sp;
     }
-    fn draw_screen(&mut self) {
-        self.backbuffer.clear_with(0,0,0);
-        self.draw_vram();
-        if let Some(screen) = &mut self.screen {
-            let should_continue = screen.update_screen(&self.backbuffer);
-            if !should_continue {
-                self.running = false;
-            }
-        }
+    fn draw_screen(&mut self, backbuffer: &mut Bitmap) {
+        // let mut backbuffer:Bitmap = &backbuffer_lock.lock().unwrap();
+        backbuffer.clear_with(0,0,0);
+        self.draw_vram(backbuffer);
     }
 }
 
@@ -645,6 +641,8 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       breakpoint:u16,
                       verbose:bool,
                       interactive:bool) -> Result<()> {
+    let backbuffer_bitmap = Bitmap::init(256,256);
+    let backbuffer = Arc::new(Mutex::new(backbuffer_bitmap));
     let mut ctx = Ctx {
         cpu, mmu, clock:0,
         running:true,
@@ -652,8 +650,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         cart,
         full_registers_visible:false,
         test_memory_visible: false,
-        backbuffer: Bitmap::init(256,256),
-        screen:None,
+        needs_redraw: false
     };
     let mut term = Term::stdout();
 
@@ -662,20 +659,35 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         ctx.execute(&mut term, false)?;
     }
 
-    if screen {
-        ctx.screen = Some(Screen::init(256,256))
-    }
-    while ctx.running {
-        if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
-            println!("done hit the breakpoint");
-            ctx.interactive = true;
+    let mut screen = Screen::init(256, 256);
+
+    let bb2 = backbuffer.clone();
+    let hand = thread::spawn(move | |
+        {
+        while ctx.running {
+            if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
+                println!("done hit the breakpoint");
+                ctx.interactive = true;
+            }
+            if ctx.interactive {
+                step_forward(&mut ctx, &mut term).unwrap();
+            } else {
+                ctx.execute(&mut term, verbose).unwrap();
+            }
+            if ctx.needs_redraw {
+                let mut bb = bb2.lock().unwrap();
+                ctx.draw_screen(&mut bb);
+                println!("redrew to back buffer");
+            }
         }
-        if ctx.interactive {
-            step_forward(&mut ctx, &mut term)?;
-        } else {
-            ctx.execute(&mut term, verbose)?;
+    });
+    while true {
+        let should_continue = screen.update_screen(&backbuffer);
+        if !should_continue {
+            break;
         }
     }
+    // hand.join();
     Ok(())
 }
 
@@ -784,9 +796,6 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term)  -> Result<()>{
         },
         _ => {}
     };
-    if let Some(screen) = &mut ctx.screen {
-        ctx.draw_screen();
-    }
     Ok(())
 }
 
@@ -856,7 +865,7 @@ fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()>  {
 }
 
 impl Ctx {
-    fn draw_vram(&mut self) -> Result<()> {
+    fn draw_vram(&mut self, backbuffer: &mut Bitmap) -> Result<()> {
         let lcdc = self.mmu.hardware.LCDC;
         // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
         // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
@@ -890,7 +899,7 @@ impl Ctx {
                         if *tile_id > 0 {
                             // println!("tile id is {}", tile_id);
                         }
-                        draw_tile_at(&mut self.backbuffer, x * 8, y * 8, tile_id, lo_data);
+                        draw_tile_at(backbuffer, x * 8, y * 8, tile_id, lo_data);
                     }
                 }
             }
@@ -900,8 +909,8 @@ impl Ctx {
 }
 
 fn dump_vram(term: &Term, ctx: &mut Ctx) -> Result<()>{
-    ctx.draw_vram();
-    ctx.backbuffer.write_to_file("vram.png");
+    // ctx.draw_vram();
+    // ctx.backbuffer.write_to_file("vram.png");
     Ok(())
 }
 
