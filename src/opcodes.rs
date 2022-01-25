@@ -9,7 +9,7 @@ use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::{Load_R_HI_R, Load_R_u8};
 use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
-use crate::opcodes::Special::{CALL_u16, DisableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
+use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 
 pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
@@ -26,6 +26,7 @@ pub enum Special {
     STOP(),
     HALT(),
     DisableInterrupts(),
+    EnableInterrupts(),
     CALL_u16(),
     PUSH(DoubleRegister),
     POP(DoubleRegister),
@@ -241,6 +242,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
         0x00 => Some(SpecialInstr(NOOP())),
         0xF3 => Some(SpecialInstr(DisableInterrupts())),
+        0xFB => Some(SpecialInstr(EnableInterrupts())),
         0x10 => Some(SpecialInstr(STOP())),
         0x76 => Some(SpecialInstr(HALT())),
         0xCD => Some(SpecialInstr(CALL_u16())),
@@ -472,6 +474,7 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         MathInst(RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
 
         SpecialInstr(DisableInterrupts()) => format!("DI -- disable interrupts"),
+        SpecialInstr(EnableInterrupts()) => format!("EI -- enable interrupts"),
         SpecialInstr(NOOP()) => format!("NOOP -- do nothing"),
         SpecialInstr(STOP()) => format!("STOP -- stop interrupts?"),
         SpecialInstr(CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),

@@ -603,6 +603,10 @@ impl Ctx {
                 self.inc_pc(1);
                 self.mmu.hardware.IME = 0;
             }
+            Special::EnableInterrupts() => {
+                self.inc_pc(1);
+                self.mmu.hardware.IME = 1;
+            }
             Special::NOOP() => {
                 self.inc_pc(1);
             }
@@ -927,19 +931,25 @@ fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()>  {
 impl Ctx {
     fn draw_vram(&mut self, backbuffer: &mut Bitmap) -> Result<()> {
         let lcdc = self.mmu.hardware.LCDC;
-        // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
-        // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
-        // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
-        // println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
-        // println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
-        // println!("window enable? {}",get_bit_as_bool(lcdc,5));
-        // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
-        // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
+        println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
+        println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
+        println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
+        println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
+        println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
+        println!("window enable? {}",get_bit_as_bool(lcdc,5));
+        println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
+        println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
         let screen_on = get_bit_as_bool(lcdc, 7);
         let window_enabled = get_bit_as_bool(lcdc, 5);
         let bg_enabled = true; //bg is always enabled
-        let bg_tilemap = if get_bit_as_bool(lcdc, 3) { &self.mmu.data[0x9C00..0x9FFF] } else { &self.mmu.data[0x9800..0x9BFF] };
+        let mut bg_tilemap_start = 0x9800;
+        let mut bg_tilemap_end = 0x9BFF;
+        if get_bit_as_bool(lcdc,3) {
+            bg_tilemap_start = 0x9C00;
+            bg_tilemap_end  = 0x9FFF;
+        }
+        let bg_tilemap = &self.mmu.data[bg_tilemap_start .. bg_tilemap_end];
 
         let mut low_data_start = 0x9000;
         let mut low_data_end = 0x97FF;
@@ -951,9 +961,10 @@ impl Ctx {
 
         if screen_on {
             if bg_enabled {
-                // println!("low data {:04x} {:04x}",low_data_start, low_data_end);
-                // println!("draw background. tilemap = {:?}", bg_tilemap);
-                // println!("tiledata = {:?}",lo_data);
+                println!("low data {:04x} {:04x}",low_data_start, low_data_end);
+                println!("tiledata = {:?}",lo_data);
+                println!("bg map {:04x} {:04x}",bg_tilemap_start, bg_tilemap_end);
+                println!("draw background. tilemap = {:?}", bg_tilemap);
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
                     for (x, tile_id) in row.iter().enumerate() {
                         if *tile_id > 0 {
