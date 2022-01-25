@@ -266,10 +266,7 @@ impl MMU {
         if addr == OBP1_ADDR  { self.hardware.OBP1 = val; }
         if addr == WX_ADDR  { self.hardware.WX = val; }
         if addr == WY_ADDR  { self.hardware.WY = val; }
-        if addr == SCX_SCROLL_X {
-            println!("writing to scroll x");
-            self.hardware.SCX = val;
-        }
+        if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
         if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);

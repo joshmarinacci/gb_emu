@@ -1001,7 +1001,11 @@ impl Ctx {
                         if *tile_id > 0 {
                             // println!("tile id is {}", tile_id);
                         }
-                        draw_tile_at(backbuffer, x * 8, y * 8, tile_id, lo_data);
+                        draw_tile_at(backbuffer,
+                                     x * 8 + (self.mmu.hardware.SCX as usize),
+                                     y * 8 + (self.mmu.hardware.SCY as usize),
+                                     tile_id,
+                                     lo_data);
                     }
                 }
             }
