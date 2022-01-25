@@ -106,7 +106,6 @@ impl MMU {
             // println!("firing vblank interrupt {} {}",old_LY, self.hardware.LY);
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
                 println!("really firing the vblank interrupt");
-                cpu.inc_pc();
                 cpu.dec_sp();
                 cpu.dec_sp();
                 println!("writing pc {:04x} to sp {:04x} ",cpu.r.pc, cpu.r.sp);

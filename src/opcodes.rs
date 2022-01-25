@@ -6,7 +6,7 @@ use Load::{Load_A_addr_R2_inc, Load_addr_R2_r, Load_addr_R2_A_dec, Load_addr_R2_
 use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BITR2, Dec_r, Dec_rr, Inc_r, Inc_rr, OR_A_r, RL, RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SLA, SUB_R_R, XOR_A_r};
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
-use crate::opcodes::Load::{Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
+use crate::opcodes::Load::{Load_A_addr_u16, Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
 use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
@@ -55,6 +55,7 @@ pub enum Load {
     Load_addr_R2_r(DoubleRegister, RegisterName),      // Load (rr), R
     Load_addr_R2_u8(DoubleRegister),
     Load_addr_u16_A(), // Load (nn), A
+    Load_A_addr_u16(), // Load (nn), A
     Load_addr_u16_R2(DoubleRegister),
 }
 #[derive(Debug)]
@@ -247,6 +248,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 
         0xe2 => Some(LoadInstr(Load_HI_R_R(C, A))),
         0xea => Some(LoadInstr(Load_addr_u16_A())),
+        0xFA => Some(LoadInstr(Load_A_addr_u16())),
         0xF2 => Some(LoadInstr(Load_R_HI_R(A,C))),
 
 
@@ -439,6 +441,7 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         LoadInstr(Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}", rr, rr),
         LoadInstr(Load_R_R(dst, src)) => format!("LD {},{} -- copy {} to {}", dst, src, src, dst),
         LoadInstr(Load_addr_u16_A()) => format!("LD (nn),A -- load A into memory at address from immediate u16"),
+        LoadInstr(Load_A_addr_u16()) => format!("LD A (nn) -- Load contents of memory at address from immediate u16 into A"),
         LoadInstr(Load_addr_u16_R2(rr)) => format!("LD (nn),{} -- load {} into memory at address from immediate u16", rr, rr),
 
         JumpInstr(Absolute_u16()) => format!("JP nn -- Jump unconditionally to absolute address"),

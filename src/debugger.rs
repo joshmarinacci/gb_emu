@@ -3,6 +3,7 @@ use console::{Color, Style, Term};
 use io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 use console::Color::White;
+use log::{debug, info};
 use Load::Load_R_u8;
 use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
@@ -54,6 +55,7 @@ impl Ctx {
         } else {
             term.write_line(&format!("current cycle {}", self.clock))?;
             println!("unknown op code {:04x}",opcode);
+            println!("current memory is PC {:04x} ",self.cpu.get_pc());
             panic!("unknown op code");
         }
         let old_ly = self.mmu.hardware.LY;
@@ -62,6 +64,9 @@ impl Ctx {
             println!("vsync");
             self.needs_redraw = true;
             // self.draw_screen();
+        }
+        if self.cpu.get_pc() == 0x0040 {
+            println!("Jumped to vblank handler");
         }
         self.clock+=1;
         Ok(())
@@ -442,6 +447,8 @@ impl Ctx {
             Jump::Absolute_u16() => {
                 let addr = self.mmu.read16(self.cpu.r.pc + 1);
                 self.set_pc(addr);
+                // println!("abs jump to {:04x}",addr);
+                debug!("Abs Jump to {:04x}",addr);
             },
             Jump::Relative_cond_carry_i8() => {
                 self.inc_pc(1);
@@ -596,6 +603,14 @@ impl Ctx {
                 self.mmu.write8(addr,val);
                 self.inc_pc(2);
             }
+            Load::Load_A_addr_u16() => {
+                self.cpu.inc_pc();
+                let addr = self.mmu.read16(self.cpu.r.pc);
+                self.cpu.inc_pc();
+                self.cpu.inc_pc();
+                let val = self.mmu.read8(addr);
+                self.cpu.r.set_u8reg(&A,val);
+            }
 
             Load::Load_addr_u16_R2(rr) => {
                 self.inc_pc(1);
@@ -668,6 +683,7 @@ impl Ctx {
                 self.cpu.inc_sp();
                 self.cpu.set_pc(addr);
                 self.mmu.hardware.IME = 1;
+                println!("returned from interrupt handler. going back to {:04x}",self.cpu.get_pc());
             }
             Special::RETZ() => {
                 self.inc_pc(1);
@@ -853,6 +869,12 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term)  -> Result<()>{
         'J' => {
             term.write_line("doing 16 instructions")?;
             for n in 0..16 {
+                ctx.execute(term, false)?;
+            }
+        },
+        'u' => {
+            term.write_line("doing 256 instructions")?;
+            for n in 0..256 {
                 ctx.execute(term, false)?;
             }
         },
