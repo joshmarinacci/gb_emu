@@ -572,10 +572,17 @@ impl Ctx {
                 self.cpu.r.set_hl(self.cpu.r.get_hl()-1);
             }
 
-            Load::Load_addr_R2_A(rr,r) => {
+            Load::Load_addr_R2_r(rr, r) => {
                 //copy contents of A to memory pointed to by RR
                 self.inc_pc(1);
                 let val = self.cpu.r.get_u8reg(r);
+                let addr = self.cpu.r.get_u16reg(rr);
+                self.mmu.write8(addr,val);
+            }
+            Load::Load_addr_R2_u8(rr) => {
+                self.inc_pc(1);
+                let val = self.mmu.read8(self.cpu.r.pc);
+                self.inc_pc(1);
                 let addr = self.cpu.r.get_u16reg(rr);
                 self.mmu.write8(addr,val);
             }

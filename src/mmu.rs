@@ -186,16 +186,16 @@ impl MMU {
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr < 0x8000 {
-            println!("trying to write outside of RW memory {:04x}",val);
+            println!("trying to write outside of RW memory {:04x} at addr {:04x}",val,addr);
             panic!("halting");
         }
         if addr == SB_REGISTER {
-            println!("wrote to the SB register {:04x}", val);
-            panic!("halting");
+            println!("wrote to the SB register {:08b}", val);
+            // panic!("halting");
         }
         if addr == SC_REGISTER {
-            println!("wrote to the SC register {:04x}", val);
-            panic!("halting");
+            println!("wrote to the SC register {:08b}", val);
+            // panic!("halting");
         }
         if addr == DIV_REGISTER {
             println!("wrote to the DIV register {:04x}", val);
@@ -210,12 +210,15 @@ impl MMU {
             panic!("halting");
         }
         if addr == TAC_REGISTER {
-            println!("wrote to the TAC register {:04x}", val);
+            println!("wrote to the TAC register {:08b}", val);
             panic!("halting");
         }
         if addr == IF_INTERRUPT_FLAG {
-            println!("wrote to the TAC register {:04x}", val);
-            panic!("halting");
+            println!("wrote to the IF register {:08b}", val);
+            if get_bit_as_bool(val,0) {
+                println!("enabling vblank");
+            }
+            // panic!("halting");
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
             // println!("writing in VRAM {:04x}  {:x}", addr, val);

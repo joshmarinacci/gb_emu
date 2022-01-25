@@ -2,11 +2,11 @@ use std::fmt::{Display, Formatter};
 use Compare::{CP_A_n, CP_A_r};
 use Instr::{CompareInst, JumpInstr, LoadInstr, MathInst, SpecialInstr};
 use Jump::{Absolute_cond_notzero_u16, Absolute_u16, Relative_cond_carry_i8, Relative_cond_notcarry_i8, Relative_cond_notzero_i8, Relative_cond_zero_i8, Relative_i8};
-use Load::{Load_A_addr_R2_inc, Load_addr_R2_A, Load_addr_R2_A_dec, Load_addr_R2_A_inc, Load_addr_u16_A, Load_addr_u16_R2, Load_HI_R_R, Load_HI_R_U8, Load_HI_U8_R, Load_R2_U16, Load_R_addr_R2, Load_R_R};
+use Load::{Load_A_addr_R2_inc, Load_addr_R2_r, Load_addr_R2_A_dec, Load_addr_R2_A_inc, Load_addr_u16_A, Load_addr_u16_R2, Load_HI_R_R, Load_HI_R_U8, Load_HI_U8_R, Load_R2_U16, Load_R_addr_R2, Load_R_R};
 use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BITR2, Dec_r, Dec_rr, Inc_r, Inc_rr, OR_A_r, RL, RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SLA, SUB_R_R, XOR_A_r};
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
-use crate::opcodes::Load::{Load_R_HI_R, Load_R_u8};
+use crate::opcodes::Load::{Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
 use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
@@ -48,7 +48,8 @@ pub enum Load {
     Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
     Load_addr_R2_A_dec(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
     Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
-    Load_addr_R2_A(DoubleRegister, RegisterName),      // Load (rr), R
+    Load_addr_R2_r(DoubleRegister, RegisterName),      // Load (rr), R
+    Load_addr_R2_u8(DoubleRegister),
     Load_addr_u16_A(), // Load (nn), A
     Load_addr_u16_R2(DoubleRegister),
 }
@@ -189,14 +190,14 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x6F => Some(LoadInstr(Load_R_R(L, A))),
 
 
-        0x70 => Some(LoadInstr(Load_addr_R2_A(HL, B))),
-        0x71 => Some(LoadInstr(Load_addr_R2_A(HL, C))),
-        0x72 => Some(LoadInstr(Load_addr_R2_A(HL, D))),
-        0x73 => Some(LoadInstr(Load_addr_R2_A(HL, E))),
-        0x74 => Some(LoadInstr(Load_addr_R2_A(HL, H))),
-        0x75 => Some(LoadInstr(Load_addr_R2_A(HL, L))),
+        0x70 => Some(LoadInstr(Load_addr_R2_r(HL, B))),
+        0x71 => Some(LoadInstr(Load_addr_R2_r(HL, C))),
+        0x72 => Some(LoadInstr(Load_addr_R2_r(HL, D))),
+        0x73 => Some(LoadInstr(Load_addr_R2_r(HL, E))),
+        0x74 => Some(LoadInstr(Load_addr_R2_r(HL, H))),
+        0x75 => Some(LoadInstr(Load_addr_R2_r(HL, L))),
 
-        0x77 => Some(LoadInstr(Load_addr_R2_A(HL, A))),
+        0x77 => Some(LoadInstr(Load_addr_R2_r(HL, A))),
         0x78 => Some(LoadInstr(Load_R_R(A, B))),
         0x79 => Some(LoadInstr(Load_R_R(A, C))),
         0x7A => Some(LoadInstr(Load_R_R(A, D))),
@@ -214,6 +215,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x1E => Some(LoadInstr(Load_R_u8(E))),
         0x26 => Some(LoadInstr(Load_R_u8(H))),
         0x2E => Some(LoadInstr(Load_R_u8(L))),
+        0x36 => Some(LoadInstr(Load_addr_R2_u8(HL))),
         0x3E => Some(LoadInstr(Load_R_u8(A))),
 
         0xE0 => Some(LoadInstr(Load_HI_U8_R(A))),
@@ -232,8 +234,8 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x32 => Some(LoadInstr(Load_addr_R2_A_dec(HL))),
         0x2A => Some(LoadInstr(Load_A_addr_R2_inc(HL))),
 
-        0x02 => Some(LoadInstr(Load_addr_R2_A(BC, A))),
-        0x12 => Some(LoadInstr(Load_addr_R2_A(DE, A))),
+        0x02 => Some(LoadInstr(Load_addr_R2_r(BC, A))),
+        0x12 => Some(LoadInstr(Load_addr_R2_r(DE, A))),
 
         0xe2 => Some(LoadInstr(Load_HI_R_R(C, A))),
         0xea => Some(LoadInstr(Load_addr_u16_A())),
@@ -422,7 +424,8 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         LoadInstr(Load_R_HI_R(dst, off)) => format!("LD {}, (FF00 + {}) -- Load High: put contents of memory at 0xFF00 + {} into register {}", dst, off, off, dst),
         LoadInstr(Load_R2_U16(rr)) => format!("LD {} u16 -- Load immediate u16 into register {}", rr, rr),
         LoadInstr(Load_R_addr_R2(r, rr)) => format!("LD {}, ({}) -- load data pointed to by {} into {}", r, rr, rr, r),
-        LoadInstr(Load_addr_R2_A(rr, r)) => format!("LD ({}),{} -- load contents of {} into memory pointed to by {}", rr, r, r, rr),
+        LoadInstr(Load_addr_R2_u8(rr)) => format!("LD ({}),u8 -- load immediate value to memory pointed at by {}",rr,rr),
+        LoadInstr(Load_addr_R2_r(rr, r)) => format!("LD ({}),{} -- load contents of {} into memory pointed to by {}", rr, r, r, rr),
         LoadInstr(Load_addr_R2_A_inc(rr)) => format!("LD ({}+), A -- load contents of A into memory pointed to by {}, then increment {}", rr, rr, rr),
         LoadInstr(Load_addr_R2_A_dec(rr)) => format!("LD ({}-), A -- load contents of A into memory pointed to by {}, then decrement {}", rr, rr, rr),
         LoadInstr(Load_A_addr_R2_inc(rr)) => format!("LD A (HL+) -- load contents of memory pointed to by {} into A, then increment {}", rr, rr),
