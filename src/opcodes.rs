@@ -8,7 +8,7 @@ use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BITR2, Dec_r, Dec_rr, Inc_r, Inc_rr,
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::{Load_A_addr_u16, Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
-use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
+use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CPL, OR_A_addr, SCF, SUB_A_addr, SWAP, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 use crate::{MMU, Z80};
@@ -112,6 +112,9 @@ pub enum Math {
     RRC(RegisterName),
     RRCA(),
     SLA(RegisterName),
+    CPL(),
+    SWAP(RegisterName),
+    SCF(),
 }
 #[derive(Debug)]
 pub enum Instr {
@@ -406,6 +409,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xCB1C => Some(MathInst(RR(H))),
         0xCB1D => Some(MathInst(RR(L))),
         0xCB1F => Some(MathInst(RR(A))),
+        0xCB37 => Some(MathInst(SWAP(A))),
 
         0x07 => Some(MathInst(RLCA())),
         0x17 => Some(MathInst(RLA())),
@@ -429,6 +433,11 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xCB0F => Some(MathInst(RRC(A))),
 
         0xCB11 => Some(MathInst(RL(C))),
+        0xCB77 => Some(MathInst(BIT(6,A))),
+        0xCB6F => Some(MathInst(BIT(5,A))),
+
+        0x2F => Some(MathInst(CPL())),
+        0x37 => Some(MathInst(SCF())),
 
 
 
@@ -503,6 +512,9 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         MathInst(RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
         MathInst(RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
         MathInst(RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
+        MathInst(CPL()) => format!("CPL -- complement A register (flip all bits)"),
+        MathInst(SWAP(r)) => format!("SWAP {} -- swap upper and lower nibbles of n",r),
+        MathInst(SCF()) => format!("SCF -- set the carry flag"),
 
         SpecialInstr(DisableInterrupts()) => format!("DI -- disable interrupts"),
         SpecialInstr(EnableInterrupts()) => format!("EI -- enable interrupts"),
@@ -1095,6 +1107,32 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.half_flag = false;
             cpu.r.carry_flag = carry;
             cpu.inc_pc();
+        }
+        Math::CPL() => {
+            cpu.inc_pc();
+            let v = cpu.r.get_u8reg(&A);
+            let v = !v;
+            cpu.r.set_u8reg(&A,v);
+            //Z not affected
+            cpu.r.subtract_n_flag = true;
+            cpu.r.half_flag = true;
+            //C not affected
+        }
+        SWAP(r) => {
+            cpu.inc_pc();
+            let v = cpu.r.get_u8reg(r);
+            let v2 = ((v & 0x0f) << 4) | ((v & 0xf0) >> 4);
+            cpu.r.set_u8reg(&A,v2);
+            cpu.r.zero_flag = v2 == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = false;
+        }
+        SCF() => {
+            cpu.inc_pc();
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = true;
         }
     }
 }
