@@ -8,11 +8,12 @@ use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BITR2, Dec_r, Dec_rr, Inc_r, Inc_rr,
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::{Load_A_addr_u16, Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
-use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
+use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, OR_A_addr, SUB_A_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 use crate::{MMU, Z80};
 use crate::common::get_bit_as_bool;
+use crate::opcodes::Jump::{Absolute_cond_carry_u16, Absolute_cond_zero_u16};
 
 pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
@@ -70,6 +71,8 @@ pub enum Jump {
     Relative_cond_zero_i8(),
     Relative_cond_notzero_i8(),
     Absolute_cond_notzero_u16(),
+    Absolute_cond_zero_u16(),
+    Absolute_cond_carry_u16(),
 }
 #[derive(Debug)]
 pub enum Compare {
@@ -82,6 +85,7 @@ pub enum Math {
     ADD_R_u8(RegisterName),
     ADD_R_R(RegisterName,RegisterName),
     ADD_RR_RR(DoubleRegister,DoubleRegister),
+    ADD_RR_u8(DoubleRegister),
     ADD_A_addr(DoubleRegister),
     SUB_R_R(RegisterName,RegisterName),
     SUB_A_addr(DoubleRegister),
@@ -292,10 +296,15 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x38 => Some(JumpInstr(Relative_cond_carry_i8())), //2 bytes, if carry, relative signed
         0xC2 => Some(JumpInstr(Absolute_cond_notzero_u16())),
         0xC3 => Some(JumpInstr(Absolute_u16())),
+        0xCA => Some(JumpInstr(Absolute_cond_zero_u16())),
+        0xDA => Some(JumpInstr(Absolute_cond_carry_u16())),
         0xFE => Some(CompareInst(CP_A_n())),
 
 
+        0x19 => Some(MathInst(ADD_RR_RR(HL, DE))),
+        0x29 => Some(MathInst(ADD_RR_RR(HL, HL))),
         0x39 => Some(MathInst(ADD_RR_RR(HL, SP))),
+        0xE8 => Some(MathInst(ADD_RR_u8(SP))),
 
         0x80 => Some(MathInst(ADD_R_R(A, B))),
         0x81 => Some(MathInst(ADD_R_R(A, C))),
@@ -324,6 +333,8 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xA7 => Some(MathInst(AND_A_r(A))),
         0xA6 => Some(MathInst(AND_A_addr(HL))),
         0xE6 => Some(MathInst(AND_A_u8())),
+
+        0xE8 => Some(MathInst(ADD_RR_u8(SP))),
 
         0xA8 => Some(MathInst(XOR_A_r(B))),
         0xA9 => Some(MathInst(XOR_A_r(C))),
@@ -453,7 +464,9 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         JumpInstr(Relative_cond_notcarry_i8()) => format!("JR NC,e -- Jump relative if not Carry flag set"),
         JumpInstr(Relative_cond_zero_i8()) => format!("JR Z,e -- Jump relative if Zero flag set"),
         JumpInstr(Relative_cond_notzero_i8()) => format!("JR NZ,e -- Jump relative if not Zero flag set"),
-        JumpInstr(Absolute_cond_notzero_u16()) => format!("JR NZ,u16 -- Jump absolute if not Zero flag set"),
+        JumpInstr(Absolute_cond_notzero_u16()) => format!("JP NZ,u16 -- Jump absolute if not Zero flag set"),
+        JumpInstr(Absolute_cond_zero_u16()) => format!("JP Z,u16 -- Jump absolute if Zero flag set"),
+        JumpInstr(Absolute_cond_carry_u16()) => format!("JP C,u16 -- Jump absolute if Carry flag set"),
         CompareInst(CP_A_n()) => format!("CP A,n  -- Compare A with u8 n. sets flags"),
         CompareInst(CP_A_r(r)) => format!("CP A,{} -- Compare A with {}. sets flags", r, r),
         CompareInst(CP_A_addr(r)) => format!("CP A, ({}) -- Compare A with ({}). sets flags", r, r),
@@ -469,6 +482,7 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         MathInst(ADD_R_u8(r)) => format!("ADD {} u8 -- add immediate u8 to register {}", r, r),
         MathInst(ADD_R_R(dst, src)) => format!("ADD {} {} -- add {} to {}, store result in {}", dst, src, src, dst, dst),
         MathInst(ADD_RR_RR(dst, src)) => format!("ADD {} {}", dst, src),
+        MathInst(Math::ADD_RR_u8(rr)) => format!("ADD {}, u8",rr),
         MathInst(ADD_A_addr(rr)) => format!("ADD A, ({}) -- ADD A with contents of memory at {}",rr,rr),
         MathInst(SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}", dst, src, src, dst, dst),
         MathInst(SUB_A_addr(rr)) => format!("SUB A, ({}) -- SUB A with contents of memory at {}",rr,rr),
@@ -872,6 +886,18 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
             cpu.r.set_u16reg(dst,result);
         }
+        Math::ADD_RR_u8(dst) => {
+            cpu.inc_pc();
+            let src_v = mmu.read8(cpu.get_pc()) as u16;
+            cpu.inc_pc();
+            let dst_v = cpu.r.get_u16reg(dst);
+            let result = dst_v.wrapping_add(src_v);
+            cpu.r.subtract_n_flag = false;
+            //dont modify the zero flag
+            cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
+            cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
+            cpu.r.set_u16reg(dst,result);
+        }
         Math::ADD_A_addr(rr) => {
             cpu.inc_pc();
             let dst_v = cpu.r.get_u8reg(&A);
@@ -1108,10 +1134,28 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
         },
         Jump::Absolute_cond_notzero_u16() => {
             cpu.inc_pc();
-            let dst = mmu.read16(cpu.r.pc);
+            let dst = mmu.read16(cpu.get_pc());
             cpu.inc_pc();
             cpu.inc_pc();
             if !cpu.r.zero_flag {
+                cpu.set_pc(dst);
+            }
+        },
+        Jump::Absolute_cond_zero_u16() => {
+            cpu.inc_pc();
+            let dst = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
+            if cpu.r.zero_flag {
+                cpu.set_pc(dst);
+            }
+        },
+        Jump::Absolute_cond_carry_u16() => {
+            cpu.inc_pc();
+            let dst = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
+            if cpu.r.carry_flag {
                 cpu.set_pc(dst);
             }
         },
