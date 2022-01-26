@@ -528,12 +528,12 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         }
         Special::CALL_u16() => {
             cpu.inc_pc();
-            let addr = mmu.read16(cpu.r.pc);
+            let addr = mmu.read16(cpu.get_pc());
             cpu.inc_pc();
             cpu.inc_pc();
             cpu.dec_sp();
             cpu.dec_sp();
-            mmu.write16(cpu.r.sp, cpu.r.pc);
+            mmu.write16(cpu.get_sp(), cpu.get_pc());
             cpu.set_pc(addr);
         }
         Special::PUSH(rr) => {
