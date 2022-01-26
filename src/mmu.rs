@@ -245,7 +245,16 @@ impl MMU {
         }
         if addr == DMA {
             println!("DMA requested!");
-            panic!("halting");
+            let src_addr = ((val as u16) << 8);
+            let src_addr_end = src_addr + 0xA0;
+            println!("transferring from src address {:04x}",src_addr);
+            let dst_addr = 0xFE00;
+            // let src_data = &self.data[(src_addr as usize)..(src_addr_end as usize)];
+            for n in 0..0xA0 {
+                let byte = self.read8(src_addr + (n as u16));
+                self.write8(dst_addr + (n as u16),byte);
+            }
+            println!("DMA transfer complete")
         }
         if addr == INTERRUPT_ENABLE {
             println!("setting interrupt enable to {:08b}",val);
@@ -349,7 +358,7 @@ pub const TEST_ADDR:u16 = 0xA000;
 const LY_LCDC_Y_COORD:u16 = 0xFF44;
 const LYC_LCDC_Y_COMPARE:u16 = 0xFF45;
 
-const DMA:u16 = 0xFF46;
+const DMA:u16 = 0xFF46; // DMA Start and Transfer address
 const BGP:u16 = 0xFF47; // BG Palette Data (R/W)
 const OBP0:u16 = 0xFF48; // Object Palette 0 Data (R/W)
 const OBP1:u16 = 0xFF49; // Object Palette 1 Data (R/W)
@@ -357,3 +366,28 @@ const OBP1:u16 = 0xFF49; // Object Palette 1 Data (R/W)
 const INTERRUPT_ENABLE:u16 = 0xffff;
 
 const VBLANK_INTERRUPT_ADDR:u16 = 0x40;
+
+/*
+
+DMA:
+* when dma memory register is written to, begin a DMA transfer
+* lock access to all memory except for FF80 and above
+* look up the argument to calculate the source address. every $100 from $0000-$F100
+* calculate dest address in the OAM area ($FE00-$FE9F)
+* copy over the memory
+* set the correct status bits during DMA
+* add function to dump the OAM area. 40 x 4B blocks. for each one is y,x,tileid, flags
+
+
+* for Test2 app, sprites stored at 0xC000 and must be copied to OAM area to be drawn
+* verify that OAM area contains the sprite info
+
+* update drawing code to draw the sprites later using the OAM table.
+* scan OAM table looking for sprites that intersect the current line. pick the first 10
+* composite the sprite bits with the background tile bits
+* test that I can actually see the sprite now.
+
+
+* implement the joypad interrupts so that Test 2 can
+
+ */

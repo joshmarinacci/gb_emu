@@ -34,17 +34,18 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
 
 pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
     let lcdc = mmu.hardware.LCDC;
-    // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
-    // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
-    // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
-    // println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
-    // println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
-    // println!("window enable? {}",get_bit_as_bool(lcdc,5));
-    // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
-    // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
+    println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
+    println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
+    println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
+    println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
+    println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
+    println!("window enable? {}",get_bit_as_bool(lcdc,5));
+    println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
+    println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
     let screen_on = get_bit_as_bool(lcdc, 7);
     let window_enabled = get_bit_as_bool(lcdc, 5);
+    let sprites_enabled = true;
     let bg_enabled = true; //bg is always enabled
     let mut bg_tilemap_start = 0x9800;
     let mut bg_tilemap_end = 0x9BFF;
@@ -53,6 +54,7 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
         bg_tilemap_end  = 0x9FFF;
     }
     let bg_tilemap = &mmu.data[bg_tilemap_start .. bg_tilemap_end];
+    let oam_table = &mmu.data[0xFE00..0xFEA0];
 
     let mut low_data_start = 0x9000;
     let mut low_data_end = 0x97FF;
@@ -79,6 +81,11 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
                                  tile_id,
                                  lo_data);
                 }
+            }
+        }
+        if sprites_enabled {
+            for (i, atts) in oam_table.chunks_exact(4).enumerate() {
+                println!("sprite atts {:?}",atts);
             }
         }
     }
