@@ -11,10 +11,10 @@ mod common;
 mod screen;
 mod ppu;
 
-use std::fmt::{Debug};
-use std::path::{PathBuf};
+use std::fmt::Debug;
+use std::path::PathBuf;
 use std::{fs, thread};
-use std::io::{Result};
+use std::io::Result;
 use std::num::ParseIntError;
 use std::time::Duration;
 use log4rs::append::file::FileAppender;
@@ -23,21 +23,9 @@ use log4rs::config::{Appender, Root};
 use log::{debug, info, LevelFilter};
 use structopt::StructOpt;
 use common::RomFile;
-use crate::cpu::{Z80};
-use crate::debugger::{start_debugger};
+use crate::cpu::Z80;
+use crate::debugger::start_debugger;
 use crate::mmu::MMU;
-
-
-fn fetch_opcode_from_memory(cpu:&Z80, mmu:&MMU) -> (u16,u16) {
-    let pc = cpu.r.pc;
-    let fb:u8 = mmu.read8(pc);
-    if fb == 0xcb {
-        let sb:u8 = mmu.read8(pc+1);
-        (0xcb00 | sb as u16,2)
-    } else {
-        (fb as u16, 1)
-    }
-}
 
 fn main() -> Result<()>{
     let args = init_setup();
@@ -69,14 +57,13 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
     Ok(())
 }
 
-
 fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
     let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
     let data:Vec<u8> = fs::read(pth)?;
     println!("0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",data[0x0104],data[0x0105]);
     print!("name = ");
     for ch in 0x0134 .. 0x0142 {
-        print!("{}",to_ascii(data[ch]));
+        print!("{}", char::from_u32(data[ch] as u32).unwrap());
     }
     println!("   ");
     // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
@@ -105,10 +92,6 @@ fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
         data,
         path: pth2,
     })
-}
-
-fn to_ascii(v: u8) -> char {
-    char::from_u32(v as u32).unwrap()
 }
 
 fn parse_hex(src:&str) -> std::result::Result<u16, ParseIntError> {

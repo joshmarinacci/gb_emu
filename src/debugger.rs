@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use console::Color::{Black, Red, White};
 use log::{debug, info};
 use Load::Load_R_u8;
-use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
+use crate::{common, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
 use crate::mmu::TEST_ADDR;
 use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
@@ -85,7 +85,7 @@ impl Ctx {
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       fast_forward: u32,
-                      screen: bool,
+                      show_screen: bool,
                       breakpoint:u16,
                       verbose:bool,
                       interactive:bool) -> Result<()> {
@@ -107,7 +107,6 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         ctx.execute(&mut term, false)?;
     }
 
-    let mut screen = Screen::init(256, 256);
 
     let bb2 = backbuffer.clone();
     let hand = thread::spawn(move | |
@@ -131,13 +130,18 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
             }
         }
     });
-    while true {
-        let should_continue = screen.update_screen(&backbuffer);
-        if !should_continue {
-            break;
+
+    if show_screen {
+        let mut screen_obj = Screen::init(256, 256);
+        while true {
+            let should_continue = screen_obj.update_screen(&backbuffer);
+            if !should_continue {
+                break;
+            }
         }
+    } else {
+        hand.join();
     }
-    // hand.join();
     Ok(())
 }
 
@@ -363,7 +367,6 @@ fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) ->Result<()>{
     Ok(())
 }
 
-
 fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
     term.write_line(&format!("registers are {} ",reg.apply_to("cool")))?;
@@ -393,7 +396,6 @@ fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16,u16) {
         (fb as u16, 1)
     }
 }
-
 
 impl Ctx {
     pub(crate) fn execute_test(&mut self) {
@@ -569,5 +571,17 @@ fn op(ins: Instr) -> u8 {
         Instr::SpecialInstr(Special::NOOP()) => 0x00,
         Instr::SpecialInstr(Special::RETI()) => 0xD9,
         _ => panic!("unknown instruction to parse"),
+    }
+}
+
+
+fn fetch_opcode_from_memory(cpu:&Z80, mmu:&MMU) -> (u16, u16) {
+    let pc = cpu.r.pc;
+    let fb:u8 = mmu.read8(pc);
+    if fb == 0xcb {
+        let sb:u8 = mmu.read8(pc+1);
+        (0xcb00 | sb as u16,2)
+    } else {
+        (fb as u16, 1)
     }
 }
