@@ -244,10 +244,10 @@ impl MMU {
             // panic!("halting");
         }
         if addr == DMA {
-            println!("DMA requested!");
+            // println!("DMA requested!");
             let src_addr = ((val as u16) << 8);
             let src_addr_end = src_addr + 0xA0;
-            println!("transferring from src address {:04x}",src_addr);
+            // println!("transferring from src address {:04x}",src_addr);
             let dst_addr = 0xFE00;
             // let src_data = &self.data[(src_addr as usize)..(src_addr_end as usize)];
             for n in 0..0xA0 {

@@ -45,8 +45,9 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
 
     let screen_on = get_bit_as_bool(lcdc, 7);
     let window_enabled = get_bit_as_bool(lcdc, 5);
-    let sprites_enabled = true;
+    let sprites_enabled = get_bit_as_bool(lcdc,1);
     let bg_enabled = true; //bg is always enabled
+    let sprite_big = get_bit_as_bool(lcdc,2);
     let mut bg_tilemap_start = 0x9800;
     let mut bg_tilemap_end = 0x9BFF;
     if get_bit_as_bool(lcdc,3) {
@@ -85,7 +86,20 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
         }
         if sprites_enabled {
             for (i, atts) in oam_table.chunks_exact(4).enumerate() {
-                println!("sprite atts {:?}",atts);
+                let y = atts[0];
+                let x = atts[1];
+                let tile_id = atts[2];
+                let flags = atts[3];
+                if tile_id >=0 && tile_id<0xFF {
+                    println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
+                    if sprite_big {
+                        println!("skipping big sprites");
+                    } else {
+                        println!("drawing sprite");
+                        draw_tile_at(backbuffer, x as usize, y as usize, &tile_id, lo_data);
+                    }
+                }
+
             }
         }
     }

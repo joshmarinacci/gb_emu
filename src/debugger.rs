@@ -46,7 +46,6 @@ impl Ctx {
 
 impl Ctx {
     pub(crate) fn execute(&mut self, term: &mut Term, verbose: bool) -> Result<()>{
-        self.needs_redraw = false;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if verbose {
             term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode))?;
@@ -123,9 +122,11 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                 ctx.execute(&mut term, verbose).unwrap();
             }
             if ctx.needs_redraw {
+                println!("refreshing screen");
                 let mut bb = bb2.lock().unwrap();
                 bb.clear_with(0,0,0);
                 draw_vram(&mut ctx.mmu, &mut bb);
+                ctx.needs_redraw = false;
                 // println!("redrew to back buffer");
             }
         }
