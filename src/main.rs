@@ -9,6 +9,7 @@ mod opcodes;
 mod debugger;
 mod common;
 mod screen;
+mod ppu;
 
 use std::fmt::{Debug};
 use std::path::{PathBuf};

@@ -13,6 +13,7 @@ use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
 use crate::opcodes::Instr::{LoadInstr, SpecialInstr};
 use crate::opcodes::RegisterName::{A, B, C, D};
+use crate::ppu::draw_vram;
 use crate::screen::Screen;
 
 struct Ctx {
@@ -63,7 +64,6 @@ impl Ctx {
         if old_ly != 0 && self.mmu.hardware.LY == 0 {
             // println!("vsync");
             self.needs_redraw = true;
-            // self.draw_screen();
         }
         if self.cpu.get_pc() == 0x0040 {
             // println!("Jumped to vblank handler");
@@ -80,11 +80,6 @@ impl Ctx {
             Instr::MathInst(math)         => opcodes::execute_math_instructions(&mut self.cpu, &mut self.mmu, math),
             Instr::JumpInstr(jump)         => opcodes::execute_jump_instructions(&mut self.cpu, &mut self.mmu, jump),
         }
-    }
-    fn draw_screen(&mut self, backbuffer: &mut Bitmap) {
-        // let mut backbuffer:Bitmap = &backbuffer_lock.lock().unwrap();
-        backbuffer.clear_with(0,0,0);
-        self.draw_vram(backbuffer);
     }
 }
 
@@ -123,13 +118,15 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                 ctx.interactive = true;
             }
             if ctx.interactive {
-                step_forward(&mut ctx, &mut term).unwrap();
+                let mut bb = bb2.lock().unwrap();
+                step_forward(&mut ctx, &mut term, &mut bb).unwrap();
             } else {
                 ctx.execute(&mut term, verbose).unwrap();
             }
             if ctx.needs_redraw {
                 let mut bb = bb2.lock().unwrap();
-                ctx.draw_screen(&mut bb);
+                bb.clear_with(0,0,0);
+                draw_vram(&mut ctx.mmu, &mut bb);
                 // println!("redrew to back buffer");
             }
         }
@@ -144,7 +141,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     Ok(())
 }
 
-fn step_forward(ctx: &mut Ctx, term: &mut Term)  -> Result<()>{
+fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Result<()>{
     let border = Style::new().bg(Color::Magenta).black();
     // term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
@@ -243,9 +240,13 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term)  -> Result<()>{
             }
         },
         'c' => dump_cart_rom(term, ctx)?,
-        'v' => dump_vram(term, ctx)?,
+        // 'v' => dump_vram(term, ctx)?,
         'o' => dump_oram(term, ctx)?,
-        's' => dump_screen(term, ctx)?,
+        's' => {
+            backbuffer.clear_with(0,0,0);
+            draw_vram(&mut ctx.mmu, backbuffer);
+            backbuffer.write_to_file("./screen.png");
+        },
         'i' => dump_interrupts(term, ctx)?,
         't' => ctx.test_memory_visible = !ctx.test_memory_visible,
         'm' => dump_all_memory(term,ctx)?,
@@ -323,67 +324,6 @@ fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()>  {
     Ok(())
 }
 
-impl Ctx {
-    fn draw_vram(&mut self, backbuffer: &mut Bitmap) -> Result<()> {
-        let lcdc = self.mmu.hardware.LCDC;
-        // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
-        // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
-        // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
-        // println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
-        // println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
-        // println!("window enable? {}",get_bit_as_bool(lcdc,5));
-        // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
-        // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
-
-        let screen_on = get_bit_as_bool(lcdc, 7);
-        let window_enabled = get_bit_as_bool(lcdc, 5);
-        let bg_enabled = true; //bg is always enabled
-        let mut bg_tilemap_start = 0x9800;
-        let mut bg_tilemap_end = 0x9BFF;
-        if get_bit_as_bool(lcdc,3) {
-            bg_tilemap_start = 0x9C00;
-            bg_tilemap_end  = 0x9FFF;
-        }
-        let bg_tilemap = &self.mmu.data[bg_tilemap_start .. bg_tilemap_end];
-
-        let mut low_data_start = 0x9000;
-        let mut low_data_end = 0x97FF;
-        if get_bit_as_bool(lcdc, 4) {
-            low_data_start = 0x8000;
-            low_data_end = 0x87FF;
-        }
-        let lo_data = &self.mmu.data[low_data_start..low_data_end];
-
-        if screen_on {
-            if bg_enabled {
-                // println!("low data {:04x} {:04x}",low_data_start, low_data_end);
-                // println!("tiledata = {:?}",lo_data);
-                // println!("bg map {:04x} {:04x}",bg_tilemap_start, bg_tilemap_end);
-                // println!("draw background. tilemap = {:?}", bg_tilemap);
-                for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
-                    for (x, tile_id) in row.iter().enumerate() {
-                        if *tile_id > 0 {
-                            // println!("tile id is {}", tile_id);
-                        }
-                        draw_tile_at(backbuffer,
-                                     x * 8 + (self.mmu.hardware.SCX as usize),
-                                     y * 8 + (self.mmu.hardware.SCY as usize),
-                                     tile_id,
-                                     lo_data);
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-fn dump_vram(term: &Term, ctx: &mut Ctx) -> Result<()>{
-    // ctx.draw_vram();
-    // ctx.backbuffer.write_to_file("vram.png");
-    Ok(())
-}
-
 fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) ->Result<()>{
     for line in mem.chunks(64) {
         let line_str:String = line.iter()
@@ -394,53 +334,6 @@ fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) ->Result<()>{
     Ok(())
 }
 
-fn dump_screen(term: &Term, ctx: &Ctx) -> Result<()>{
-    let mut buf = Bitmap::init(32*8,32*8); // actual window buffer is 256x256
-    buf.clear_with(0,0,0);
-    let vram:&[u8] = ctx.mmu.get_current_bg_display_data();
-    let tiledata:&[u8] = ctx.mmu.fetch_tiledata_block2();
-    // println!("vram len is {}",vram.len());
-    for (y,row) in vram.chunks_exact(32).enumerate() {
-        for (x, tile_id) in row.iter().enumerate() {
-            draw_tile_at(&mut buf, x*8, y*8, tile_id, tiledata);
-        }
-        let hex_tile = row.iter().map(|b| format!("{:02x} ", b)).collect::<String>();
-        println!("{}",hex_tile);
-    }
-    buf.write_to_file("./screen.png");
-    term.write_line(&format!("wrote out to 'screen.png'"))?;
-    Ok(())
-}
-
-fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: &u8, tiledata: &[u8]) {
-    let start:usize = ((*tile_id as u16)*16) as usize;
-    let stop:usize = start + 16;
-    let tile = &tiledata[start..stop];
-    for (line,row) in tile.chunks_exact(2).enumerate() {
-        for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
-            let (r,g,b) = match color {
-                0 => (50,50,50),
-                1 => (100,100,100),
-                2 => (0,0,0),
-                3 => (200,200,200),
-                _ => (255,0,255),
-            };
-            img.set_pixel_rgb((x+7 - n) as i32, (y + line) as i32, r, g, b);
-        }
-    }
-}
-
-fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
-    let b1 = row[0];
-    let b2 = row[1];
-    let mut colors:Vec<u8> = vec![];
-    for n in 0..8 {
-        let v1 = common::get_bit(b1, n);
-        let v2 = common::get_bit(b2, n);
-        colors.push((v1 << 1) | v2);
-    }
-    colors
-}
 
 fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
