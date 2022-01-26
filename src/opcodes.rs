@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use log::debug;
 use Compare::{CP_A_n, CP_A_r};
 use Instr::{CompareInst, JumpInstr, LoadInstr, MathInst, SpecialInstr};
 use Jump::{Absolute_cond_notzero_u16, Absolute_u16, Relative_cond_carry_i8, Relative_cond_notcarry_i8, Relative_cond_notzero_i8, Relative_cond_zero_i8, Relative_i8};
@@ -11,6 +12,7 @@ use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, AND_A_addr, AND_A_u8, OR_A_add
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETZ, RST, STOP};
 use crate::{MMU, Z80};
+use crate::common::get_bit_as_bool;
 
 pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
@@ -713,6 +715,408 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             mmu.write16(addr,val);
             cpu.inc_pc();
             cpu.inc_pc();
+        }
+    }
+}
+
+pub fn execute_compare_instructions(cpu:&mut Z80, mmu:&mut MMU, comp:&Compare) {
+    match comp {
+        Compare::CP_A_n() => {
+            cpu.inc_pc();
+            let src_v = mmu.read8(cpu.r.pc);
+            cpu.inc_pc();
+
+            let dst_v = cpu.r.get_u8reg(&A);
+            let result = src_v.wrapping_sub(dst_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+            cpu.r.subtract_n_flag = true;
+            cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+        }
+        Compare::CP_A_r(r) => {
+            cpu.inc_pc();
+            let src_v = cpu.r.get_u8reg(r);
+            let dst_v = cpu.r.get_u8reg(&A);
+            let result = dst_v.wrapping_sub(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+            cpu.r.subtract_n_flag = true;
+            cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+        }
+        Compare::CP_A_addr(r) => {
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(r);
+            let src_v = mmu.read8(addr);
+            let dst_v = cpu.r.get_u8reg(&A);
+            let result = dst_v.wrapping_sub(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+            cpu.r.subtract_n_flag = true;
+            cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+        }
+    }
+}
+
+pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
+    match math {
+        Math::XOR_A_r(r) => {
+            cpu.inc_pc();
+            let res = cpu.r.get_u8reg(&A) ^ cpu.r.get_u8reg(r);
+            cpu.r.zero_flag = res == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = false;
+            cpu.r.set_u8reg(&A,res);
+        }
+        Math::XOR_A_u8() => {
+            cpu.inc_pc();
+            let n = mmu.read8(cpu.r.pc);
+            let res = cpu.r.get_u8reg(&A) ^ n;
+            cpu.r.zero_flag = res == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = false;
+            cpu.r.set_u8reg(&A,res);
+        }
+        Math::XOR_A_addr(rr) => {
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(rr);
+            let val = mmu.read8(addr);
+            let res = cpu.r.get_u8reg(&A) ^ val;
+            cpu.r.zero_flag = res == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = false;
+            cpu.r.set_u8reg(&A,res);
+        }
+        Math::OR_A_r(r) => {
+            cpu.inc_pc();
+            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) | cpu.r.get_u8reg(r));
+            cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = false;
+        }
+        Math::OR_A_addr(rr) => {
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(rr);
+            let val = mmu.read8(addr);
+            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) | val);
+            cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = false;
+        }
+        Math::AND_A_r(r) => {
+            cpu.inc_pc();
+            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) & cpu.r.get_u8reg(r));
+            cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = true;
+            cpu.r.carry_flag = false;
+        }
+        Math::AND_A_u8() => {
+            cpu.inc_pc();
+            let n = mmu.read8(cpu.r.pc);
+            cpu.inc_pc();
+            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) & n);
+            cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = true;
+            cpu.r.carry_flag = false;
+        }
+        Math::AND_A_addr(rr) => {
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(rr);
+            let val = mmu.read8(addr);
+            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) & val);
+            cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = true;
+            cpu.r.carry_flag = false;
+        }
+        Math::ADD_R_u8(r) => {
+            cpu.inc_pc();
+            let v1 = cpu.r.get_u8reg(r);
+            let v2 = mmu.read8(cpu.r.pc);
+            let result = v1.wrapping_add(v2);
+            cpu.inc_pc();
+            cpu.r.set_u8reg(r, v2);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = (v1 & 0xF) + (v2 & 0xF) > 0xFF;
+            cpu.r.carry_flag = (v1 as u16) + (v2 as u16) > 0xFF;
+        }
+        Math::ADD_R_R(dst, src) => {
+            cpu.inc_pc();
+            let dst_v = cpu.r.get_u8reg(dst);
+            let src_v = cpu.r.get_u8reg(src);
+            let result = dst_v.wrapping_add(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) + (src_v & 0x0f) > 0xF;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
+            cpu.r.set_u8reg(dst, result);
+        }
+        Math::ADD_RR_RR(dst,src) => {
+            cpu.inc_pc();
+            let src_v = cpu.r.get_u16reg(src);
+            let dst_v = cpu.r.get_u16reg(dst);
+            let result = dst_v.wrapping_add(src_v);
+            cpu.r.subtract_n_flag = false;
+            //dont modify the zero flag
+            cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
+            cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
+            cpu.r.set_u16reg(dst,result);
+        }
+        Math::ADD_A_addr(rr) => {
+            cpu.inc_pc();
+            let dst_v = cpu.r.get_u8reg(&A);
+            let addr = cpu.r.get_u16reg(rr);
+            let src_v = mmu.read8(addr);
+            let result = dst_v.wrapping_add(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) + (src_v & 0x0f) > 0xF;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
+            cpu.r.set_u8reg(&A, result);
+        }
+        Math::SUB_R_R(dst, src) => {
+            cpu.inc_pc();
+            let dst_v = cpu.r.get_u8reg(dst);
+            let src_v = cpu.r.get_u8reg(src);
+            let result = dst_v.wrapping_sub(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+            cpu.r.subtract_n_flag = true;
+            cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+            cpu.r.set_u8reg(dst, result);
+        }
+        Math::SUB_A_addr(rr) => {
+            cpu.inc_pc();
+            let dst_v = cpu.r.get_u8reg(&A);
+            let addr = cpu.r.get_u16reg(rr);
+            let src_v = mmu.read8(addr);
+            let result = dst_v.wrapping_sub(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+            cpu.r.subtract_n_flag = true;
+            cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+            cpu.r.set_u8reg(&A, result);
+        }
+        Math::Inc_r(dst_r) => {
+            cpu.inc_pc();
+            let src_v = cpu.r.get_u8reg(dst_r);
+            let result = src_v.wrapping_add(1);
+            cpu.r.set_u8reg(dst_r, result);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (result & 0x0F) + 1 > 0x0F;
+            cpu.r.subtract_n_flag = false;
+        }
+        Math::Dec_r(r) => {
+            cpu.inc_pc();
+            let val = cpu.r.get_u8reg(r);
+            let result = val.wrapping_sub(1);
+            cpu.r.set_u8reg(r, result);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (result & 0x0F) == 0;
+            cpu.r.subtract_n_flag = true;
+        }
+        Math::Inc_rr(rr) => {
+            cpu.inc_pc();
+            let val = cpu.r.get_u16reg(rr);
+            let result = val.wrapping_add(1);
+            cpu.r.set_u16reg(rr, result);
+        }
+        Math::Dec_rr(rr) => {
+            cpu.inc_pc();
+            let mut val = cpu.r.get_u16reg(rr);
+            val -= 1;
+            cpu.r.set_u16reg(rr, val);
+        }
+        Math::BIT(b,r) => {
+            cpu.inc_pc();
+            let val = cpu.r.get_u8reg(r);
+            cpu.inc_pc();
+            cpu.r.zero_flag = !get_bit_as_bool(val, *b);
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = true;
+        }
+        Math::BITR2(b,r) => {
+            cpu.inc_pc();
+            let addr = cpu.r.get_u16reg(r);
+            let val = mmu.read16(addr);
+            let mask = match b {
+                0 => 0b0000_0001,
+                1 => 0b0000_0010,
+                2 => 0b0000_0100,
+                3 => 0b0000_1000,
+                4 => 0b0001_0000,
+                5 => 0b0010_0000,
+                6 => 0b0100_0000,
+                7 => 0b1000_0000,
+                _ => {
+                    panic!("we can't look at bits higher than 7")
+                }
+            };
+            cpu.r.zero_flag = !((val & mask) > 0);
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = true;
+        }
+        Math::RLC(r) => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(r);
+            let carry_flag = r_val & 0x80 == 0x80;
+            let f_val = (r_val << 1) | if carry_flag { 1 } else { 0 };
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(r,f_val);
+            cpu.inc_pc();
+        }
+        Math::RLCA() => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(&A);
+            let carry_flag = r_val & 0x80 == 0x80;
+            let f_val = (r_val << 1) | if carry_flag { 1 } else { 0 };
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(&A,f_val);
+        }
+        Math::RL(r) => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(r);
+            let carry_flag = r_val & 0x80 == 0x80;
+            let f_val = (r_val << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(r, f_val);
+            cpu.inc_pc();
+        }
+        Math::RLA() => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(&A);
+            let carry_flag = r_val & 0x80 == 0x80;
+            let f_val = (r_val << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(&A, f_val);
+        }
+        Math::RRC(r) => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(r);
+            let carry_flag = r_val & 0x01 == 0x01;
+            let f_val = (r_val >> 1) | (if carry_flag {0x80} else { 0x00 });
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(r, f_val);
+            cpu.inc_pc();
+        }
+        Math::RRCA() => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(&A);
+            let carry_flag = r_val & 0x01 == 0x01;
+            let f_val = (r_val >> 1) | (if carry_flag {0x80} else { 0x00 });
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(&A, f_val);
+        }
+        Math::RR(r) => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(r);
+            let carry_flag = r_val & 0x01 == 0x01;
+            let f_val = (r_val >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(r, f_val);
+            cpu.inc_pc();
+        }
+        Math::RRA() => {
+            cpu.inc_pc();
+            let r_val = cpu.r.get_u8reg(&A);
+            let carry_flag = r_val & 0x01 == 0x01;
+            let f_val = (r_val >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
+            cpu.r.half_flag = false;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.zero_flag = f_val == 0;
+            cpu.r.carry_flag = carry_flag;
+            cpu.r.set_u8reg(&A, f_val);
+        }
+        Math::SLA(r) => {
+            cpu.inc_pc();
+            let n = cpu.r.get_u8reg(r);
+            let v = cpu.r.get_u8reg(&A);
+            let (v2,carry) = v.overflowing_shl(n as u32);
+            cpu.r.set_u8reg(&A,v2);
+            cpu.r.zero_flag = v2 == 0;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.half_flag = false;
+            cpu.r.carry_flag = carry;
+            cpu.inc_pc();
+        }
+    }
+}
+
+pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
+    match jump {
+        Jump::Absolute_u16() => {
+            let addr = mmu.read16(cpu.r.pc + 1);
+            cpu.set_pc(addr);
+            // println!("abs jump to {:04x}",addr);
+            debug!("Abs Jump to {:04x}",addr);
+        },
+        Jump::Relative_cond_carry_i8() => {
+            cpu.inc_pc();
+            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            cpu.inc_pc();
+            // println!("carry flag is set to {}",cpu.r.carry_flag);
+            if cpu.r.carry_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+        },
+        Jump::Relative_cond_notcarry_i8() => {
+            cpu.inc_pc();
+            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            cpu.inc_pc();
+            if !cpu.r.carry_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+        }
+        Jump::Relative_cond_zero_i8() => {
+            cpu.inc_pc();
+            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            cpu.inc_pc();
+            if cpu.r.zero_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+        }
+        Jump::Relative_cond_notzero_i8() => {
+            cpu.inc_pc();
+            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            cpu.inc_pc();
+            if !cpu.r.zero_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+        },
+        Jump::Absolute_cond_notzero_u16() => {
+            cpu.inc_pc();
+            let dst = mmu.read16(cpu.r.pc);
+            cpu.inc_pc();
+            cpu.inc_pc();
+            if !cpu.r.zero_flag {
+                cpu.set_pc(dst);
+            }
+        },
+        Jump::Relative_i8() => {
+            cpu.inc_pc();
+            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            cpu.inc_pc();
+            cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16);
         }
     }
 }
