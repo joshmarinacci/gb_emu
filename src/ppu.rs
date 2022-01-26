@@ -34,14 +34,14 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
 
 pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
     let lcdc = mmu.hardware.LCDC;
-    println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
-    println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
-    println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
-    println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
-    println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
-    println!("window enable? {}",get_bit_as_bool(lcdc,5));
-    println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
-    println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
+    // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
+    // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
+    // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
+    // println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
+    // println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
+    // println!("window enable? {}",get_bit_as_bool(lcdc,5));
+    // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
+    // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
     let screen_on = get_bit_as_bool(lcdc, 7);
     let window_enabled = get_bit_as_bool(lcdc, 5);
@@ -95,7 +95,7 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
                     if sprite_big {
                         println!("skipping big sprites");
                     } else {
-                        println!("drawing sprite");
+                        // println!("drawing sprite");
                         draw_tile_at(backbuffer, x as usize, y as usize, &tile_id, lo_data);
                     }
                 }

@@ -256,8 +256,8 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x02 => Some(LoadInstr(Load_addr_R2_r(BC, A))),
         0x12 => Some(LoadInstr(Load_addr_R2_r(DE, A))),
 
-        0xe2 => Some(LoadInstr(Load_HI_R_R(C, A))),
-        0xea => Some(LoadInstr(Load_addr_u16_A())),
+        0xE2 => Some(LoadInstr(Load_HI_R_R(C, A))),
+        0xEA => Some(LoadInstr(Load_addr_u16_A())),
         0xFA => Some(LoadInstr(Load_A_addr_u16())),
         0xF2 => Some(LoadInstr(Load_R_HI_R(A,C))),
 
@@ -723,10 +723,11 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
         Load::Load_addr_u16_A() => {
             cpu.inc_pc();
             let addr = mmu.read16(cpu.r.pc);
+            cpu.inc_pc();
+            cpu.inc_pc();
             let val = cpu.r.get_u8reg(&A);
+            // println!("writing {:02x} to address {:04x}",val,addr);
             mmu.write8(addr,val);
-            cpu.inc_pc();
-            cpu.inc_pc();
         }
         Load::Load_A_addr_u16() => {
             cpu.inc_pc();

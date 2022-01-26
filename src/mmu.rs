@@ -192,6 +192,10 @@ impl MMU {
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr < 0x8000 {
+            if addr >= 0x2000 && addr <= 0x3FFF {
+                println!("writing to ROM Bank Number {:04x}",val);
+                return;
+            }
             println!("trying to write outside of RW memory {:04x} at addr {:04x}",val,addr);
             panic!("halting");
         }
@@ -232,7 +236,7 @@ impl MMU {
         }
         if addr == LCDC_LCDCONTROL {
             // println!("writing to turn on the LCD Display");
-            println!("writing to LCDC register {:0b}",val);
+            println!("writing to LCDC register {:08b}",val);
             self.hardware.LCDC = val;
             // let b3 = get_bit(self.hardware.LCDC,3);
             // println!("bit 3 is now {}",b3);
