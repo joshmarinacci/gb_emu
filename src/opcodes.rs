@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use log::debug;
+use log::{debug, info};
 use Compare::{CP_A_n, CP_A_r};
 use Instr::{CompareInst, JumpInstr, LoadInstr, MathInst, SpecialInstr};
 use Jump::{Absolute_cond_notzero_u16, Absolute_u16, Relative_cond_carry_i8, Relative_cond_notcarry_i8, Relative_cond_notzero_i8, Relative_cond_zero_i8, Relative_i8};
@@ -510,10 +510,12 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         Special::DisableInterrupts() => {
             cpu.inc_pc();
             mmu.hardware.IME = 0;
+            info!("disabled interrupts");
         }
         Special::EnableInterrupts() => {
             cpu.inc_pc();
             mmu.hardware.IME = 1;
+            info!("enabled interrupts");
         }
         Special::NOOP() => {
             cpu.inc_pc();
@@ -525,6 +527,7 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         Special::STOP() => {
             cpu.inc_pc();
             mmu.hardware.IME = 0;
+            info!("stopped");
         }
         Special::CALL_u16() => {
             cpu.inc_pc();
@@ -535,13 +538,13 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             cpu.dec_sp();
             mmu.write16(cpu.get_sp(), cpu.get_pc());
             cpu.set_pc(addr);
+            info!("call function at {:04x}",addr);
         }
         Special::PUSH(rr) => {
             cpu.inc_pc();
             cpu.dec_sp();
             cpu.dec_sp();
             let value = cpu.r.get_u16reg(rr);
-            // println!("pushing {:04x}",value);
             mmu.write16(cpu.r.sp, value);
         }
         Special::POP(rr) => {
@@ -1076,7 +1079,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             let addr = mmu.read16(cpu.r.pc + 1);
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
-            debug!("Abs Jump to {:04x}",addr);
+            // info!("Abs Jump to {:04x}",addr);
         },
         Jump::Relative_cond_carry_i8() => {
             cpu.inc_pc();

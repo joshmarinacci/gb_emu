@@ -20,7 +20,7 @@ use std::time::Duration;
 use log4rs::append::file::FileAppender;
 use log4rs::Config;
 use log4rs::config::{Appender, Root};
-use log::{info, LevelFilter};
+use log::{debug, info, LevelFilter};
 use structopt::StructOpt;
 use common::RomFile;
 use crate::cpu::{Z80};
