@@ -172,7 +172,7 @@ impl MMU {
         if addr == SCX_SCROLL_X { return self.hardware.SCX; }
         if addr == SCY_SCROLL_Y { return self.hardware.SCY; }
         if addr == STAT_LCDCONTROL {
-            println!("reading STAT_LCDCONTROL register");
+            // println!("reading STAT_LCDCONTROL register");
             return self.hardware.STAT;
         }
         self.data[addr as usize]

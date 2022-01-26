@@ -2,7 +2,7 @@ use std::{io, thread};
 use console::{Color, Style, Term};
 use io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
-use console::Color::White;
+use console::Color::{Black, Red, White};
 use log::{debug, info};
 use Load::Load_R_u8;
 use crate::{common, fetch_opcode_from_memory, MMU, opcodes, Z80};
@@ -151,20 +151,49 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
     term.write_line(&border.apply_to("========================================").to_string())?;
 
     // print the current memory
-    let start = ctx.cpu.r.pc;
-    let back:i32 = 2;
-    for n in 0..5 {
-        let iv = (start as i32) + n - back;
-        // println!("n is {} {}",n,iv);
-        if iv < 0 {
-            term.write_line("----")?;
-            continue;
+    // {
+    //     let start = ctx.cpu.r.pc;
+    //     let back: i32 = 2;
+    //     for n in 0..5 {
+    //         let iv = (start as i32) + n - back;
+    //         // println!("n is {} {}",n,iv);
+    //         if iv < 0 {
+    //             term.write_line("----")?;
+    //             continue;
+    //         }
+    //         let addr = iv as u16;
+    //         // println!("address is {:04x}",addr);
+    //         let prefix = if addr == start { " *" } else { "  " };
+    //         let data = ctx.mmu.read8(addr);
+    //         term.write_line(&format!("{} {:04x}  {:02x}", prefix, addr, data))?;
+    //     }
+    // }
+
+    {
+
+        let s = ctx.cpu.r.pc as f32;
+        let pc = ctx.cpu.r.pc as usize;
+        let s2 = (s / 16.0).floor() as u32;
+        let s3 = (s2 * 16) as usize;
+        let e = s3 + 16*5 as usize;
+        let data = &ctx.mmu.data[s3 .. e];
+        let nums = 0..16;
+        let plain_style = Style::new().bg(White).red();
+        let highl_style = Style::new().bg(Black).white().underlined();
+        let line_str:String = nums.into_iter().map(|n|(format!("{:02x} ",n))).collect();
+        term.write_line(&format!("       {}",line_str));
+        for (i, row) in data.chunks(16).enumerate() {
+            let abs_off = i*16;
+            let line_str:String = row.into_iter().enumerate().map(|(n,v)|{
+                let abs = abs_off + n + s3;
+                let style = (if abs  == pc { &highl_style  } else { &plain_style });
+                style.apply_to(format!("{:02x} ",v)).to_string()
+            }).collect();
+            // let line_str:String = row.iter()
+            //     .map(|b|format!("{:02x} ",b))
+            //     .collect();
+            term.write_line(&format!("{:04x}   {} ", s3+ i, line_str));
         }
-        let addr = iv as u16;
-        // println!("address is {:04x}",addr);
-        let prefix = if addr == start { " *"} else {"  "};
-        let data = ctx.mmu.read8(addr);
-        term.write_line(&format!("{} {:04x}  {:02x}",prefix,addr,data))?;
     }
 
     {
