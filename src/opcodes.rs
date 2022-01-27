@@ -448,6 +448,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xCB11 => Some(MathInst(RL(C))),
         0xCB77 => Some(MathInst(BIT(6,A))),
         0xCB6F => Some(MathInst(BIT(5,A))),
+        0xCB67 => Some(MathInst(BIT(4,A))),
 
         0x2F => Some(MathInst(CPL())),
         0x37 => Some(MathInst(SCF())),
