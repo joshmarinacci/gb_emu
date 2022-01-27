@@ -13,10 +13,19 @@ pub struct Hardware {
     pub LCDC:u8,
     pub STAT:u8,
     pub IME:u8,
+    pub IE:u8,
+    pub IF:u8,
     pub BGP:u8,
     pub OBP0:u8,
     pub OBP1:u8,
+
+    pub TIMA:u8,
+    pub TMA:u8,
+    pub DIV:u8,
+    pub TAC:u8,
+
     pub vblank_interrupt_enabled:bool,
+    pub timer_interrupt_enabled:bool,
 
     pub clock: i32,
     pub interrupt_ready: bool,
@@ -34,12 +43,20 @@ impl Hardware {
             LCDC: 0,
             STAT: 0,
             IME: 0,
+            IE: 0,
+            IF: 0,
             BGP: 0,
             OBP0: 0,
             OBP1: 0,
             vblank_interrupt_enabled: false,
+            timer_interrupt_enabled: false,
             clock: 0,
-            interrupt_ready: false
+            interrupt_ready: false,
+
+            TIMA:0,
+            TMA:0,
+            DIV:0,
+            TAC:0,
         }
     }
     pub fn update(&mut self) {
@@ -50,6 +67,11 @@ impl Hardware {
         if self.LY > 153 {
             self.LY = 0;
         }
+        let (v2, overflowed) = self.DIV.overflowing_add(1);
+        if overflowed {
+            println!("div overflowed");
+        }
+        self.DIV = v2;
     }
 }
 pub struct MMU {
@@ -59,6 +81,8 @@ pub struct MMU {
     lowest_used_iram:u16,
     highest_used_iram:u16,
     pub hardware:Hardware,
+    pub vblank_hit:bool,
+    pub timer_hit:bool,
 }
 
 impl MMU {
@@ -96,15 +120,18 @@ impl MMU {
     pub(crate) fn fetch_oram(&self) -> &[u8] {
         &self.data[0xFE00 .. 0xFE9F]
     }
-}
 
-impl MMU {
     pub(crate) fn update(&mut self, cpu: &mut Z80) {
+        self.vblank_hit = false;
+        self.timer_hit = false;
         let old_LY = self.hardware.LY;
         self.hardware.update();
+
+        //vblank
         if old_LY > 0 && self.hardware.LY == 0 {
             // println!("firing vblank interrupt {} {}",old_LY, self.hardware.LY);
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
+                self.vblank_hit = true;
                 // println!("really firing the vblank interrupt");
                 cpu.dec_sp();
                 cpu.dec_sp();
@@ -112,6 +139,26 @@ impl MMU {
                 self.write16(cpu.r.sp, cpu.r.pc);
                 cpu.set_pc(VBLANK_INTERRUPT_ADDR);
                 // println!("Jumping to handler at addr {:04x}", cpu.get_pc());
+            }
+        }
+
+        // if timer is enabled
+        if get_bit_as_bool(self.hardware.TAC,2) {
+            if self.hardware.clock % 5 == 0 {
+                let (val, overflowed) = self.hardware.TIMA.overflowing_add(1);
+                self.hardware.TIMA = val;
+                if overflowed {
+                    println!("timer overflowed");
+                    self.hardware.TIMA = self.hardware.TMA;
+                    println!("fire timer interrupt");
+                    if self.hardware.IME > 0 && self.hardware.timer_interrupt_enabled {
+                        self.timer_hit = true;
+                        cpu.dec_sp();
+                        cpu.dec_sp();
+                        self.write16(cpu.r.sp, cpu.r.pc);
+                        cpu.set_pc(TIMER_INTERRUPT_ADDR);
+                    }
+                }
             }
         }
     }
@@ -154,6 +201,8 @@ impl MMU {
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
             hardware: Hardware::init(),
+            vblank_hit: false,
+            timer_hit: false
         }
     }
     pub(crate) fn overlay_boot(&mut self) {
@@ -209,7 +258,7 @@ impl MMU {
         }
         if addr == DIV_REGISTER {
             println!("wrote to the DIV register {:04x}", val);
-            panic!("halting");
+            self.hardware.DIV = 0;
         }
         if addr == TIMA_REGISTER {
             println!("wrote to the TIMA register {:04x}", val);
@@ -217,19 +266,11 @@ impl MMU {
         }
         if addr == TMA_REGISTER {
             println!("wrote to the TMA register {:04x}", val);
-            panic!("halting");
+            self.hardware.TMA = val;
         }
         if addr == TAC_REGISTER {
             println!("wrote to the TAC register {:08b}", val);
-            panic!("halting");
-        }
-        if addr == IF_INTERRUPT_FLAG {
-            println!("wrote to the IF register {:08b}", val);
-            if get_bit_as_bool(val,0) {
-                println!("enabling vblank");
-                self.hardware.vblank_interrupt_enabled = true;
-            }
-            // panic!("halting");
+            self.hardware.TAC = val;
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
             // println!("writing in VRAM {:04x}  {:x}", addr, val);
@@ -261,12 +302,26 @@ impl MMU {
             println!("DMA transfer complete")
         }
         if addr == INTERRUPT_ENABLE {
-            println!("setting interrupt enable to {:08b}",val);
+            println!("wrote to the IE register. {:08b}",val);
             if get_bit_as_bool(val,0) {
-                println!("enabled vblank");
                 self.hardware.vblank_interrupt_enabled = true;
             }
+            if get_bit_as_bool(val, 2) {
+                self.hardware.timer_interrupt_enabled = true;
+            }
+            self.hardware.IE = val;
             return;
+        }
+        if addr == IF_INTERRUPT_FLAG {
+            println!("wrote to the IF register {:08b}", val);
+            if get_bit_as_bool(val,0) {
+                self.hardware.vblank_interrupt_enabled = true;
+            }
+            if get_bit_as_bool(val, 2) {
+                self.hardware.timer_interrupt_enabled = true;
+            }
+            self.hardware.IF = val;
+            // panic!("halting");
         }
         if addr == BGP {
             //this is the background color palette
@@ -370,6 +425,8 @@ const OBP1:u16 = 0xFF49; // Object Palette 1 Data (R/W)
 const INTERRUPT_ENABLE:u16 = 0xffff;
 
 const VBLANK_INTERRUPT_ADDR:u16 = 0x40;
+pub const TIMER_INTERRUPT_ADDR:u16  = 0x50;
+const STAT_INTERRUPT_ADDR:u16   = 0x48;
 
 /*
 

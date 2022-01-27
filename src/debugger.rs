@@ -7,7 +7,7 @@ use log::{debug, info};
 use Load::Load_R_u8;
 use crate::{common, MMU, opcodes, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
-use crate::mmu::TEST_ADDR;
+use crate::mmu::{TEST_ADDR, TIMER_INTERRUPT_ADDR};
 use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
 use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
@@ -58,15 +58,8 @@ impl Ctx {
             println!("current memory is PC {:04x} ",self.cpu.get_pc());
             panic!("unknown op code");
         }
-        let old_ly = self.mmu.hardware.LY;
         self.mmu.update(&mut self.cpu);
-        if old_ly != 0 && self.mmu.hardware.LY == 0 {
-            // println!("vsync");
-            self.needs_redraw = true;
-        }
-        if self.cpu.get_pc() == 0x0040 {
-            // println!("Jumped to vblank handler");
-        }
+        if self.mmu.vblank_hit { self.needs_redraw = true; }
         self.clock+=1;
         Ok(())
     }
@@ -377,6 +370,8 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     term.write_line(&format!("SCY  {}",ctx.mmu.hardware.SCY))?;
     term.write_line(&format!("LCDC {:8b}",ctx.mmu.hardware.LCDC))?;
     term.write_line(&format!("STAT {:8b}",ctx.mmu.hardware.STAT))?;
+    term.write_line(&format!("IME  {:8b}",ctx.mmu.hardware.IME))?;
+    term.write_line(&format!("IE   {:8b}",ctx.mmu.hardware.IE))?;
     term.write_line(&format!("BGP  {:8b}",ctx.mmu.hardware.BGP))?;
     term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
     term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
@@ -549,6 +544,84 @@ fn test_vblank_interrupt() {
         ctx.execute_test();
         // if instruction counter reaches some high number then we clearly got stuck
         if ctx.clock > 3090 {
+            panic!("stuck inside a loop!");
+        }
+        // if ctx.mmu.hardware.LY == 0x99 {
+        //     panic!("hit the vblank");
+        // }
+    }
+    println!("reached the end");
+}
+
+#[test]
+fn test_timer_interrupt() {
+    let mut rom = vec![
+        // start at 0x0000
+        op(Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::SP))), // LD SP 16 init SP to 0xFFFE
+        0xFE, 0xFF,
+
+
+        // enable timer interrupts by setting 0xFFF0 to b0000_0010
+        op(Instr::LoadInstr(Load_R_u8(B))), // LD B, 0x04
+        0b0000_0100,
+        // LD HL, 0xFFFF
+        op(Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::HL))),
+        0xFF,
+        0xFF,
+        op(Instr::LoadInstr(Load::Load_addr_R2_r(DoubleRegister::HL,RegisterName::B))), // write 0x01 to the IE register
+
+        //enable timer using TAC
+        op(Instr::LoadInstr(Load_R_u8(B))), // LD B, 0x04
+        0b0000_0100,
+        op(Instr::LoadInstr(Load::Load_R2_U16(DoubleRegister::HL))),
+        0x07,
+        0xFF,
+        op(Instr::LoadInstr(Load::Load_addr_R2_r(DoubleRegister::HL,RegisterName::B))), // write b100 to the TAC register
+
+        //turn on interrupts in general
+        op(Instr::SpecialInstr(Special::EnableInterrupts())), // EI code
+
+        // set B to 65
+        op(Instr::LoadInstr(Load_R_u8(B))), // LD B 0x65
+        0x65, //02
+
+        op(Instr::LoadInstr(Load::Load_R_R(RegisterName::A,RegisterName::B))), //copy B to A
+        op(Instr::CompareInst(Compare::CP_A_n())), //spin loop looking for A is 66
+        0x66, // u8 66
+        op(Instr::JumpInstr(Jump::Relative_cond_notzero_i8())),// JR NZ jump back two spaces if not zero yet//05
+        0xfb, // -2
+
+
+        op(Instr::LoadInstr(Load_R_u8(B))), //if got here then test is over, set B to 67
+        0x67,
+    ];
+
+    println!("length is {}",rom.len());
+    for i in rom.len() .. (TIMER_INTERRUPT_ADDR as usize) {
+        rom.push(op(Instr::SpecialInstr(Special::NOOP())));
+    }
+    println!("length is {}",rom.len());
+
+    // add the timer interrupt handler
+    rom.push(op(Instr::LoadInstr(Load_R_u8(B)))); // set B to 66
+    rom.push(0x66);
+    rom.push(op(Instr::SpecialInstr(Special::RETI())));
+    println!("length is {}",rom.len());
+
+    // test loops until B is 67
+    let mut ctx:Ctx = Ctx::make_test_context(&rom.to_vec());
+    print_registers(&ctx.cpu, &ctx.mmu);
+    while ctx.cpu.r.get_u8reg(&B) != 0x67 {
+        ctx.execute_test();
+        println!("timer info DIV {:04} TIMA {:04} TMA {:04} TAC {:04}",
+                 ctx.mmu.hardware.DIV,
+                 ctx.mmu.hardware.TIMA,
+                 ctx.mmu.hardware.TMA,
+                 ctx.mmu.hardware.TAC,
+        );
+        // if instruction counter reaches some high number then we clearly got stuck
+        if ctx.clock > 3090 {
+            println!("timer is {} {} {}", ctx.mmu.timer_hit, ctx.mmu.hardware.timer_interrupt_enabled, ctx.mmu.hardware.IME);
             panic!("stuck inside a loop!");
         }
         // if ctx.mmu.hardware.LY == 0x99 {
