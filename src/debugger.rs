@@ -2,6 +2,7 @@ use std::{io, thread};
 use console::{Color, Style, Term};
 use io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::mpsc::channel;
 use console::Color::{Black, Red, White};
 use log::{debug, info};
 use Load::Load_R_u8;
@@ -25,7 +26,6 @@ struct Ctx {
     cart: Option<RomFile>,
     full_registers_visible: bool,
     test_memory_visible: bool,
-    needs_redraw:bool,
 }
 
 impl Ctx {
@@ -39,7 +39,6 @@ impl Ctx {
             cart: None,
             full_registers_visible: false,
             test_memory_visible: false,
-            needs_redraw: false,
         }
     }
 }
@@ -59,7 +58,6 @@ impl Ctx {
             panic!("unknown op code");
         }
         self.mmu.update(&mut self.cpu);
-        if self.mmu.vblank_hit { self.needs_redraw = true; }
         self.clock+=1;
         Ok(())
     }
@@ -90,7 +88,6 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         cart,
         full_registers_visible:false,
         test_memory_visible: false,
-        needs_redraw: false
     };
     let mut term = Term::stdout();
 
@@ -99,6 +96,8 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         ctx.execute(&mut term, false)?;
     }
 
+    let (to_screen,receive_screen) = channel::<String>();
+    let (to_cpu, receive_cpu) = channel::<String>();
 
     let bb2 = backbuffer.clone();
     let hand = thread::spawn(move | |
@@ -114,13 +113,18 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
             } else {
                 ctx.execute(&mut term, verbose).unwrap();
             }
-            if ctx.needs_redraw {
-                // println!("refreshing screen");
-                let mut bb = bb2.lock().unwrap();
-                bb.clear_with(0,0,0);
-                draw_vram(&mut ctx.mmu, &mut bb);
-                ctx.needs_redraw = false;
-                // println!("redrew to back buffer");
+            if ctx.mmu.refresh_requested {
+                {
+                    let mut bb = bb2.lock().unwrap();
+                    // bb.clear_with(0, 0, 0);
+                    draw_vram(&mut ctx.mmu, &mut bb);
+                }
+                to_screen.send(String::from("go"));
+                if let Ok(str) = receive_cpu.recv() {
+                } else {
+                    println!("error coming back from cpu?");
+                }
+                ctx.mmu.refresh_requested = false;
             }
         }
     });
@@ -128,9 +132,10 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     if show_screen {
         let mut screen_obj = Screen::init(256, 256);
         while true {
-            let should_continue = screen_obj.update_screen(&backbuffer);
-            if !should_continue {
-                break;
+            if !screen_obj.process_input() { break; }
+            if let Ok(str) = receive_screen.try_recv() {
+                screen_obj.update_screen(&backbuffer);
+                to_cpu.send(String::from("stop"));
             }
         }
     } else {
@@ -624,7 +629,7 @@ fn test_timer_interrupt() {
         );
         // if instruction counter reaches some high number then we clearly got stuck
         if ctx.clock > 3090 {
-            println!("timer is {} {} {}", ctx.mmu.timer_hit, ctx.mmu.hardware.timer_interrupt_enabled, ctx.mmu.hardware.IME);
+            println!("timer is {} {}", ctx.mmu.hardware.timer_interrupt_enabled, ctx.mmu.hardware.IME);
             panic!("stuck inside a loop!");
         }
         // if ctx.mmu.hardware.LY == 0x99 {

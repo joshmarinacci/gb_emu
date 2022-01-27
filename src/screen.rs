@@ -15,24 +15,8 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn init(w:i32,h:i32) -> Screen {
-        let sdl_context = sdl2::init().unwrap();
-        let window = sdl_context.video().unwrap()
-            .window("rust-sdl2 demo: Video", 256 * 2, 256 * 2)
-            .position_centered()
-            .opengl()
-            .build()
-            .map_err(|e| e.to_string()).unwrap();
-        let canvas:WindowCanvas = window.into_canvas().software().build().map_err(|e| e.to_string()).unwrap();
-        let tex = canvas.texture_creator().create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, w as u32, h as u32).unwrap();
-        Screen {
-            context:sdl_context,
-            canvas,
-            texture:tex,
-        }
-    }
-    pub fn update_screen(&mut self, backbuffer_m: &Mutex<Bitmap>) -> bool {
-        //handle any pending inputs
+    pub(crate) fn process_input(&self) -> bool {
+        // println!("screen: processsing input");
         while true {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
                 match event {
@@ -53,7 +37,29 @@ impl Screen {
                 break;
             }
         }
+        return true;
+    }
+}
 
+impl Screen {
+    pub fn init(w:i32,h:i32) -> Screen {
+        let sdl_context = sdl2::init().unwrap();
+        let window = sdl_context.video().unwrap()
+            .window("rust-sdl2 demo: Video", 256 * 2, 256 * 2)
+            .position_centered()
+            .opengl()
+            .build()
+            .map_err(|e| e.to_string()).unwrap();
+        let canvas:WindowCanvas = window.into_canvas().software().build().map_err(|e| e.to_string()).unwrap();
+        let tex = canvas.texture_creator().create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, w as u32, h as u32).unwrap();
+        Screen {
+            context:sdl_context,
+            canvas,
+            texture:tex,
+        }
+    }
+    pub fn update_screen(&mut self, backbuffer_m: &Mutex<Bitmap>)  {
+        //handle any pending inputs
         {
             let backbuffer = backbuffer_m.lock().unwrap();
             self.canvas.with_texture_canvas(&mut self.texture, |can| {
@@ -80,6 +86,5 @@ impl Screen {
         }
         self.canvas.present();
         ::std::thread::sleep(Duration::from_millis(1));
-        return true;
     }
 }

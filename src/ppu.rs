@@ -44,6 +44,7 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
     // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
     let screen_on = get_bit_as_bool(lcdc, 7);
+    if !screen_on { return Ok(()) };
     let window_enabled = get_bit_as_bool(lcdc, 5);
     let sprites_enabled = get_bit_as_bool(lcdc,1);
     let bg_enabled = true; //bg is always enabled
@@ -83,7 +84,7 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
                                      tile_id,
                                      lo_data);
                     } else {
-                        println!("drawing tile id {:02x}",tile_id);
+                        // println!("drawing tile id {:02x}",tile_id);
                     }
                 }
             }

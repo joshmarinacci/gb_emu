@@ -614,6 +614,7 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             cpu.inc_sp();
             cpu.set_pc(addr);
             mmu.hardware.IME = 1;
+            mmu.hardware.interrupt_just_returned = true;
             // println!("returned from interrupt handler. going back to {:04x}",self.cpu.get_pc());
         }
         Special::RETZ() => {

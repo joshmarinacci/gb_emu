@@ -4,6 +4,12 @@ use crate::bootrom::BOOT_ROM;
 use crate::common::{get_bit, get_bit_as_bool};
 use crate::Z80;
 
+pub enum InterruptType {
+    VBlank,
+    Timer,
+    Serial,
+    None,
+}
 pub struct Hardware {
     pub SCY:u8,
     pub SCX:u8,
@@ -27,9 +33,13 @@ pub struct Hardware {
 
     pub vblank_interrupt_enabled:bool,
     pub timer_interrupt_enabled:bool,
+    pub lcdc_interrupt_enabled:bool,
+    pub serial_interrupt_enabled:bool,
+    pub transition_interrupt_enabled:bool,
+    pub interrupt_just_returned:bool,
+    pub active_interrupt:InterruptType,
 
     pub clock: i32,
-    pub interrupt_ready: bool,
 }
 
 impl Hardware {
@@ -51,9 +61,12 @@ impl Hardware {
             OBP1: 0,
             vblank_interrupt_enabled: false,
             timer_interrupt_enabled: false,
+            lcdc_interrupt_enabled: false,
+            serial_interrupt_enabled: false,
+            transition_interrupt_enabled: false,
             clock: 0,
-            interrupt_ready: false,
-
+            active_interrupt: InterruptType::None,
+            interrupt_just_returned: false,
             TIMA:0,
             TMA:0,
             DIV:0,
@@ -82,8 +95,7 @@ pub struct MMU {
     lowest_used_iram:u16,
     highest_used_iram:u16,
     pub hardware:Hardware,
-    pub vblank_hit:bool,
-    pub timer_hit:bool,
+    pub refresh_requested:bool,
 }
 
 impl MMU {
@@ -123,23 +135,31 @@ impl MMU {
     }
 
     pub(crate) fn update(&mut self, cpu: &mut Z80) {
-        self.vblank_hit = false;
-        self.timer_hit = false;
         let old_LY = self.hardware.LY;
         self.hardware.update();
 
+        if self.hardware.IME == 1  && self.hardware.interrupt_just_returned {
+            self.hardware.interrupt_just_returned = false;
+            match self.hardware.active_interrupt {
+                InterruptType::VBlank => self.refresh_requested = true,
+                InterruptType::Timer => {}
+                InterruptType::Serial => {}
+                InterruptType::None => {}
+            }
+            self.hardware.active_interrupt = InterruptType::None;
+        }
         //vblank
         if old_LY > 0 && self.hardware.LY == 0 {
-            // println!("firing vblank interrupt {} {}",old_LY, self.hardware.LY);
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
-                self.vblank_hit = true;
-                // println!("really firing the vblank interrupt");
+                self.hardware.active_interrupt = InterruptType::VBlank;
+                self.hardware.IME = 0;
                 cpu.dec_sp();
                 cpu.dec_sp();
-                // println!("writing pc {:04x} to sp {:04x} ",cpu.r.pc, cpu.r.sp);
                 self.write16(cpu.r.sp, cpu.r.pc);
                 cpu.set_pc(VBLANK_INTERRUPT_ADDR);
-                // println!("Jumping to handler at addr {:04x}", cpu.get_pc());
+            } else {
+                //otherwise just trigger a normal refresh?
+                self.refresh_requested = true;
             }
         }
 
@@ -149,11 +169,10 @@ impl MMU {
                 let (val, overflowed) = self.hardware.TIMA.overflowing_add(1);
                 self.hardware.TIMA = val;
                 if overflowed {
-                    println!("timer overflowed");
                     self.hardware.TIMA = self.hardware.TMA;
-                    println!("fire timer interrupt");
                     if self.hardware.IME > 0 && self.hardware.timer_interrupt_enabled {
-                        self.timer_hit = true;
+                        self.hardware.IME = 0;
+                        self.hardware.active_interrupt = InterruptType::Timer;
                         cpu.dec_sp();
                         cpu.dec_sp();
                         self.write16(cpu.r.sp, cpu.r.pc);
@@ -202,8 +221,7 @@ impl MMU {
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
             hardware: Hardware::init(),
-            vblank_hit: false,
-            timer_hit: false
+            refresh_requested: false
         }
     }
     pub(crate) fn overlay_boot(&mut self) {
@@ -247,7 +265,7 @@ impl MMU {
     pub fn write8(&mut self, addr:u16, val:u8) {
         if addr < 0x8000 {
             if addr >= 0x2000 && addr <= 0x3FFF {
-                println!("writing to ROM Bank Number {:04x}",val);
+                // println!("writing to ROM Bank Number {:04x}",val);
                 return;
             }
             println!("trying to write outside of RW memory {:04x} at addr {:04x}",val,addr);
@@ -323,34 +341,23 @@ impl MMU {
             return;
         }
         if addr == INTERRUPT_ENABLE {
-            println!("wrote to the IE register. {:08b}",val);
-            if get_bit_as_bool(val,0) {
-                self.hardware.vblank_interrupt_enabled = true;
-            }
-            if get_bit_as_bool(val, 2) {
-                self.hardware.timer_interrupt_enabled = true;
-            }
+            // println!("wrote to the IE register. {:08b}",val);
+            self.hardware.vblank_interrupt_enabled = get_bit_as_bool(val,0);
+            self.hardware.lcdc_interrupt_enabled = get_bit_as_bool(val,1);
+            self.hardware.timer_interrupt_enabled = get_bit_as_bool(val,2);
+            self.hardware.serial_interrupt_enabled = get_bit_as_bool(val, 3);
+            self.hardware.transition_interrupt_enabled = get_bit_as_bool(val,4);
             self.hardware.IE = val;
             return;
         }
         if addr == IF_INTERRUPT_FLAG {
-            println!("wrote to the IF register {:08b}", val);
-            if get_bit_as_bool(val,0) {
-                self.hardware.vblank_interrupt_enabled = true;
-            }
-            if get_bit_as_bool(val, 2) {
-                self.hardware.timer_interrupt_enabled = true;
-            }
             self.hardware.IF = val;
-            // panic!("halting");
             return;
         }
         if addr == BGP {
-            //this is the background color palette
-            //https://gbdev.gg8.se/wiki/articles/Video_Display#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only
-            info!("writing to BGP LCD register {:0b}",val);
+            // info!("writing to BGP LCD register {:0b}",val);
             self.hardware.BGP = val;
-            dump_bgp_bits(val);
+            // dump_bgp_bits(val);
             return;
         }
         if addr == OBP0_ADDR  { self.hardware.OBP0 = val; return; }
