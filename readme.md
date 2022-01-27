@@ -36,6 +36,7 @@ special thanks to [here](https://github.com/mvdnes/rboy/blob/master/src/cpu.rs) 
 
 [bootrom explanation](https://realboyemulator.wordpress.com/2013/01/03/a-look-at-the-game-boy-bootstrap-let-the-fun-begin/)
 
+[opcode map](https://izik1.github.io/gbops/)
 
 # boot rom
 the bootrom is internal to the emulator. You can include it with --boot. When stepping through it you'll probably
@@ -47,4 +48,10 @@ perform the CRC check.
 * 24594  start Nintendo Logo check
 * 28674  end of the logo check, starting to fill VRAM with tilemap
 * 28806 start scrolling  
+
+
+
+0xFF4B is highest register
+tetris is writing to 0xFFF0 to FFEF and down to FFE1 and also FF81 and FF80 and FFA1
+this is actually a routine to wait during DMA transfers since all other memory is off limits
 

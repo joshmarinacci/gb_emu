@@ -115,7 +115,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                 ctx.execute(&mut term, verbose).unwrap();
             }
             if ctx.needs_redraw {
-                println!("refreshing screen");
+                // println!("refreshing screen");
                 let mut bb = bb2.lock().unwrap();
                 bb.clear_with(0,0,0);
                 draw_vram(&mut ctx.mmu, &mut bb);
@@ -173,7 +173,10 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
         let pc = ctx.cpu.r.pc as usize;
         let s2 = (s / 16.0).floor() as u32;
         let s3 = (s2 * 16) as usize;
-        let e = s3 + 16*5 as usize;
+        let mut e = s3 + 16*5 as usize;
+        if e >= 0xFFFF {
+            e = 0xFFFE;
+        }
         let data = &ctx.mmu.data[s3 .. e];
         let nums = 0..16;
         let plain_style = Style::new().bg(White).red();

@@ -76,11 +76,15 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
                     if *tile_id > 0 {
                         // println!("tile id is {}", tile_id);
                     }
-                    draw_tile_at(backbuffer,
-                                 x * 8 + (mmu.hardware.SCX as usize),
-                                 y * 8 + (mmu.hardware.SCY as usize),
-                                 tile_id,
-                                 lo_data);
+                    if *tile_id < 127 {
+                        draw_tile_at(backbuffer,
+                                     x * 8 + (mmu.hardware.SCX as usize),
+                                     y * 8 + (mmu.hardware.SCY as usize),
+                                     tile_id,
+                                     lo_data);
+                    } else {
+                        println!("drawing tile id {:02x}",tile_id);
+                    }
                 }
             }
         }
@@ -91,7 +95,7 @@ pub fn draw_vram(mmu:&mut MMU, backbuffer: &mut Bitmap) -> Result<()> {
                 let tile_id = atts[2];
                 let flags = atts[3];
                 if tile_id >=0 && tile_id<0xFF {
-                    println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
+                    // println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
                     if sprite_big {
                         println!("skipping big sprites");
                     } else {

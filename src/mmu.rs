@@ -1,4 +1,5 @@
 use std::cmp::{max, min};
+use log::info;
 use crate::bootrom::BOOT_ROM;
 use crate::common::{get_bit, get_bit_as_bool};
 use crate::Z80;
@@ -69,7 +70,7 @@ impl Hardware {
         }
         let (v2, overflowed) = self.DIV.overflowing_add(1);
         if overflowed {
-            println!("div overflowed");
+            // println!("div overflowed");
         }
         self.DIV = v2;
     }
@@ -224,6 +225,10 @@ impl MMU {
             // println!("reading STAT_LCDCONTROL register");
             return self.hardware.STAT;
         }
+        if addr == INTERRUPT_ENABLE {
+            return self.hardware.IE;
+        }
+        // println!("reading from address {:04x}",addr);
         self.data[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
@@ -248,44 +253,59 @@ impl MMU {
             println!("trying to write outside of RW memory {:04x} at addr {:04x}",val,addr);
             panic!("halting");
         }
+        if addr == P1_JOYPAD_INFO {
+            info!("writing to JOYPAD register {:08b}",val);
+            return;
+        }
+
         if addr == SB_REGISTER {
-            println!("wrote to the SB register {:08b}", val);
+            info!("wrote to the SB register {:08b}", val);
             // panic!("halting");
+            return;
         }
         if addr == SC_REGISTER {
-            println!("wrote to the SC register {:08b}", val);
+            info!("wrote to the SC register {:08b}", val);
             // panic!("halting");
+            return;
         }
         if addr == DIV_REGISTER {
-            println!("wrote to the DIV register {:04x}", val);
+            info!("wrote to the DIV register {:04x}", val);
             self.hardware.DIV = 0;
+            return;
         }
         if addr == TIMA_REGISTER {
             println!("wrote to the TIMA register {:04x}", val);
             panic!("halting");
         }
         if addr == TMA_REGISTER {
-            println!("wrote to the TMA register {:04x}", val);
+            info!("wrote to the TMA register {:04x}", val);
             self.hardware.TMA = val;
+            return;
         }
         if addr == TAC_REGISTER {
-            println!("wrote to the TAC register {:08b}", val);
+            info!("wrote to the TAC register {:08b}", val);
             self.hardware.TAC = val;
+            return;
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
             // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
+        if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
+            // println!("writing to hi ram {:04x} value = {:02x}",addr,val);
+        }
         if addr == LCDC_LCDCONTROL {
             // println!("writing to turn on the LCD Display");
-            println!("writing to LCDC register {:08b}",val);
+            info!("writing to LCDC register {:08b}",val);
             self.hardware.LCDC = val;
             // let b3 = get_bit(self.hardware.LCDC,3);
             // println!("bit 3 is now {}",b3);
             // dump_LCDC_bits(self.hardware.LCDC);
+            return;
         }
         if addr == STAT_LCDCONTROL {
-            println!("writing to STAT LCD register {:0b}",val);
+            info!("writing to STAT LCD register {:0b}",val);
             self.hardware.STAT = val;
+            return;
             // panic!("halting");
         }
         if addr == DMA {
@@ -299,7 +319,8 @@ impl MMU {
                 let byte = self.read8(src_addr + (n as u16));
                 self.write8(dst_addr + (n as u16),byte);
             }
-            println!("DMA transfer complete")
+            info!("DMA transfer complete");
+            return;
         }
         if addr == INTERRUPT_ENABLE {
             println!("wrote to the IE register. {:08b}",val);
@@ -322,24 +343,40 @@ impl MMU {
             }
             self.hardware.IF = val;
             // panic!("halting");
+            return;
         }
         if addr == BGP {
             //this is the background color palette
             //https://gbdev.gg8.se/wiki/articles/Video_Display#FF47_-_BGP_-_BG_Palette_Data_.28R.2FW.29_-_Non_CGB_Mode_Only
-            println!("writing to BGP LCD register {:0b}",val);
+            info!("writing to BGP LCD register {:0b}",val);
             self.hardware.BGP = val;
             dump_bgp_bits(val);
+            return;
         }
-        if addr == OBP0_ADDR  { self.hardware.OBP0 = val; }
-        if addr == OBP1_ADDR  { self.hardware.OBP1 = val; }
-        if addr == WX_ADDR  { self.hardware.WX = val; }
-        if addr == WY_ADDR  { self.hardware.WY = val; }
-        if addr == SCX_SCROLL_X { self.hardware.SCX = val; }
-        if addr == SCY_SCROLL_Y { self.hardware.SCY = val; }
+        if addr == OBP0_ADDR  { self.hardware.OBP0 = val; return; }
+        if addr == OBP1_ADDR  { self.hardware.OBP1 = val; return; }
+        if addr == WX_ADDR  { self.hardware.WX = val; return; }
+        if addr == WY_ADDR  { self.hardware.WY = val; return; }
+        if addr == SCX_SCROLL_X { self.hardware.SCX = val; return; }
+        if addr == SCY_SCROLL_Y { self.hardware.SCY = val; return; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);
             self.highest_used_iram = max(self.highest_used_iram,addr);
+        }
+        let arr = [
+            NR10_SOUND, NR11_SOUND, NR12_SOUND, NR13_SOUND, NR14_SOUND,
+            NR21_SOUND, NR22_SOUND, NR23_SOUND, NR24_SOUND,
+            NR30_SOUND, NR31_SOUND, NR32_SOUND, NR33_SOUND, NR34_SOUND,
+            NR42_SOUND, NR44_SOUND,
+            NR50_SOUND, NR51_SOUND, NR52_SOUND];
+        if arr.contains(&addr) {
+            // println!("setting sound register {:04x} to {:02x}",addr,val);
+            return;
+        }
+        if addr >= 0xFF00 && addr < 0xFF80 {
+            println!("trying to write to the registers area {:04x} {:02}",addr, val);
+            return;
         }
         self.data[addr as usize] = val;
     }
@@ -387,6 +424,9 @@ pub const VRAM_END:u16 = 0x9FFF;
 const INTERNAL_RAM_START:u16 = 0xC000;
 const INTERNAL_RAM_END:u16 = 0xDFFF;
 
+const INTERNAL_RAM_HI_START:u16 = 0xFF80;
+const INTERNAL_RAM_HI_END:u16   = 0xFFFE;
+
 const P1_JOYPAD_INFO:u16 = 0xFF00; // P1
 const SB_REGISTER:u16 = 0xFF01;
 const SC_REGISTER:u16 = 0xFF02;
@@ -400,7 +440,22 @@ const NR11_SOUND:u16 = 0xFF11;
 const NR12_SOUND:u16 = 0xFF12;
 const NR13_SOUND:u16 = 0xFF13;
 const NR14_SOUND:u16 = 0xFF14;
-const NR16_SOUND:u16 = 0xFF16;
+const NR21_SOUND:u16 = 0xFF16;
+const NR22_SOUND:u16 = 0xFF17;
+const NR23_SOUND:u16 = 0xFF18;
+const NR24_SOUND:u16 = 0xFF19;
+
+const NR30_SOUND:u16 = 0xFF1A;
+const NR31_SOUND:u16 = 0xFF1B;
+const NR32_SOUND:u16 = 0xFF1C;
+const NR33_SOUND:u16 = 0xFF1D;
+const NR34_SOUND:u16 = 0xFF1E;
+
+const NR42_SOUND:u16 = 0xFF21;
+const NR44_SOUND:u16 = 0xFF23;
+const NR50_SOUND:u16 = 0xFF24;
+const NR51_SOUND:u16 = 0xFF25;
+const NR52_SOUND:u16 = 0xFF26;
 //more sound stuff
 
 const LCDC_LCDCONTROL:u16 = 0xFF40;
