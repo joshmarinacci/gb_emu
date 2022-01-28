@@ -8,9 +8,9 @@ use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BITR2, Dec_r, Dec_rr, Inc_r, Inc_rr,
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::{Load_A_addr_u16, Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
-use crate::opcodes::Math::{ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CPL, Dec_rr_addr, Inc_rr_addr, OR_A_addr, RES, SCF, SET, SRA, SRL, SUB_A_addr, SWAP, XOR_A_addr, XOR_A_u8};
+use crate::opcodes::Math::{ADC_A_addr, ADC_A_R, ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CPL, Dec_rr_addr, Inc_rr_addr, OR_A_addr, RES, SCF, SET, SRA, SRL, SUB_A_addr, SUB_A_u8, SWAP, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
-use crate::opcodes::Special::{CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETNC, RETNZ, RETZ, RST, STOP};
+use crate::opcodes::Special::{CALL_NZ_U16, CALL_u16, DisableInterrupts, EnableInterrupts, HALT, NOOP, POP, PUSH, RET, RETI, RETNC, RETNZ, RETZ, RST, STOP};
 use crate::{MMU, Z80};
 use crate::common::{get_bit_as_bool, set_bit};
 use crate::opcodes::Jump::{Absolute_cond_carry_u16, Absolute_cond_zero_u16, Absolute_R2};
@@ -35,6 +35,7 @@ pub enum Special {
     DisableInterrupts(),
     EnableInterrupts(),
     CALL_u16(),
+    CALL_NZ_U16(),
     PUSH(DoubleRegister),
     POP(DoubleRegister),
     RET(),
@@ -90,8 +91,13 @@ pub enum Math {
     ADD_RR_RR(DoubleRegister,DoubleRegister),
     ADD_RR_u8(DoubleRegister),
     ADD_A_addr(DoubleRegister),
+    ADC_A_R(RegisterName),
+    ADC_A_addr(DoubleRegister),
+
     SUB_R_R(RegisterName,RegisterName),
     SUB_A_addr(DoubleRegister),
+    SUB_A_u8(),
+
     XOR_A_r(RegisterName),
     XOR_A_u8(),
     XOR_A_addr(DoubleRegister),
@@ -277,6 +283,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x10 => Some(SpecialInstr(STOP())),
         0x76 => Some(SpecialInstr(HALT())),
         0xCD => Some(SpecialInstr(CALL_u16())),
+        0xC4 => Some(SpecialInstr(CALL_NZ_U16())),
         0xC1 => Some(SpecialInstr(POP(BC))),
         0xC5 => Some(SpecialInstr(PUSH(BC))),
         0xD1 => Some(SpecialInstr(POP(DE))),
@@ -330,6 +337,14 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x85 => Some(MathInst(ADD_R_R(A, L))),
         0x86 => Some(MathInst(ADD_A_addr(HL))),
         0x87 => Some(MathInst(ADD_R_R(A, A))),
+        0x88 => Some(MathInst(ADC_A_R(B))),
+        0x89 => Some(MathInst(ADC_A_R(C))),
+        0x8A => Some(MathInst(ADC_A_R(D))),
+        0x8B => Some(MathInst(ADC_A_R(E))),
+        0x8C => Some(MathInst(ADC_A_R(H))),
+        0x8D => Some(MathInst(ADC_A_R(L))),
+        0x8E => Some(MathInst(ADC_A_addr(HL))),
+        0x8F => Some(MathInst(ADC_A_R(A))),
 
         0x90 => Some(MathInst(SUB_R_R(A, B))),
         0x91 => Some(MathInst(SUB_R_R(A, C))),
@@ -339,6 +354,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x95 => Some(MathInst(SUB_R_R(A, L))),
         0x96 => Some(MathInst(SUB_A_addr(HL))),
         0x97 => Some(MathInst(SUB_R_R(A, A))),
+        0xD6 => Some(MathInst(SUB_A_u8())),
 
         0xA0 => Some(MathInst(AND_A_r(B))),
         0xA1 => Some(MathInst(AND_A_r(C))),
@@ -628,8 +644,11 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         MathInst(ADD_RR_RR(dst, src)) => format!("ADD {} {}", dst, src),
         MathInst(ADD_RR_u8(rr)) => format!("ADD {}, u8",rr),
         MathInst(ADD_A_addr(rr)) => format!("ADD A, ({}) -- ADD A with contents of memory at {}",rr,rr),
+        MathInst(ADC_A_R(src)) => format!("ADD A {} -- add A to {}, store result in A", src,src),
+        MathInst(ADC_A_addr(DR)) => format!("ADD A ({}) -- add A with contents of memory at {}, use carry bit",DR,DR),
         MathInst(SUB_R_R(dst, src)) => format!("SUB {} {} -- subtract {} from {}, store result in {}", dst, src, src, dst, dst),
         MathInst(SUB_A_addr(rr)) => format!("SUB A, ({}) -- SUB A with contents of memory at {}",rr,rr),
+        MathInst(SUB_A_u8()) => format!("SUB A, u8 -- SUB A with contents immediate u8"),
 
         MathInst(Inc_rr(rr)) => format!("INC {} -- Increment register {}", rr, rr),
         MathInst(Inc_rr_addr(rr)) => format!("INC {} -- Increment value pointed to by register {}", rr, rr),
@@ -662,6 +681,7 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         SpecialInstr(NOOP()) => format!("NOOP -- do nothing"),
         SpecialInstr(STOP()) => format!("STOP -- stop interrupts?"),
         SpecialInstr(CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
+        SpecialInstr(CALL_NZ_U16()) => format!("CALL NZ u16 -- if not zflag set, save next addr to the stack, then jump to the specified address"),
         SpecialInstr(PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack", rr, rr),
         SpecialInstr(POP(rr)) => format!("POP {} -- pop off stack, back to register {}", rr, rr),
         SpecialInstr(RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
@@ -707,6 +727,18 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             cpu.dec_sp();
             mmu.write16(cpu.get_sp(), cpu.get_pc());
             cpu.set_pc(addr);
+        }
+        Special::CALL_NZ_U16() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
+            if cpu.r.zero_flag == false {
+                cpu.dec_sp();
+                cpu.dec_sp();
+                mmu.write16(cpu.get_sp(), cpu.get_pc());
+                cpu.set_pc(addr);
+            }
         }
         Special::PUSH(rr) => {
             cpu.inc_pc();
@@ -1083,6 +1115,31 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
             cpu.r.set_u8reg(&A, result);
         }
+        Math::ADC_A_R(R) => {
+            cpu.inc_pc();
+            let c = if cpu.r.carry_flag { 1 } else { 0 };
+            let a = cpu.r.get_u8reg(&A);
+            let b = cpu.r.get_u8reg(R);
+            let r = a.wrapping_add(b).wrapping_add(c);
+            cpu.r.zero_flag = r == 0;
+            cpu.r.half_flag = (a & 0x0F) + (b & 0x0f) + c > 0xF;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.carry_flag = (a as u16) + (b as u16)  + (c as u16)> 0xFF;
+            cpu.r.set_u8reg(&A, r);
+        }
+        Math::ADC_A_addr(DR) => {
+            cpu.inc_pc();
+            let c = if cpu.r.carry_flag { 1 } else { 0 };
+            let a = cpu.r.get_u8reg(&A);
+            let addr = cpu.r.get_u16reg(DR);
+            let b = mmu.read8(addr);
+            let r = a.wrapping_add(b).wrapping_add(c);
+            cpu.r.zero_flag = r == 0;
+            cpu.r.half_flag = (a & 0x0F) + (b & 0x0f) + c > 0xF;
+            cpu.r.subtract_n_flag = false;
+            cpu.r.carry_flag = (a as u16) + (b as u16)  + (c as u16)> 0xFF;
+            cpu.r.set_u8reg(&A, r);
+        }
         Math::SUB_R_R(dst, src) => {
             cpu.inc_pc();
             let dst_v = cpu.r.get_u8reg(dst);
@@ -1099,6 +1156,17 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let dst_v = cpu.r.get_u8reg(&A);
             let addr = cpu.r.get_u16reg(rr);
             let src_v = mmu.read8(addr);
+            let result = dst_v.wrapping_sub(src_v);
+            cpu.r.zero_flag = result == 0;
+            cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+            cpu.r.subtract_n_flag = true;
+            cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+            cpu.r.set_u8reg(&A, result);
+        }
+        Math::SUB_A_u8() => {
+            cpu.inc_pc();
+            let dst_v = cpu.r.get_u8reg(&A);
+            let src_v = mmu.read8(cpu.get_pc());
             let result = dst_v.wrapping_sub(src_v);
             cpu.r.zero_flag = result == 0;
             cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);

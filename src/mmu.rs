@@ -264,9 +264,10 @@ impl MMU {
         self.data[(addr + 0) as usize] = lo;
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
+        // info!("writing {:02x} at {:04x}",val,addr);
         if addr < 0x8000 {
             if addr >= 0x2000 && addr <= 0x3FFF {
-                // println!("writing to ROM Bank Number {:04x}",val);
+                info!("writing to ROM Bank Number {:04x}",val);
                 return;
             }
             println!("trying to write outside of RW memory {:04x} at addr {:04x}",val,addr);

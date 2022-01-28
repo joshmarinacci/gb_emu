@@ -119,7 +119,8 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
             } else {
                 ctx.execute(&mut term, verbose).unwrap();
             }
-            if ctx.mmu.refresh_requested {
+            if ctx.mmu.refresh_requested && show_screen {
+                println!("refresh requested");
                 {
                     let mut bb = bb2.lock().unwrap();
                     // bb.clear_with(0, 0, 0);
