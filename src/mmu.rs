@@ -4,6 +4,7 @@ use crate::bootrom::BOOT_ROM;
 use crate::common::{get_bit, get_bit_as_bool};
 use crate::Z80;
 
+#[derive(Debug)]
 pub enum InterruptType {
     VBlank,
     Timer,

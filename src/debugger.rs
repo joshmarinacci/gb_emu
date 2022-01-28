@@ -26,6 +26,8 @@ struct Ctx {
     cart: Option<RomFile>,
     full_registers_visible: bool,
     test_memory_visible: bool,
+    show_interrupts:bool,
+    last_status:String,
 }
 
 impl Ctx {
@@ -39,6 +41,8 @@ impl Ctx {
             cart: None,
             full_registers_visible: false,
             test_memory_visible: false,
+            show_interrupts: false,
+            last_status: String::from("--nothing--"),
         }
     }
 }
@@ -88,6 +92,8 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         cart,
         full_registers_visible:false,
         test_memory_visible: false,
+        show_interrupts: false,
+        last_status: "".to_string()
     };
     let mut term = Term::stdout();
 
@@ -146,7 +152,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
 
 fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Result<()>{
     let border = Style::new().bg(Color::Magenta).black();
-    // term.clear_screen()?;
+    term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
         term.write_line(&format!("executing rom {}", cart.path))?;
     }
@@ -237,6 +243,9 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
     if ctx.test_memory_visible {
         show_test_memory(term, ctx)?;
     }
+    if ctx.show_interrupts {
+        dump_interrupts(term, ctx)?;
+    }
 
     // print info about the next opcode
     let primary = Style::new().green().bold();
@@ -254,6 +263,8 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
         println!("current cycle {}", ctx.clock);
         panic!("unknown op code")
     }
+
+    println!("{}",ctx.last_status);
 
 
     let commands = Style::new().reverse();
@@ -281,8 +292,9 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
             backbuffer.clear_with(0,0,0);
             draw_vram(&mut ctx.mmu, backbuffer);
             backbuffer.write_to_file("./screen.png");
+            ctx.last_status = String::from("wrote to screen.png")
         },
-        'i' => dump_interrupts(term, ctx)?,
+        'i' => ctx.show_interrupts = !ctx.show_interrupts,
         't' => ctx.test_memory_visible = !ctx.test_memory_visible,
         'm' => dump_all_memory(term,ctx)?,
         'b' => {
@@ -323,7 +335,12 @@ fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
 fn dump_interrupts(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
     term.write_line(&reg.apply_to("INTERRUPTS").to_string())?;
+    term.write_line(&format!("active interrupt = {:?}",ctx.mmu.hardware.active_interrupt))?;
     term.write_line(&format!("vblank = {}",ctx.mmu.hardware.vblank_interrupt_enabled))?;
+    term.write_line(&format!("timer = {}",ctx.mmu.hardware.timer_interrupt_enabled))?;
+    term.write_line(&format!("lcdc = {}",ctx.mmu.hardware.lcdc_interrupt_enabled))?;
+    term.write_line(&format!("serial = {}",ctx.mmu.hardware.serial_interrupt_enabled))?;
+    term.write_line(&format!("transition = {}",ctx.mmu.hardware.transition_interrupt_enabled))?;
     Ok(())
 }
 
