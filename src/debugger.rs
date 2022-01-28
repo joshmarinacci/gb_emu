@@ -281,8 +281,12 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
             }
         },
         'u' => {
-            term.write_line("doing 256 instructions")?;
             for n in 0..256 {
+                ctx.execute(term, false)?;
+            }
+        },
+        'U' => {
+            for n in 0..(256*16) {
                 ctx.execute(term, false)?;
             }
         },
