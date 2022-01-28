@@ -1191,133 +1191,100 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             val = set_bit(val,*b,true);
             cpu.r.set_u8reg(r,val);
         }
-        Math::RLC(r) => {
+        Math::RLC(R) => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(r);
-            let carry_flag = r_val & 0x80 == 0x80;
-            let f_val = (r_val << 1) | if carry_flag { 1 } else { 0 };
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(r,f_val);
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x80 == 0x80;
+            let r = (a << 1) | if c { 1 } else { 0 };
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu, r,c);
         }
         Math::RLCA() => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(&A);
-            let carry_flag = r_val & 0x80 == 0x80;
-            let f_val = (r_val << 1) | if carry_flag { 1 } else { 0 };
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(&A,f_val);
+            let a = cpu.r.get_u8reg(&A);
+            let c = a & 0x80 == 0x80;
+            let r = (a << 1) | if c { 1 } else { 0 };
+            cpu.r.set_u8reg(&A, r);
+            set_sr_flags(cpu,r,c);
         }
-        Math::RL(r) => {
+        Math::RL(R) => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(r);
-            let carry_flag = r_val & 0x80 == 0x80;
-            let f_val = (r_val << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(r, f_val);
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x80 == 0x80;
+            let r = (a << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu,r,c);
         }
         Math::RLA() => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(&A);
-            let carry_flag = r_val & 0x80 == 0x80;
-            let f_val = (r_val << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(&A, f_val);
+            let a = cpu.r.get_u8reg(&A);
+            let c = a & 0x80 == 0x80;
+            let r = (a << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
+            cpu.r.set_u8reg(&A, r);
+            set_sr_flags(cpu,r,c);
         }
-        Math::RRC(r) => {
+        Math::RRC(R) => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(r);
-            let carry_flag = r_val & 0x01 == 0x01;
-            let f_val = (r_val >> 1) | (if carry_flag {0x80} else { 0x00 });
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(r, f_val);
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x01 == 0x01;
+            let r = (a >> 1) | (if c {0x80} else { 0x00 });
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu,r,c);
         }
         Math::RRCA() => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(&A);
-            let carry_flag = r_val & 0x01 == 0x01;
-            let f_val = (r_val >> 1) | (if carry_flag {0x80} else { 0x00 });
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(&A, f_val);
+            let a = cpu.r.get_u8reg(&A);
+            let c = a & 0x01 == 0x01;
+            let r = (a >> 1) | (if c {0x80} else { 0x00 });
+            cpu.r.set_u8reg(&A, r);
+            set_sr_flags(cpu,r,c);
         }
-        Math::RR(r) => {
+        Math::RR(R) => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(r);
-            let carry_flag = r_val & 0x01 == 0x01;
-            let f_val = (r_val >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(r, f_val);
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x01 == 0x01;
+            let r = (a >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::RRA() => {
             cpu.inc_pc();
-            let r_val = cpu.r.get_u8reg(&A);
-            let carry_flag = r_val & 0x01 == 0x01;
-            let f_val = (r_val >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
-            cpu.r.half_flag = false;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.zero_flag = f_val == 0;
-            cpu.r.carry_flag = carry_flag;
-            cpu.r.set_u8reg(&A, f_val);
+            let a = cpu.r.get_u8reg(&A);
+            let c = a & 0x01 == 0x01;
+            let r = (a >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
+            cpu.r.set_u8reg(&A, r);
+            set_sr_flags(cpu,r,c);
         }
-        Math::SLA(r) => {
+        Math::SLA(R) => {
             cpu.inc_pc();
-            let n = cpu.r.get_u8reg(r);
-            let v = cpu.r.get_u8reg(&A);
-            let (v2,carry) = v.overflowing_shl(n as u32);
-            cpu.r.set_u8reg(&A,v2);
-            cpu.r.zero_flag = v2 == 0;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.half_flag = false;
-            cpu.r.carry_flag = carry;
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x80 == 0x80;
+            let r = a << 1;
+            cpu.r.set_u8reg(R,r);
+            set_sr_flags(cpu,r,c);
         }
-        Math::SRA(r) => {
+        Math::SRA(R) => {
             cpu.inc_pc();
-            let n = cpu.r.get_u8reg(r);
-            let v = cpu.r.get_u8reg(&A);
-            let (v2,carry) = v.overflowing_shr(n as u32);
-            cpu.r.set_u8reg(&A,v2);
-            cpu.r.zero_flag = v2 == 0;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.half_flag = false;
-            cpu.r.carry_flag = carry;
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x01 == 0x01;
+            let r = (a >> 1) | (a &0x80);
+            cpu.r.set_u8reg(R,r);
+            set_sr_flags(cpu,r,c);
         }
-        Math::SRL(r) => {
+        Math::SRL(R) => {
             cpu.inc_pc();
-            let n = cpu.r.get_u8reg(r);
-            let v = cpu.r.get_u8reg(&L);
-            let (v2,carry) = v.overflowing_shr(n as u32);
-            cpu.r.set_u8reg(&A,v2);
-            cpu.r.zero_flag = v2 == 0;
-            cpu.r.subtract_n_flag = false;
-            cpu.r.half_flag = false;
-            cpu.r.carry_flag = carry;
             cpu.inc_pc();
+            let a = cpu.r.get_u8reg(R);
+            let c = a & 0x01 == 0x01;
+            let r = a >> 1;
+            cpu.r.set_u8reg(R,r);
+            set_sr_flags(cpu,r,c);
         }
         Math::CPL() => {
             cpu.inc_pc();
@@ -1346,6 +1313,13 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.carry_flag = true;
         }
     }
+}
+
+fn set_sr_flags(cpu: &mut Z80, r: u8, carry: bool) {
+    cpu.r.zero_flag = r == 0;
+    cpu.r.subtract_n_flag = false;
+    cpu.r.half_flag = false;
+    cpu.r.carry_flag = carry;
 }
 
 pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
