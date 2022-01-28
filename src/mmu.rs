@@ -27,6 +27,8 @@ pub struct Hardware {
     pub OBP0:u8,
     pub OBP1:u8,
 
+    pub SB:u8,
+
     pub TIMA:u8,
     pub TMA:u8,
     pub DIV:u8,
@@ -72,6 +74,7 @@ impl Hardware {
             TMA:0,
             DIV:0,
             TAC:0,
+            SB: 0
         }
     }
     pub fn update(&mut self) {
@@ -279,12 +282,16 @@ impl MMU {
         }
 
         if addr == SB_REGISTER {
-            info!("wrote to the SB register {:08b}", val);
+            // info!("wrote to the SB register {:08b} {:02x}", val, val);
+            self.hardware.SB = val;
             // panic!("halting");
             return;
         }
         if addr == SC_REGISTER {
-            info!("wrote to the SC register {:08b}", val);
+            // info!("wrote to the SC register {:08b} {:02x}", val, val);
+            if val == 0x81 {
+                info!("print serial byte {:02x}", self.hardware.SB)
+            }
             // panic!("halting");
             return;
         }

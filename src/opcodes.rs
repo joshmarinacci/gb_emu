@@ -10,7 +10,7 @@ use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::{Load_A_addr_u16, Load_addr_R2_u8, Load_R_HI_R, Load_R_u8};
 use crate::opcodes::Math::{ADC_A_addr, ADC_A_R, ADC_A_u8, ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CPL, Dec_rr_addr, Inc_rr_addr, OR_A_addr, RES, SCF, SET, SRA, SRL, SUB_A_addr, SUB_A_u8, SWAP, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
-use crate::opcodes::Special::{CALL_NZ_U16, CALL_u16, DisableInterrupts, EnableInterrupts, HALT, Invalid, NOOP, POP, PUSH, RET, RETI, RETNC, RETNZ, RETZ, RST, STOP};
+use crate::opcodes::Special::{CALL_NZ_U16, CALL_u16, DisableInterrupts, EnableInterrupts, HALT, Invalid, NOOP, POP, PUSH, RET, RETC, RETI, RETNC, RETNZ, RETZ, RST, STOP};
 use crate::{MMU, Z80};
 use crate::common::{get_bit_as_bool, set_bit};
 use crate::opcodes::Jump::{Absolute_cond_carry_u16, Absolute_cond_zero_u16, Absolute_R2};
@@ -43,6 +43,7 @@ pub enum Special {
     RETNZ(),
     RETNC(),
     RETI(),
+    RETC(),
     RST(u8),
     Invalid(u8),
 }
@@ -300,6 +301,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xC9 => Some(SpecialInstr(RET())),
         0xD9 => Some(SpecialInstr(RETI())),
         0xD0 => Some(SpecialInstr(RETNC())),
+        0xD8 => Some(SpecialInstr(RETC())),
 
         0xC7 => Some(SpecialInstr(RST(0x00))),
         0xD7 => Some(SpecialInstr(RST(0x10))),
@@ -692,6 +694,7 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         SpecialInstr(POP(rr)) => format!("POP {} -- pop off stack, back to register {}", rr, rr),
         SpecialInstr(RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
         SpecialInstr(RETI()) => format!("RET -- pop two bytes from the stack and jump to that address, plus enable interrupts"),
+        SpecialInstr(RETC()) => format!("RETC -- return if carry is set"),
         SpecialInstr(RST(h)) => format!("RST {:02x} -- put present address onto stack, jump to address {:02x}", h, h),
         SpecialInstr(RETZ()) => format!("RET Z  -- return of zflag is set"),
         SpecialInstr(RETNZ()) => format!("RET NZ  -- return of zflag is not set"),
@@ -801,6 +804,15 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         Special::RETNC() => {
             cpu.inc_pc();
             if !cpu.r.carry_flag {
+                let addr = mmu.read16(cpu.r.sp);
+                cpu.inc_sp();
+                cpu.inc_sp();
+                cpu.set_pc(addr);
+            }
+        }
+        Special::RETC() => {
+            cpu.inc_pc();
+            if cpu.r.carry_flag {
                 let addr = mmu.read16(cpu.r.sp);
                 cpu.inc_sp();
                 cpu.inc_sp();
@@ -1485,6 +1497,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             let e = u8_as_i8(mmu.read8(cpu.r.pc));
             cpu.inc_pc();
+            info!("jumpping relative {}",e);
             cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16);
         }
     }
