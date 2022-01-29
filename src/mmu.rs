@@ -318,6 +318,9 @@ impl MMU {
             // info!("reading to read from bad ram area");
             return 0xFF;
         }
+        if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
+            info!("reading from hi ram {:04x} value = {:02x}",addr,self.data[addr as usize]);
+        }
         // println!("reading from address {:04x}",addr);
         self.data[addr as usize]
     }
@@ -365,13 +368,13 @@ impl MMU {
             panic!("halting");
         }
         if addr == P1_JOYPAD_INFO {
-            info!("writing to JOYPAD register {:08b}",val);
+            // info!("writing to JOYPAD register {:08b}",val);
             if get_bit_as_bool(val,5) {
-                info!("Select Action Buttons");
+                // info!("Select Action Buttons");
                 self.joypad.readmode = JoypadReadMode::Action();
             }
             if get_bit_as_bool(val,4) {
-                info!("Select Direction Buttons");
+                // info!("Select Direction Buttons");
                 self.joypad.readmode = JoypadReadMode::Direction();
             }
             return;
@@ -414,7 +417,7 @@ impl MMU {
             // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
-            // println!("writing to hi ram {:04x} value = {:02x}",addr,val);
+            info!("writing to hi ram {:04x} value = {:02x}",addr,val);
         }
         if addr == LCDC_LCDCONTROL {
             // println!("writing to turn on the LCD Display");

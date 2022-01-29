@@ -770,7 +770,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
 pub fn lookup_opcode_info(op: Instr) -> String {
     match op {
         LoadInstr(Load_R_u8(r)) => format!("LD {},n -- Load register from immediate u8", r),
-        LoadInstr(Load_HI_R_U8(r)) => format!("LDH {},(n) -- Load High: put contents of 0xFF00 + u8 into register {}", r, r),
+        LoadInstr(Load_HI_R_U8(r)) => format!("LDH {},(n) -- Load contents of 0xFF00 + u8 into {}", r, r),
         LoadInstr(Load_HI_U8_R(r)) => format!("LDH (n),{} -- Load High at u8 address with contents of {}", r, r),
         LoadInstr(Load_HI_R_R(off, src)) => format!("LD (FF00 + {}),{}  -- Load High: put contents of register {} into memory of 0xFF00 + {} ", off, src, src, off),
         LoadInstr(Load_R_HI_R(dst, off)) => format!("LD {}, (FF00 + {}) -- Load High: put contents of memory at 0xFF00 + {} into register {}", dst, off, off, dst),
@@ -1759,12 +1759,14 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             let addr = mmu.read16(cpu.get_pc());
             cpu.inc_pc();
             cpu.inc_pc();
+            info!("Jumping to {:04x}",addr);
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
         },
         Jump::Absolute_R2(rr) => {
             let addr = cpu.r.get_u16reg(rr);
+            info!("Jumping to {:04x}",addr);
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
@@ -1792,7 +1794,9 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
-            if !cpu.r.zero_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
+            if !cpu.r.zero_flag {
+                cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16);
+            }
         },
         Jump::Absolute_cond_notzero_u16() => {
             cpu.inc_pc();
@@ -1800,6 +1804,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             cpu.inc_pc();
             if !cpu.r.zero_flag {
+                info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
         },
@@ -1809,6 +1814,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             cpu.inc_pc();
             if cpu.r.zero_flag {
+                info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
         },
@@ -1818,6 +1824,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             cpu.inc_pc();
             if cpu.r.carry_flag {
+                info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
         },
