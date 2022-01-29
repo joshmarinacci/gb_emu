@@ -290,7 +290,7 @@ impl MMU {
         if addr == SC_REGISTER {
             // info!("wrote to the SC register {:08b} {:02x}", val, val);
             if val == 0x81 {
-                info!("print serial byte {:02x}", self.hardware.SB)
+                info!("print serial byte {:02x} {}", self.hardware.SB, char::from_u32(self.hardware.SB as u32).unwrap());
             }
             // panic!("halting");
             return;
