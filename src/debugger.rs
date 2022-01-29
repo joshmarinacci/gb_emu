@@ -6,7 +6,7 @@ use std::sync::mpsc::channel;
 use console::Color::{Black, Red, White};
 use log::{debug, info};
 use Load::Load_R_u8;
-use crate::{common, MMU, opcodes, Z80};
+use crate::{common, MMU, opcodes, ScreenSettings, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
 use crate::mmu::{TEST_ADDR, TIMER_INTERRUPT_ADDR};
 use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
@@ -14,7 +14,7 @@ use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
 use crate::opcodes::Instr::{LoadInstr, SpecialInstr};
 use crate::opcodes::RegisterName::{A, B, C, D};
-use crate::ppu::draw_vram;
+use crate::ppu::{PPU, ScreenState};
 use crate::screen::Screen;
 
 struct Ctx {
@@ -97,12 +97,13 @@ pub enum InputEvent {
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       fast_forward: u32,
-                      show_screen: bool,
+                      screen_settings:&ScreenSettings,
                       breakpoint:u16,
                       verbose:bool,
                       interactive:bool) -> Result<()> {
-    let backbuffer_bitmap = Bitmap::init(256,256);
-    let backbuffer = Arc::new(Mutex::new(backbuffer_bitmap));
+    let mut ppu = PPU::init();
+    let screen_state = ScreenState::init();
+    let shared_screen_state = Arc::new(Mutex::new(ScreenState::init()));
     let mut ctx = Ctx {
         cpu, mmu, clock:0,
         running:true,
@@ -123,14 +124,19 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     let (to_screen,receive_screen) = channel::<String>();
     let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
-    let bb2 = backbuffer.clone();
+    let bb2 = shared_screen_state.clone();
+    let screen_enabled = screen_settings.enabled;
     let hand = thread::spawn(move | |
         {
         while ctx.running {
+
+            //handle breakpoints
             if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
                 println!("done hit the breakpoint");
                 ctx.interactive = true;
             }
+
+            //step forward or execute next CPU clock cycle
             if ctx.interactive {
                 let mut bb = bb2.lock().unwrap();
                 step_forward(&mut ctx, &mut term, &mut bb).unwrap();
@@ -160,11 +166,12 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                     }
                 }
             }
-            if ctx.mmu.refresh_requested && show_screen {
+            if ctx.mmu.refresh_requested && screen_enabled {
                 {
                     let mut bb = bb2.lock().unwrap();
                     // bb.clear_with(0, 0, 0);
-                    draw_vram(&mut ctx.mmu, &mut bb);
+                    ppu.draw_vram(&mut ctx.mmu, &mut bb);
+                    // draw_vram(&mut ctx.mmu, &mut bb);
                 }
                 to_screen.send(String::from("go"));
                 if let Ok(str) = receive_cpu.recv() {
@@ -176,12 +183,12 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         }
     });
 
-    if show_screen {
-        let mut screen_obj = Screen::init(256, 256);
+    if screen_settings.enabled {
+        let mut screen_obj = Screen::init(screen_settings);
         while true {
             if !screen_obj.process_input(&to_cpu) { break; }
             if let Ok(str) = receive_screen.try_recv() {
-                screen_obj.update_screen(&backbuffer);
+                screen_obj.update_screen(&shared_screen_state);
                 to_cpu.send(InputEvent::Stop());
             }
         }
@@ -191,7 +198,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     Ok(())
 }
 
-fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Result<()>{
+fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut MutexGuard<ScreenState>) -> Result<()>{
     let border = Style::new().bg(Color::Magenta).black();
     // term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
@@ -334,9 +341,9 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Resu
         // 'v' => dump_vram(term, ctx)?,
         'o' => dump_oram(term, ctx)?,
         's' => {
-            backbuffer.clear_with(0,0,0);
-            draw_vram(&mut ctx.mmu, backbuffer);
-            backbuffer.write_to_file("./screen.png");
+            // screenstate.clear_with(0, 0, 0);
+            // draw_vram(&mut ctx.mmu, screenstate);
+            // screenstate.write_to_file("./screen.png");
             ctx.last_status = String::from("wrote to screen.png")
         },
         'i' => ctx.show_interrupts = !ctx.show_interrupts,

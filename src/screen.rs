@@ -1,5 +1,5 @@
 use std::sync::mpsc::Sender;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -11,11 +11,19 @@ use crate::common::Bitmap;
 use crate::debugger::{InputEvent, JoyPadKey};
 use crate::debugger::InputEvent::{Press, Release};
 use crate::debugger::JoyPadKey::A;
+use crate::ppu::ScreenState;
 
+pub struct ScreenSettings {
+    pub(crate) x:i32,
+    pub(crate) y:i32,
+    pub(crate) scale:f32,
+    pub(crate) enabled:bool,
+}
 pub struct Screen {
     canvas:WindowCanvas,
     texture:Texture,
     context: Sdl,
+    pub scale: f32,
 }
 
 impl Screen {
@@ -63,33 +71,41 @@ impl Screen {
 }
 
 impl Screen {
-    pub fn init(w:i32,h:i32) -> Screen {
+    pub fn init(settings: &ScreenSettings) -> Screen {
+        println!("using scale {}", settings.scale);
+        let win_w:u32 = (settings.scale * 256.0).floor() as u32;
+        let win_h:u32 = (settings.scale * 256.0).floor() as u32;
+        let tex_w:u32 = 256;
+        let tex_h:u32 = 256;
         let sdl_context = sdl2::init().unwrap();
         let window = sdl_context.video().unwrap()
-            .window("rust-sdl2 demo: Video", 256 * 2, 256 * 2)
-            .position_centered()
+            .window("rust-sdl2 demo: Video", win_w, win_h)
+            .position(settings.x,settings.y)//ition_centered()
             .opengl()
             .build()
             .map_err(|e| e.to_string()).unwrap();
         let canvas:WindowCanvas = window.into_canvas().software().build().map_err(|e| e.to_string()).unwrap();
-        let tex = canvas.texture_creator().create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, w as u32, h as u32).unwrap();
+        let tex = canvas.texture_creator()
+            .create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, tex_w,tex_h).unwrap();
         Screen {
             context:sdl_context,
             canvas,
             texture:tex,
+            scale:settings.scale,
         }
     }
-    pub fn update_screen(&mut self, backbuffer_m: &Mutex<Bitmap>)  {
+    pub fn update_screen(&mut self, screenstate_mutex: &Arc<Mutex<ScreenState>>)  {
         //handle any pending inputs
         {
-            let backbuffer = backbuffer_m.lock().unwrap();
+            let screenstate = screenstate_mutex.lock().unwrap();
+            println!("current scanline {}", screenstate.current_scanline);
             self.canvas.with_texture_canvas(&mut self.texture, |can| {
-                for i in 0..backbuffer.w {
-                    for j in 0..backbuffer.h {
-                        let n: usize = ((j * backbuffer.w + i) * 4) as usize;
+                for i in 0..screenstate.backbuffer.w {
+                    for j in 0..screenstate.backbuffer.h {
+                        let n: usize = ((j * screenstate.backbuffer.w + i) * 4) as usize;
                         //let px = img.get_pixel_32argb(i,j);
                         // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
-                        let (r, g, b) = backbuffer.get_pixel_rgb(i, j);
+                        let (r, g, b) = screenstate.backbuffer.get_pixel_rgb(i, j);
                         // println!("rgb {},{},{}",r,g,b);
                         // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
                         can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
@@ -97,12 +113,9 @@ impl Screen {
                     }
                 }
             }).unwrap();
-
-
-            self.canvas.copy(&self.texture, None,
-                               Rect::new(0, 0,
-                                         (backbuffer.w * 2) as u32,
-                                         (backbuffer.h * 2) as u32));
+            let w = (self.scale * screenstate.backbuffer.w as f32).floor() as u32;
+            let h = (self.scale * screenstate.backbuffer.h as f32).floor() as u32;
+            self.canvas.copy(&self.texture, None, Rect::new(0, 0, w,h));
 
         }
         self.canvas.present();

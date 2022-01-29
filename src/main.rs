@@ -26,6 +26,7 @@ use common::RomFile;
 use crate::cpu::Z80;
 use crate::debugger::start_debugger;
 use crate::mmu::MMU;
+use crate::screen::ScreenSettings;
 
 fn main() -> Result<()>{
     let args = init_setup();
@@ -53,7 +54,13 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
         cpu.r.pc = 0x100;
     }
 
-    start_debugger(cpu, mmu, Some(cart), args.fastforward, args.screen, args.breakpoint, args.verbose, args.interactive)?;
+    let settings = ScreenSettings {
+        x: args.x,
+        y: args.y,
+        scale: args.scale,
+        enabled: args.screen
+    };
+    start_debugger(cpu, mmu, Some(cart), args.fastforward, &settings, args.breakpoint, args.verbose, args.interactive)?;
     Ok(())
 }
 
@@ -117,6 +124,12 @@ struct Cli {
     breakpoint:u16,
     #[structopt(long)]
     screen:bool,
+    #[structopt(long, default_value="100")]
+    x:i32,
+    #[structopt(long, default_value="100")]
+    y:i32,
+    #[structopt(long, default_value="1")]
+    scale:f32,
 }
 
 fn init_setup() -> Cli {
