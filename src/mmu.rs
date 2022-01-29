@@ -1,7 +1,7 @@
 use std::cmp::{max, min};
 use log::info;
 use crate::bootrom::BOOT_ROM;
-use crate::common::{get_bit, get_bit_as_bool};
+use crate::common::{get_bit, get_bit_as_bool, set_bit};
 use crate::Z80;
 
 #[derive(Debug)]
@@ -92,6 +92,17 @@ impl Hardware {
         self.DIV = v2;
     }
 }
+
+pub struct Joypad {
+    pub a:bool,
+    pub b:bool,
+    pub select:bool,
+    pub start:bool,
+    pub up:bool,
+    pub down:bool,
+    pub left:bool,
+    pub right:bool,
+}
 pub struct MMU {
     inbios:bool,
     bios:Vec<u8>,
@@ -100,6 +111,7 @@ pub struct MMU {
     highest_used_iram:u16,
     pub hardware:Hardware,
     pub refresh_requested:bool,
+    pub joypad:Joypad,
 }
 
 impl MMU {
@@ -144,9 +156,15 @@ impl MMU {
 
         if self.hardware.IME == 1  && self.hardware.interrupt_just_returned {
             self.hardware.interrupt_just_returned = false;
+            self.hardware.IF = set_bit(self.hardware.IF,0,false);
             match self.hardware.active_interrupt {
-                InterruptType::VBlank => self.refresh_requested = true,
-                InterruptType::Timer => {}
+                InterruptType::VBlank => {
+                    self.refresh_requested = true;
+                    // info!("ending VBLank Interrupt");
+                },
+                InterruptType::Timer => {
+                    info!("ending timer interrupt");
+                }
                 InterruptType::Serial => {}
                 InterruptType::None => {}
             }
@@ -155,7 +173,9 @@ impl MMU {
         //vblank
         if old_LY > 0 && self.hardware.LY == 0 {
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
+                // info!("starting VBLank Interrupt");
                 self.hardware.active_interrupt = InterruptType::VBlank;
+                self.hardware.IF = set_bit(self.hardware.IF,0,true);
                 self.hardware.IME = 0;
                 cpu.dec_sp();
                 cpu.dec_sp();
@@ -175,8 +195,10 @@ impl MMU {
                 if overflowed {
                     self.hardware.TIMA = self.hardware.TMA;
                     if self.hardware.IME > 0 && self.hardware.timer_interrupt_enabled {
+                        info!("starting timer interrupt");
                         self.hardware.IME = 0;
                         self.hardware.active_interrupt = InterruptType::Timer;
+                        self.hardware.IF = set_bit(self.hardware.IF,2,true);
                         cpu.dec_sp();
                         cpu.dec_sp();
                         self.write16(cpu.r.sp, cpu.r.pc);
@@ -226,7 +248,17 @@ impl MMU {
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
             hardware: Hardware::init(),
-            refresh_requested: false
+            refresh_requested: false,
+            joypad: Joypad {
+                a: false,
+                b: false,
+                select: false,
+                start: false,
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            }
         }
     }
     pub(crate) fn overlay_boot(&mut self) {
@@ -252,19 +284,41 @@ impl MMU {
             return self.hardware.IE;
         }
         if addr == P1_JOYPAD_INFO {
-            info!("reading from joypad info");
-            return 0b0000_1000;
+            let mut val = 0xFF;
+            // 0 means pressed, 1 meanse released
+            val = set_bit(val,0, !self.joypad.a);
+            // val = set_bit(val,1,true);
+            // val = set_bit(val,2,true);
+            // val = set_bit(val,3,true);
+            info!("reading from joypad info {:08b}",val);
+            return val;
+        }
+        if addr == IF_INTERRUPT_FLAG {
+            info!("reading If flags {:0b}",self.hardware.IF);
+            return self.hardware.IF;
+        }
+        if addr >= 0xFEA0 && addr <= 0xFEFF {
+            info!("writing to read from bad ram area");
+            return 0xFF;
         }
         // println!("reading from address {:04x}",addr);
         self.data[addr as usize]
     }
     pub fn read16(&self, addr:u16) -> u16 {
+        if addr >= 0xFEA0 && addr <= 0xFEFF {
+            info!("writing to read from bad ram area");
+            return 0xFFFF;
+        }
+
         // println!("reading from bios at loca{tion {:04x}",addr);
         let hi = self.data[(addr + 1) as usize] as u16;
         let lo = self.data[(addr + 0) as usize] as u16;
         (hi << 8) + lo
     }
     pub fn write16(&mut self, addr:u16, data:u16) {
+        if addr >= 0xFEA0 && addr <= 0xFEFF {
+            println!("writing to write to bad ram area");
+        }
         // println!("writing to memory at location {:04x}",addr);
         let hi = ((data & 0xFF00) >> 8) as u8;
         let lo = ((data & 0x00FF) >> 0) as u8;
@@ -274,8 +328,20 @@ impl MMU {
     pub fn write8(&mut self, addr:u16, val:u8) {
         // info!("writing {:02x} at {:04x}",val,addr);
         if addr < 0x8000 {
+            if addr >= 0x0000 && addr <= 0x1FFF {
+                info!("writing to enable external RAM");
+                return;
+            }
             if addr >= 0x2000 && addr <= 0x3FFF {
                 info!("writing to ROM Bank Number {:04x}",val);
+                return;
+            }
+            if addr >= 0x4000 && addr <= 0x5FFF {
+                info!("writing to RAM Bank Number or Upper bits of ROM bank number {:04x}",val);
+                return;
+            }
+            if addr >= 0x6000 && addr <= 0x7FFF {
+                info!("toggling MBC1 banking modes {:04x}",val);
                 return;
             }
             println!("trying to write outside of RW memory {:04x} at addr {:04x}",val,addr);
@@ -335,6 +401,7 @@ impl MMU {
             // println!("writing to turn on the LCD Display");
             info!("writing to LCDC register {:08b}",val);
             self.hardware.LCDC = val;
+            // dump_lcdc_bits(val);
             return;
         }
         if addr == STAT_LCDCONTROL {
@@ -353,11 +420,16 @@ impl MMU {
                 let byte = self.read8(src_addr + (n as u16));
                 self.write8(dst_addr + (n as u16),byte);
             }
-            info!("DMA transfer complete");
+            // info!("DMA transfer complete");
             return;
         }
         if addr == INTERRUPT_ENABLE {
-            // println!("wrote to the IE register. {:08b}",val);
+            info!("wrote to the Ie register. {:08b}",val);
+            if get_bit_as_bool(val,0) { info!("enabled vblank interrupt"); }
+            if get_bit_as_bool(val,1) { info!("enabled LCD Stat interrupt"); }
+            if get_bit_as_bool(val,2) { info!("enabled Timer interrupt"); }
+            if get_bit_as_bool(val,3) { info!("enabled serial interrupt"); }
+            if get_bit_as_bool(val,4) { info!("enabled joypad interrupt"); }
             self.hardware.vblank_interrupt_enabled = get_bit_as_bool(val,0);
             self.hardware.lcdc_interrupt_enabled = get_bit_as_bool(val,1);
             self.hardware.timer_interrupt_enabled = get_bit_as_bool(val,2);
@@ -367,6 +439,7 @@ impl MMU {
             return;
         }
         if addr == IF_INTERRUPT_FLAG {
+            info!("wrote to the If register. {:08b}",val);
             self.hardware.IF = val;
             return;
         }
@@ -397,8 +470,11 @@ impl MMU {
             // println!("setting sound register {:04x} to {:02x}",addr,val);
             return;
         }
+        if addr >= 0xFEA0 && addr <= 0xFEFF {
+            info!("writing to write to bad ram area");
+        }
         if addr >= 0xFF00 && addr < 0xFF80 {
-            println!("trying to write to the registers area {:04x} {:02}",addr, val);
+            info!("trying to write to the registers area {:04x} {:02}",addr, val);
             return;
         }
         self.data[addr as usize] = val;
@@ -437,7 +513,7 @@ fn dump_lcdc_bits(by: u8) {
             7 => format!("LCD Display Enable = {}",b),
             _ => "Unknown so far".to_string(),
         };
-        println!("LCDC: {}",v);
+        info!("LCDC: {}",v);
     }
 }
 

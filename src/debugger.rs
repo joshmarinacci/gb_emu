@@ -118,9 +118,25 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                 step_forward(&mut ctx, &mut term, &mut bb).unwrap();
             } else {
                 ctx.execute(&mut term, verbose).unwrap();
+                if let Ok(str) = receive_cpu.try_recv() {
+                    println!("got a message from the screen {}",str);
+                    if str.eq("space_down") {
+                        println!("space pressed for the A button");
+                        ctx.mmu.joypad.a = true;
+                    }
+                    if str.eq("space_up") {
+                        println!("space released for the A button");
+                        ctx.mmu.joypad.a = false;
+                    }
+                    if str.eq("return_down") {
+                        ctx.mmu.joypad.start = true;
+                    }
+                    if str.eq("return_up") {
+                        ctx.mmu.joypad.start = false;
+                    }
+                }
             }
             if ctx.mmu.refresh_requested && show_screen {
-                println!("refresh requested");
                 {
                     let mut bb = bb2.lock().unwrap();
                     // bb.clear_with(0, 0, 0);
@@ -139,7 +155,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     if show_screen {
         let mut screen_obj = Screen::init(256, 256);
         while true {
-            if !screen_obj.process_input() { break; }
+            if !screen_obj.process_input(&to_cpu) { break; }
             if let Ok(str) = receive_screen.try_recv() {
                 screen_obj.update_screen(&backbuffer);
                 to_cpu.send(String::from("stop"));
@@ -153,7 +169,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
 
 fn step_forward(ctx: &mut Ctx, term: &mut Term, backbuffer: &mut Bitmap) -> Result<()>{
     let border = Style::new().bg(Color::Magenta).black();
-    term.clear_screen()?;
+    // term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
         term.write_line(&format!("executing rom {}", cart.path))?;
     }

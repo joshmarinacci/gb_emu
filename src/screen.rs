@@ -1,3 +1,4 @@
+use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 use std::time::Duration;
 use sdl2::event::Event;
@@ -15,7 +16,7 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub(crate) fn process_input(&self) -> bool {
+    pub(crate) fn process_input(&self, to_cpu: &Sender<String>) -> bool {
         // println!("screen: processsing input");
         while true {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
@@ -28,6 +29,18 @@ impl Screen {
                         println!("quitting");
                         return false;
                     },
+                    Event::KeyDown {keycode:Some(Keycode::Space),..} => {
+                        to_cpu.send(String::from("space_down"));
+                    }
+                    Event::KeyUp {keycode:Some(Keycode::Space),..} => {
+                        to_cpu.send(String::from("space_up"));
+                    }
+                    Event::KeyDown {keycode:Some(Keycode::Return),..} => {
+                        to_cpu.send(String::from("return_down"));
+                    }
+                    Event::KeyUp {keycode:Some(Keycode::Return),..} => {
+                        to_cpu.send(String::from("return_up"));
+                    }
                     _ => {
                         // println!("othe event {:?}", event);
                     }
