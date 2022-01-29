@@ -1027,7 +1027,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
         }
         Load::Load_HI_U8_R(r) => {
             cpu.inc_pc();
-            let e = mmu.read8(cpu.r.pc);
+            let e = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             let addr = 0xFF00 + (e as u16);
             let val = cpu.r.get_u8reg(r);
@@ -1114,7 +1114,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
         }
         Load::Load_addr_R2_u8(rr) => {
             cpu.inc_pc();
-            let val = mmu.read8(cpu.r.pc);
+            let val = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(rr);
             mmu.write8(addr,val);
@@ -1122,7 +1122,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
 
         Load::Load_addr_u16_A() => {
             cpu.inc_pc();
-            let addr = mmu.read16(cpu.r.pc);
+            let addr = mmu.read16(cpu.get_pc());
             cpu.inc_pc();
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(&A);
@@ -1170,7 +1170,7 @@ pub fn execute_compare_instructions(cpu:&mut Z80, mmu:&mut MMU, comp:&Compare) {
     match comp {
         Compare::CP_A_n() => {
             cpu.inc_pc();
-            let src_v = mmu.read8(cpu.r.pc);
+            let src_v = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
 
             let dst_v = cpu.r.get_u8reg(&A);
@@ -1217,7 +1217,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
         }
         Math::XOR_A_u8() => {
             cpu.inc_pc();
-            let n = mmu.read8(cpu.r.pc);
+            let n = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             let res = cpu.r.get_u8reg(&A) ^ n;
             cpu.r.zero_flag = res == 0;
@@ -1247,7 +1247,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
         }
         Math::OR_A_u8() => {
             cpu.inc_pc();
-            let n = mmu.read8(cpu.r.pc);
+            let n = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) | n);
             cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
@@ -1275,7 +1275,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
         }
         Math::AND_A_u8() => {
             cpu.inc_pc();
-            let n = mmu.read8(cpu.r.pc);
+            let n = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) & n);
             cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
@@ -1296,9 +1296,9 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
         Math::ADD_R_u8(r) => {
             cpu.inc_pc();
             let v1 = cpu.r.get_u8reg(r);
-            let v2 = mmu.read8(cpu.r.pc);
-            let result = v1.wrapping_add(v2);
+            let v2 = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
+            let result = v1.wrapping_add(v2);
             cpu.r.set_u8reg(r, v2);
             cpu.r.zero_flag = result == 0;
             cpu.r.subtract_n_flag = false;
