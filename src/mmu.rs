@@ -287,9 +287,8 @@ impl MMU {
             let mut val = 0xFF;
             // 0 means pressed, 1 meanse released
             val = set_bit(val,0, !self.joypad.a);
-            // val = set_bit(val,1,true);
-            // val = set_bit(val,2,true);
-            // val = set_bit(val,3,true);
+            val = set_bit(val,1, !self.joypad.left);
+            val = set_bit(val,3, !self.joypad.start);
             info!("reading from joypad info {:08b}",val);
             return val;
         }

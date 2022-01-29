@@ -8,6 +8,9 @@ use sdl2::rect::Rect;
 use sdl2::render::{Texture, TextureAccess, WindowCanvas};
 use sdl2::Sdl;
 use crate::common::Bitmap;
+use crate::debugger::{InputEvent, JoyPadKey};
+use crate::debugger::InputEvent::{Press, Release};
+use crate::debugger::JoyPadKey::A;
 
 pub struct Screen {
     canvas:WindowCanvas,
@@ -16,7 +19,7 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub(crate) fn process_input(&self, to_cpu: &Sender<String>) -> bool {
+    pub(crate) fn process_input(&self, to_cpu: &Sender<InputEvent>) -> bool {
         // println!("screen: processsing input");
         while true {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
@@ -27,20 +30,25 @@ impl Screen {
                         ..
                     } => {
                         println!("quitting");
+                        to_cpu.send(InputEvent::Stop());
                         return false;
                     },
-                    Event::KeyDown {keycode:Some(Keycode::Space),..} => {
-                        to_cpu.send(String::from("space_down"));
-                    }
-                    Event::KeyUp {keycode:Some(Keycode::Space),..} => {
-                        to_cpu.send(String::from("space_up"));
-                    }
-                    Event::KeyDown {keycode:Some(Keycode::Return),..} => {
-                        to_cpu.send(String::from("return_down"));
-                    }
-                    Event::KeyUp {keycode:Some(Keycode::Return),..} => {
-                        to_cpu.send(String::from("return_up"));
-                    }
+                    Event::KeyDown {keycode:Some(Keycode::Z),..} => { to_cpu.send(Press(JoyPadKey::A));  }
+                    Event::KeyUp {keycode:Some(Keycode::Z),..} => {  to_cpu.send(Release(JoyPadKey::A)); }
+                    Event::KeyDown {keycode:Some(Keycode::X),..} => { to_cpu.send(Press(JoyPadKey::B));  }
+                    Event::KeyUp {keycode:Some(Keycode::X),..} => {  to_cpu.send(Release(JoyPadKey::B)); }
+                    Event::KeyDown {keycode:Some(Keycode::Space),..} => { to_cpu.send(Press(JoyPadKey::Select));  }
+                    Event::KeyUp {keycode:Some(Keycode::Space),..} => {  to_cpu.send(Release(JoyPadKey::Select)); }
+                    Event::KeyDown {keycode:Some(Keycode::Return),..} =>  {to_cpu.send(Press(JoyPadKey::Start));},
+                    Event::KeyUp {keycode:Some(Keycode::Return),..} =>  {to_cpu.send(Release(JoyPadKey::Start));},
+                    Event::KeyDown {keycode:Some(Keycode::Left),..} => { to_cpu.send(Press(JoyPadKey::Left));  }
+                    Event::KeyUp {keycode:Some(Keycode::Left),..} => {  to_cpu.send(Release(JoyPadKey::Left)); }
+                    Event::KeyDown {keycode:Some(Keycode::Right),..} => { to_cpu.send(Press(JoyPadKey::Right));  }
+                    Event::KeyUp {keycode:Some(Keycode::Right),..} => {  to_cpu.send(Release(JoyPadKey::Right)); }
+                    Event::KeyDown {keycode:Some(Keycode::Up),..} => { to_cpu.send(Press(JoyPadKey::Up));  }
+                    Event::KeyUp {keycode:Some(Keycode::Up),..} => {  to_cpu.send(Release(JoyPadKey::Up)); }
+                    Event::KeyDown {keycode:Some(Keycode::Down),..} => { to_cpu.send(Press(JoyPadKey::Down));  }
+                    Event::KeyUp {keycode:Some(Keycode::Down),..} => {  to_cpu.send(Release(JoyPadKey::Down)); }
                     _ => {
                         // println!("othe event {:?}", event);
                     }

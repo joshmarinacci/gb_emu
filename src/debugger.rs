@@ -77,6 +77,24 @@ impl Ctx {
     }
 }
 
+#[derive(Debug)]
+pub enum JoyPadKey {
+    A,
+    B,
+    Select,
+    Start,
+    Up,
+    Down,
+    Left,
+    Right
+}
+#[derive(Debug)]
+pub enum InputEvent {
+    Press(JoyPadKey),
+    Release(JoyPadKey),
+    Stop(),
+}
+
 pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       fast_forward: u32,
                       show_screen: bool,
@@ -103,7 +121,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     }
 
     let (to_screen,receive_screen) = channel::<String>();
-    let (to_cpu, receive_cpu) = channel::<String>();
+    let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
     let bb2 = backbuffer.clone();
     let hand = thread::spawn(move | |
@@ -118,21 +136,27 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                 step_forward(&mut ctx, &mut term, &mut bb).unwrap();
             } else {
                 ctx.execute(&mut term, verbose).unwrap();
-                if let Ok(str) = receive_cpu.try_recv() {
-                    println!("got a message from the screen {}",str);
-                    if str.eq("space_down") {
-                        println!("space pressed for the A button");
-                        ctx.mmu.joypad.a = true;
-                    }
-                    if str.eq("space_up") {
-                        println!("space released for the A button");
-                        ctx.mmu.joypad.a = false;
-                    }
-                    if str.eq("return_down") {
-                        ctx.mmu.joypad.start = true;
-                    }
-                    if str.eq("return_up") {
-                        ctx.mmu.joypad.start = false;
+                if let Ok(evt) = receive_cpu.try_recv() {
+                    match evt {
+                        InputEvent::Press(JoyPadKey::A) => {        ctx.mmu.joypad.a = true;       }
+                        InputEvent::Release(JoyPadKey::A) => {      ctx.mmu.joypad.a = false;      }
+                        InputEvent::Press(JoyPadKey::B) => {        ctx.mmu.joypad.b = true;       }
+                        InputEvent::Release(JoyPadKey::B) => {      ctx.mmu.joypad.b = false;      }
+                        InputEvent::Press(JoyPadKey::Start) => {    ctx.mmu.joypad.start = true;   }
+                        InputEvent::Release(JoyPadKey::Start) => {  ctx.mmu.joypad.start = false;  }
+                        InputEvent::Press(JoyPadKey::Select) => {   ctx.mmu.joypad.select = true;   }
+                        InputEvent::Release(JoyPadKey::Select) => { ctx.mmu.joypad.select = false;  }
+                        InputEvent::Press(JoyPadKey::Left) => {     ctx.mmu.joypad.left = true;    }
+                        InputEvent::Release(JoyPadKey::Left) => {   ctx.mmu.joypad.left = false;   }
+                        InputEvent::Press(JoyPadKey::Right) => {    ctx.mmu.joypad.right = true;   }
+                        InputEvent::Release(JoyPadKey::Right) => {  ctx.mmu.joypad.right = false;  }
+                        InputEvent::Press(JoyPadKey::Up) => {       ctx.mmu.joypad.up = true;   }
+                        InputEvent::Release(JoyPadKey::Up)=> {      ctx.mmu.joypad.up = false;  }
+                        InputEvent::Press(JoyPadKey::Down) => {     ctx.mmu.joypad.down = true;   }
+                        InputEvent::Release(JoyPadKey::Down)=> {    ctx.mmu.joypad.down = false;  }
+                        _ => {
+                            println!("unhandled event {:?}",evt);
+                        }
                     }
                 }
             }
@@ -158,7 +182,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
             if !screen_obj.process_input(&to_cpu) { break; }
             if let Ok(str) = receive_screen.try_recv() {
                 screen_obj.update_screen(&backbuffer);
-                to_cpu.send(String::from("stop"));
+                to_cpu.send(InputEvent::Stop());
             }
         }
     } else {
