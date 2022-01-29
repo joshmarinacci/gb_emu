@@ -93,6 +93,10 @@ impl Hardware {
     }
 }
 
+pub enum JoypadReadMode {
+    Action(),
+    Direction(),
+}
 pub struct Joypad {
     pub a:bool,
     pub b:bool,
@@ -102,6 +106,7 @@ pub struct Joypad {
     pub down:bool,
     pub left:bool,
     pub right:bool,
+    pub readmode:JoypadReadMode,
 }
 pub struct MMU {
     inbios:bool,
@@ -257,7 +262,8 @@ impl MMU {
                 up: false,
                 down: false,
                 left: false,
-                right: false
+                right: false,
+                readmode: JoypadReadMode::Action()
             }
         }
     }
@@ -286,9 +292,21 @@ impl MMU {
         if addr == P1_JOYPAD_INFO {
             let mut val = 0xFF;
             // 0 means pressed, 1 meanse released
-            val = set_bit(val,0, !self.joypad.a);
-            val = set_bit(val,1, !self.joypad.left);
-            val = set_bit(val,3, !self.joypad.start);
+            match self.joypad.readmode {
+                JoypadReadMode::Action() => {
+                    val = set_bit(val,0, !self.joypad.a);
+                    val = set_bit(val,1, !self.joypad.b);
+                    val = set_bit(val,2, !self.joypad.select);
+                    val = set_bit(val,3, !self.joypad.start);
+
+                }
+                JoypadReadMode::Direction() => {
+                    val = set_bit(val,0, !self.joypad.right);
+                    val = set_bit(val,1, !self.joypad.left);
+                    val = set_bit(val,2, !self.joypad.up);
+                    val = set_bit(val,3, !self.joypad.down);
+                }
+            }
             info!("reading from joypad info {:08b}",val);
             return val;
         }
@@ -297,7 +315,7 @@ impl MMU {
             return self.hardware.IF;
         }
         if addr >= 0xFEA0 && addr <= 0xFEFF {
-            info!("writing to read from bad ram area");
+            // info!("reading to read from bad ram area");
             return 0xFF;
         }
         // println!("reading from address {:04x}",addr);
@@ -305,7 +323,7 @@ impl MMU {
     }
     pub fn read16(&self, addr:u16) -> u16 {
         if addr >= 0xFEA0 && addr <= 0xFEFF {
-            info!("writing to read from bad ram area");
+            // info!("readijg to read from bad ram area");
             return 0xFFFF;
         }
 
@@ -349,10 +367,12 @@ impl MMU {
         if addr == P1_JOYPAD_INFO {
             info!("writing to JOYPAD register {:08b}",val);
             if get_bit_as_bool(val,5) {
-                info!("Select Action Buttons")
+                info!("Select Action Buttons");
+                self.joypad.readmode = JoypadReadMode::Action();
             }
             if get_bit_as_bool(val,4) {
-                info!("Select Direction Buttons")
+                info!("Select Direction Buttons");
+                self.joypad.readmode = JoypadReadMode::Direction();
             }
             return;
         }
@@ -470,7 +490,7 @@ impl MMU {
             return;
         }
         if addr >= 0xFEA0 && addr <= 0xFEFF {
-            info!("writing to write to bad ram area");
+            // info!("writing to write to bad ram area");
         }
         if addr >= 0xFF00 && addr < 0xFF80 {
             info!("trying to write to the registers area {:04x} {:02}",addr, val);

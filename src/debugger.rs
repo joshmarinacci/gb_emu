@@ -144,16 +144,16 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                         InputEvent::Release(JoyPadKey::B) => {      ctx.mmu.joypad.b = false;      }
                         InputEvent::Press(JoyPadKey::Start) => {    ctx.mmu.joypad.start = true;   }
                         InputEvent::Release(JoyPadKey::Start) => {  ctx.mmu.joypad.start = false;  }
-                        InputEvent::Press(JoyPadKey::Select) => {   ctx.mmu.joypad.select = true;   }
-                        InputEvent::Release(JoyPadKey::Select) => { ctx.mmu.joypad.select = false;  }
+                        InputEvent::Press(JoyPadKey::Select) => {   ctx.mmu.joypad.select = true;  }
+                        InputEvent::Release(JoyPadKey::Select) => { ctx.mmu.joypad.select = false; }
                         InputEvent::Press(JoyPadKey::Left) => {     ctx.mmu.joypad.left = true;    }
                         InputEvent::Release(JoyPadKey::Left) => {   ctx.mmu.joypad.left = false;   }
                         InputEvent::Press(JoyPadKey::Right) => {    ctx.mmu.joypad.right = true;   }
                         InputEvent::Release(JoyPadKey::Right) => {  ctx.mmu.joypad.right = false;  }
-                        InputEvent::Press(JoyPadKey::Up) => {       ctx.mmu.joypad.up = true;   }
-                        InputEvent::Release(JoyPadKey::Up)=> {      ctx.mmu.joypad.up = false;  }
-                        InputEvent::Press(JoyPadKey::Down) => {     ctx.mmu.joypad.down = true;   }
-                        InputEvent::Release(JoyPadKey::Down)=> {    ctx.mmu.joypad.down = false;  }
+                        InputEvent::Press(JoyPadKey::Up) => {       ctx.mmu.joypad.up = true;      }
+                        InputEvent::Release(JoyPadKey::Up)=> {      ctx.mmu.joypad.up = false;     }
+                        InputEvent::Press(JoyPadKey::Down) => {     ctx.mmu.joypad.down = true;    }
+                        InputEvent::Release(JoyPadKey::Down)=> {    ctx.mmu.joypad.down = false;   }
                         _ => {
                             println!("unhandled event {:?}",evt);
                         }
