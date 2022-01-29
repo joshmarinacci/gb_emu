@@ -278,7 +278,7 @@ impl MMU {
         if addr >= VRAM_START  && addr <= VRAM_END {
             // println!("reading from vram {:04x}",addr);
         }
-        if addr == LY_LCDC_Y_COORD { return self.hardware.LY; }
+        if addr == LY_LCDC_Y_COORD { { return self.hardware.LY; } }
         if addr == LYC_LCDC_Y_COMPARE { return self.hardware.LYC; }
         if addr == SCX_SCROLL_X { return self.hardware.SCX; }
         if addr == SCY_SCROLL_Y { return self.hardware.SCY; }
@@ -307,7 +307,7 @@ impl MMU {
                     val = set_bit(val,3, !self.joypad.down);
                 }
             }
-            info!("reading from joypad info {:08b}",val);
+            // info!("reading from joypad info {:08b}",val);
             return val;
         }
         if addr == IF_INTERRUPT_FLAG {
@@ -319,7 +319,7 @@ impl MMU {
             return 0xFF;
         }
         if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
-            info!("reading from hi ram {:04x} value = {:02x}",addr,self.data[addr as usize]);
+            // info!("reading from hi ram {:04x} value = {:02x}",addr,self.data[addr as usize]);
         }
         // println!("reading from address {:04x}",addr);
         self.data[addr as usize]
@@ -417,7 +417,7 @@ impl MMU {
             // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
-            info!("writing to hi ram {:04x} value = {:02x}",addr,val);
+            // info!("writing to hi ram {:04x} value = {:02x}",addr,val);
         }
         if addr == LCDC_LCDCONTROL {
             // println!("writing to turn on the LCD Display");

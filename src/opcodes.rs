@@ -8,9 +8,9 @@ use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BIT_addr, Dec_r, Dec_rr, Inc_r, Inc_
 use crate::opcodes::Compare::CP_A_addr;
 use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
 use crate::opcodes::Load::{Load_A_addr_R2_dec, Load_A_addr_u16, Load_addr_R2_u8, Load_R2_R2, Load_R2_R2_add_i8, Load_R_HI_R, Load_R_u8};
-use crate::opcodes::Math::{ADC_A_addr, ADC_A_R, ADC_A_u8, ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CCF, CPL, Dec_rr_addr, Inc_rr_addr, OR_A_addr, OR_A_u8, RES, RES_addr, RL_addr, RLC_addr, RR_addr, RRC_addr, SBC_R_addr, SBC_R_R, SCF, SET, SET_addr, SLA_addr, SRA, SRA_addr, SRL, SRL_addr, SUB_A_addr, SUB_A_u8, SWAP, SWAP_addr, XOR_A_addr, XOR_A_u8};
+use crate::opcodes::Math::{ADC_A_addr, ADC_A_R, ADC_A_u8, ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CCF, CPL, DAA, Dec_rr_addr, Inc_rr_addr, OR_A_addr, OR_A_u8, RES, RES_addr, RL_addr, RLC_addr, RR_addr, RRC_addr, SBC_R_addr, SBC_R_R, SCF, SET, SET_addr, SLA_addr, SRA, SRA_addr, SRL, SRL_addr, SUB_A_addr, SUB_A_u8, SWAP, SWAP_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
-use crate::opcodes::Special::{CALL_NZ_U16, CALL_u16, DisableInterrupts, EnableInterrupts, HALT, Invalid, NOOP, POP, PUSH, RET, RETC, RETI, RETNC, RETNZ, RETZ, RST, STOP};
+use crate::opcodes::Special::{CALL_C_U16, CALL_NZ_U16, CALL_u16, CALL_Z_U16, DisableInterrupts, EnableInterrupts, HALT, Invalid, NOOP, POP, PUSH, RET, RETC, RETI, RETNC, RETNZ, RETZ, RST, STOP};
 use crate::{MMU, Z80};
 use crate::common::{get_bit_as_bool, set_bit};
 use crate::opcodes::Jump::{Absolute_cond_carry_u16, Absolute_cond_zero_u16, Absolute_R2};
@@ -35,7 +35,9 @@ pub enum Special {
     DisableInterrupts(),
     EnableInterrupts(),
     CALL_u16(),
+    CALL_Z_U16(),
     CALL_NZ_U16(),
+    CALL_C_U16(),
     PUSH(DoubleRegister),
     POP(DoubleRegister),
     RET(),
@@ -144,6 +146,7 @@ pub enum Math {
     SRA_addr(DoubleRegister),
     SRL(RegisterName),
     SRL_addr(DoubleRegister),
+    DAA(),
     CPL(),
     CCF(),
     SWAP(RegisterName),
@@ -304,8 +307,12 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xFB => Some(SpecialInstr(EnableInterrupts())),
         0x10 => Some(SpecialInstr(STOP())),
         0x76 => Some(SpecialInstr(HALT())),
+
+        0xCC => Some(SpecialInstr(CALL_Z_U16())),
         0xCD => Some(SpecialInstr(CALL_u16())),
         0xC4 => Some(SpecialInstr(CALL_NZ_U16())),
+        0xDD => Some(SpecialInstr(CALL_C_U16())),
+
         0xC1 => Some(SpecialInstr(POP(BC))),
         0xC5 => Some(SpecialInstr(PUSH(BC))),
         0xD1 => Some(SpecialInstr(POP(DE))),
@@ -470,10 +477,11 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x0F => Some(MathInst(RRCA())),
         0x1F => Some(MathInst(RRA())),
 
+        0x27 => Some(MathInst(DAA())),
         0x2F => Some(MathInst(CPL())),
         0x37 => Some(MathInst(SCF())),
         0x3F => Some(MathInst(CCF())),
-        0xED => Some(SpecialInstr(Special::Invalid(0xED))),
+        // 0xED => Some(SpecialInstr(Special::Invalid(0xED))),
 
         // bit manipulation
 
@@ -857,6 +865,7 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         MathInst(RLCA()) => format!("RLCA -- rotate A left. same as RLC A "),
         MathInst(RRA()) => format!("RRA -- Rotate A right. Same as RR A"),
         MathInst(RRCA()) => format!("RRCA -- Rotate A right, Same as RRC A"),
+        MathInst(DAA()) => format!("DDA -- Decimal adjust register A"),
         MathInst(CPL()) => format!("CPL -- complement A register (flip all bits)"),
         MathInst(CCF()) => format!("CCF -- complement carry flag (flip all bits)"),
         MathInst(SWAP(r)) => format!("SWAP {} -- swap upper and lower nibbles of n",r),
@@ -869,6 +878,8 @@ pub fn lookup_opcode_info(op: Instr) -> String {
         SpecialInstr(STOP()) => format!("STOP -- stop interrupts?"),
         SpecialInstr(CALL_u16()) => format!("CALL u16 -- save next addr to the stack, then jump to the specified address"),
         SpecialInstr(CALL_NZ_U16()) => format!("CALL NZ u16 -- if not zflag set, save next addr to the stack, then jump to the specified address"),
+        SpecialInstr(CALL_Z_U16()) => format!("CALL Z u16 -- if zflag set, save next addr to the stack, then jump to the specified address"),
+        SpecialInstr(CALL_C_U16()) => format!("CALL C u16 -- if carry set, save next addr to the stack, then jump to the specified address"),
         SpecialInstr(PUSH(rr)) => format!("PUSH {} -- push contents of register {} to the stack", rr, rr),
         SpecialInstr(POP(rr)) => format!("POP {} -- pop off stack, back to register {}", rr, rr),
         SpecialInstr(RET()) => format!("RET -- pop two bytes from the stack and jump to that address"),
@@ -888,12 +899,12 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         Special::DisableInterrupts() => {
             cpu.inc_pc();
             mmu.hardware.IME = 0;
-            info!("disabled interrupts");
+            // info!("disabled interrupts");
         }
         Special::EnableInterrupts() => {
             cpu.inc_pc();
             mmu.hardware.IME = 1;
-            info!("enabled interrupts");
+            // info!("enabled interrupts");
         }
         Special::NOOP() => {
             cpu.inc_pc();
@@ -923,6 +934,30 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             cpu.inc_pc();
             cpu.inc_pc();
             if cpu.r.zero_flag == false {
+                cpu.dec_sp();
+                cpu.dec_sp();
+                mmu.write16(cpu.get_sp(), cpu.get_pc());
+                cpu.set_pc(addr);
+            }
+        }
+        Special::CALL_Z_U16() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
+            if cpu.r.zero_flag == true {
+                cpu.dec_sp();
+                cpu.dec_sp();
+                mmu.write16(cpu.get_sp(), cpu.get_pc());
+                cpu.set_pc(addr);
+            }
+        }
+        Special::CALL_C_U16() => {
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
+            if cpu.r.carry_flag == true {
                 cpu.dec_sp();
                 cpu.dec_sp();
                 mmu.write16(cpu.get_sp(), cpu.get_pc());
@@ -1691,6 +1726,24 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             mmu.write8(addr,r);
             set_sr_flags(cpu,r,c);
         }
+        Math::DAA() => {
+            cpu.inc_pc();
+            let mut a = cpu.r.get_u8reg(&A);
+            let mut adjust = if cpu.r.carry_flag { 0x60 } else { 0x00 };
+            if cpu.r.half_flag { adjust |= 0x06; };
+            if !cpu.r.zero_flag {
+                if a & 0x0F > 0x09 { adjust |= 0x06; };
+                if a > 0x99 { adjust |= 0x60; };
+                a = a.wrapping_add(adjust);
+            } else {
+                a = a.wrapping_sub(adjust);
+            }
+
+            cpu.r.zero_flag = a == 0;
+            cpu.r.carry_flag = adjust >= 0x60;
+            cpu.r.half_flag = false;
+            cpu.r.set_u8reg(&A,a);
+        }
         Math::CPL() => {
             cpu.inc_pc();
             let v = cpu.r.get_u8reg(&A);
@@ -1759,14 +1812,14 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             let addr = mmu.read16(cpu.get_pc());
             cpu.inc_pc();
             cpu.inc_pc();
-            info!("Jumping to {:04x}",addr);
+            // info!("Jumping to {:04x}",addr);
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
         },
         Jump::Absolute_R2(rr) => {
             let addr = cpu.r.get_u16reg(rr);
-            info!("Jumping to {:04x}",addr);
+            // info!("Jumping to {:04x}",addr);
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
@@ -1804,7 +1857,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             cpu.inc_pc();
             if !cpu.r.zero_flag {
-                info!("Jumping to {:04x}",dst);
+                // info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
         },
@@ -1814,7 +1867,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             cpu.inc_pc();
             if cpu.r.zero_flag {
-                info!("Jumping to {:04x}",dst);
+                // info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
         },
@@ -1824,7 +1877,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.inc_pc();
             cpu.inc_pc();
             if cpu.r.carry_flag {
-                info!("Jumping to {:04x}",dst);
+                // info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
         },
