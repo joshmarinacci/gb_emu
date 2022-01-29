@@ -251,6 +251,10 @@ impl MMU {
         if addr == INTERRUPT_ENABLE {
             return self.hardware.IE;
         }
+        if addr == P1_JOYPAD_INFO {
+            info!("reading from joypad info");
+            return 0b0000_1000;
+        }
         // println!("reading from address {:04x}",addr);
         self.data[addr as usize]
     }
@@ -279,6 +283,12 @@ impl MMU {
         }
         if addr == P1_JOYPAD_INFO {
             info!("writing to JOYPAD register {:08b}",val);
+            if get_bit_as_bool(val,5) {
+                info!("Select Action Buttons")
+            }
+            if get_bit_as_bool(val,4) {
+                info!("Select Direction Buttons")
+            }
             return;
         }
 
@@ -325,16 +335,12 @@ impl MMU {
             // println!("writing to turn on the LCD Display");
             info!("writing to LCDC register {:08b}",val);
             self.hardware.LCDC = val;
-            // let b3 = get_bit(self.hardware.LCDC,3);
-            // println!("bit 3 is now {}",b3);
-            // dump_LCDC_bits(self.hardware.LCDC);
             return;
         }
         if addr == STAT_LCDCONTROL {
-            info!("writing to STAT LCD register {:0b}",val);
+            info!("writing to STAT LCD register {:08b}",val);
             self.hardware.STAT = val;
             return;
-            // panic!("halting");
         }
         if addr == DMA {
             // println!("DMA requested!");
