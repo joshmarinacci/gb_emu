@@ -3,6 +3,10 @@ use crate::{common, MMU};
 use crate::common::{Bitmap, get_bit_as_bool};
 
 fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: &u8, tiledata: &[u8]) {
+    // if x > 127 { return; }
+    // if y > 127 { return; }
+    if *tile_id >= 0x7F { return; }
+    // println!("{} {}  id {:02x}",x,y,tile_id);
     let start:usize = ((*tile_id as u16)*16) as usize;
     let stop:usize = start + 16;
     let tile = &tiledata[start..stop];

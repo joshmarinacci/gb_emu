@@ -168,7 +168,7 @@ impl MMU {
                     // info!("ending VBLank Interrupt");
                 },
                 InterruptType::Timer => {
-                    info!("ending timer interrupt");
+                    // info!("ending timer interrupt");
                 }
                 InterruptType::Serial => {}
                 InterruptType::None => {}
@@ -200,7 +200,7 @@ impl MMU {
                 if overflowed {
                     self.hardware.TIMA = self.hardware.TMA;
                     if self.hardware.IME > 0 && self.hardware.timer_interrupt_enabled {
-                        info!("starting timer interrupt");
+                        // info!("starting timer interrupt");
                         self.hardware.IME = 0;
                         self.hardware.active_interrupt = InterruptType::Timer;
                         self.hardware.IF = set_bit(self.hardware.IF,2,true);
@@ -447,10 +447,10 @@ impl MMU {
         }
         if addr == INTERRUPT_ENABLE {
             info!("wrote to the Ie register. {:08b}",val);
-            if get_bit_as_bool(val,0) { info!("enabled vblank interrupt"); }
+            // if get_bit_as_bool(val,0) { info!("enabled vblank interrupt"); }
             if get_bit_as_bool(val,1) { info!("enabled LCD Stat interrupt"); }
-            if get_bit_as_bool(val,2) { info!("enabled Timer interrupt"); }
-            if get_bit_as_bool(val,3) { info!("enabled serial interrupt"); }
+            // if get_bit_as_bool(val,2) { info!("enabled Timer interrupt"); }
+            // if get_bit_as_bool(val,3) { info!("enabled serial interrupt"); }
             if get_bit_as_bool(val,4) { info!("enabled joypad interrupt"); }
             self.hardware.vblank_interrupt_enabled = get_bit_as_bool(val,0);
             self.hardware.lcdc_interrupt_enabled = get_bit_as_bool(val,1);
