@@ -25,8 +25,6 @@ pub struct Z80_registers {
     pub(crate) pc:u16, // program counter
     pub(crate) sp:u16, // stack pointer
 
-    m:u8,
-    t:u8,
 }
 
 
@@ -187,8 +185,6 @@ impl Z80 {
                 l: 0,
                 pc: 0,
                 sp: 0,
-                m: 0,
-                t: 0,
             },
         }
     }
@@ -205,8 +201,5 @@ impl Z80 {
 
         self.r.sp = 0;
         self.r.pc = 0;
-
-        self.r.m = 0;                       // set timing
-        self.r.t = 0;
     }
 }
