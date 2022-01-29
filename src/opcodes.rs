@@ -934,27 +934,25 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             cpu.dec_sp();
             cpu.dec_sp();
             let value = cpu.r.get_u16reg(rr);
-            mmu.write16(cpu.r.sp, value);
+            mmu.write16(cpu.get_sp(), value);
         }
         Special::POP(rr) => {
             cpu.inc_pc();
-            let value = mmu.read16(cpu.r.sp);
+            let value = mmu.read16(cpu.get_sp());
             cpu.inc_sp();
             cpu.inc_sp();
-            // println!("popped {:04x}",value);
-            // println!("sp is {:04x}",self.cpu.r.sp);
             cpu.r.set_u16reg(rr,value);
         }
         Special::RET() => {
             cpu.inc_pc();
-            let addr = mmu.read16(cpu.r.sp);
+            let addr = mmu.read16(cpu.get_sp());
             cpu.inc_sp();
             cpu.inc_sp();
             cpu.set_pc(addr);
         }
         Special::RETI() => {
             cpu.inc_pc();
-            let addr = mmu.read16(cpu.r.sp);
+            let addr = mmu.read16(cpu.get_sp());
             cpu.inc_sp();
             cpu.inc_sp();
             cpu.set_pc(addr);
@@ -1013,21 +1011,19 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
 pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
     match load {
         Load_R_u8(r) => {
-            // load immediate u8 into the register
             cpu.inc_pc();
-            let val = mmu.read8(cpu.r.pc);
+            let val = mmu.read8(cpu.get_pc());
+            cpu.inc_pc();
             cpu.r.set_u8reg(r, val);
-            cpu.inc_pc();
         }
         // put the memory address 0xFF00 + n into register r
         Load::Load_HI_R_U8(r) => {
-            // println!("running LDH");
-            let n = mmu.read8(cpu.r.pc+1);
+            cpu.inc_pc();
+            let n = mmu.read8(cpu.get_pc());
+            cpu.inc_pc();
             let addr = 0xFF00 + (n as u16);
             cpu.r.set_u8reg(&r,mmu.read8(addr));
             // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
-            cpu.inc_pc();
-            cpu.inc_pc();
         }
         Load::Load_HI_U8_R(r) => {
             cpu.inc_pc();
@@ -1416,6 +1412,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.inc_pc();
             let a = cpu.r.get_u8reg(&A);
             let b = mmu.read8(cpu.get_pc());
+            cpu.inc_pc();
             let r = a.wrapping_sub(b);
             set_sub_flags(cpu,r,a,b,0);
             cpu.r.set_u8reg(&A, r);
@@ -1758,7 +1755,10 @@ fn set_sr_flags(cpu: &mut Z80, r: u8, carry: bool) {
 pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
     match jump {
         Jump::Absolute_u16() => {
-            let addr = mmu.read16(cpu.r.pc + 1);
+            cpu.inc_pc();
+            let addr = mmu.read16(cpu.get_pc());
+            cpu.inc_pc();
+            cpu.inc_pc();
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
@@ -1771,28 +1771,28 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
         },
         Jump::Relative_cond_carry_i8() => {
             cpu.inc_pc();
-            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
             // println!("carry flag is set to {}",cpu.r.carry_flag);
-            if cpu.r.carry_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+            if cpu.r.carry_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
         },
         Jump::Relative_cond_notcarry_i8() => {
             cpu.inc_pc();
-            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
-            if !cpu.r.carry_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+            if !cpu.r.carry_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
         }
         Jump::Relative_cond_zero_i8() => {
             cpu.inc_pc();
-            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
-            if cpu.r.zero_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+            if cpu.r.zero_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
         }
         Jump::Relative_cond_notzero_i8() => {
             cpu.inc_pc();
-            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
-            if !cpu.r.zero_flag { cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16); }
+            if !cpu.r.zero_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
         },
         Jump::Absolute_cond_notzero_u16() => {
             cpu.inc_pc();
@@ -1823,10 +1823,10 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
         },
         Jump::Relative_i8() => {
             cpu.inc_pc();
-            let e = u8_as_i8(mmu.read8(cpu.r.pc));
+            let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
             // info!("jumpping relative {}",e);
-            cpu.set_pc((((cpu.r.pc) as i32) + e as i32) as u16);
+            cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16);
         }
     }
 }

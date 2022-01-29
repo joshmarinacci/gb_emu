@@ -210,7 +210,8 @@ impl MMU {
 
 impl MMU {
     pub fn init(rom:&[u8]) -> MMU {
-        let mut data:Vec<u8> = vec![0x12; 0xFFFF];
+        let mut data:Vec<u8> = vec![0x12; (0xFFFF+1)];
+        info!("memory length is {} {:04x}",data.len(),data.len());
         data.fill(0x12);
         let bios = Vec::from(BOOT_ROM);
         //copy over the cart rom
