@@ -398,21 +398,21 @@ impl MMU {
             return;
         }
         if addr == DIV_REGISTER {
-            info!("wrote to the DIV register {:04x}", val);
+            // info!("wrote to the DIV register {:04x}", val);
             self.hardware.DIV = 0;
             return;
         }
         if addr == TIMA_REGISTER {
-            println!("wrote to the TIMA register {:04x}", val);
+            // println!("wrote to the TIMA register {:04x}", val);
             panic!("halting");
         }
         if addr == TMA_REGISTER {
-            info!("wrote to the TMA register {:04x}", val);
+            // info!("wrote to the TMA register {:04x}", val);
             self.hardware.TMA = val;
             return;
         }
         if addr == TAC_REGISTER {
-            info!("wrote to the TAC register {:08b}", val);
+            // info!("wrote to the TAC register {:08b}", val);
             self.hardware.TAC = val;
             return;
         }
@@ -430,7 +430,7 @@ impl MMU {
             return;
         }
         if addr == STAT_LCDCONTROL {
-            info!("writing to STAT LCD register {:08b}",val);
+            // info!("writing to STAT LCD register {:08b}",val);
             self.hardware.STAT = val;
             return;
         }
@@ -449,12 +449,12 @@ impl MMU {
             return;
         }
         if addr == INTERRUPT_ENABLE {
-            info!("wrote to the Ie register. {:08b}",val);
+            // info!("wrote to the Ie register. {:08b}",val);
             // if get_bit_as_bool(val,0) { info!("enabled vblank interrupt"); }
-            if get_bit_as_bool(val,1) { info!("enabled LCD Stat interrupt"); }
+            // if get_bit_as_bool(val,1) { info!("enabled LCD Stat interrupt"); }
             // if get_bit_as_bool(val,2) { info!("enabled Timer interrupt"); }
             // if get_bit_as_bool(val,3) { info!("enabled serial interrupt"); }
-            if get_bit_as_bool(val,4) { info!("enabled joypad interrupt"); }
+            // if get_bit_as_bool(val,4) { info!("enabled joypad interrupt"); }
             self.hardware.vblank_interrupt_enabled = get_bit_as_bool(val,0);
             self.hardware.lcdc_interrupt_enabled = get_bit_as_bool(val,1);
             self.hardware.timer_interrupt_enabled = get_bit_as_bool(val,2);
@@ -464,12 +464,12 @@ impl MMU {
             return;
         }
         if addr == IF_INTERRUPT_FLAG {
-            info!("wrote to the If register. {:08b}",val);
+            // info!("wrote to the If register. {:08b}",val);
             self.hardware.IF = val;
             return;
         }
         if addr == BGP {
-            info!("writing to BGP LCD register {:0b}",val);
+            // info!("writing to BGP LCD register {:0b}",val);
             self.hardware.BGP = val;
             // dump_bgp_bits(val);
             return;
@@ -479,15 +479,15 @@ impl MMU {
         if addr == WX_ADDR  { self.hardware.WX = val; return; }
         if addr == WY_ADDR  { self.hardware.WY = val; return; }
         if addr == SCX_SCROLL_X {
-            info!("writing to SCX");
+            // info!("writing to SCX {}",val);
             self.hardware.SCX = val; return;
         }
         if addr == LYC_LCDC_Y_COMPARE {
-            info!("writing to the LYC register");
+            // info!("writing to the LYC register");
             self.hardware.LYC = val;
         }
         if addr == SCY_SCROLL_Y {
-            info!("writing to SCY");
+            // info!("writing to SCY {}",val);
             self.hardware.SCY = val; return; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);

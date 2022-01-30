@@ -107,12 +107,15 @@ impl ScreenState {
     }
 }
 
-fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: &u8, tiledata: &[u8]) {
+fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8]) {
     // if x > 127 { return; }
     // if y > 127 { return; }
-    if *tile_id >= 0x7F { return; }
+    if tile_id > 0x7F {
+        println!("tile id! {:02x}",tile_id);
+        return;
+    }
     // println!("{} {}  id {:02x}",x,y,tile_id);
-    let start:usize = ((*tile_id as u16)*16) as usize;
+    let start:usize = ((tile_id as u16)*16) as usize;
     let stop:usize = start + 16;
     let tile = &tiledata[start..stop];
     for (line,row) in tile.chunks_exact(2).enumerate() {
@@ -147,7 +150,7 @@ impl PPU {
         // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
         // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
         // println!("bg tile map area  {}",get_bit_as_bool(lcdc,3));
-        // println!("bg tile data area? {}",get_bit_as_bool(lcdc,4));
+        // println!("bg tile data area? {}",get_bit_as_bool(screenstate.LCDC,4));
         // println!("window enable? {}",get_bit_as_bool(lcdc,5));
         // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
         // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
@@ -166,34 +169,32 @@ impl PPU {
         let bg_tilemap = &mmu.data[bg_tilemap_start..bg_tilemap_end];
         let oam_table = &mmu.data[0xFE00..0xFEA0];
 
-        let mut low_data_start = 0x9000;
-        let mut low_data_end = 0x97FF;
+        let mut td1_start = 0x9000;
+        let mut td1_end = 0x97FF;
+        let mut td2_start = 0x8800;
+        let mut td2_end = 0x8FFF;
         if get_bit_as_bool(mmu.hardware.LCDC, 4) {
-            low_data_start = 0x8000;
-            low_data_end = 0x87FF;
+            td1_start = 0x8000;
+            td1_end = 0x87FF;
         }
-        let tile_data = &mmu.data[low_data_start..low_data_end];
+        let tile_data = &mmu.data[td1_start..td1_end];
+        let td2 = &mmu.data[td2_start .. (td2_end + 1)];
 
-        // if screen_on {
             if bg_enabled {
-                // println!("low data {:04x} {:04x}",low_data_start, low_data_end);
-                // println!("tiledata = {:?}",lo_data);
-                // println!("bg map {:04x} {:04x}",bg_tilemap_start, bg_tilemap_end);
-                // println!("draw background. tilemap = {:?}", bg_tilemap);
+                let img = &mut screenstate.backbuffer;
+                let sx = 0;//mmu.hardware.SCX as usize;
+                let sy = 0;//mmu.hardware.SCY as usize;
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
-                    // screenstate.current_scanline = y as u8;
                     for (x, tile_id) in row.iter().enumerate() {
-                        if *tile_id > 0 {
-                            // println!("tile id is {}", tile_id);
+                        let id = *tile_id;
+                        if id >= 0 && id < 128 {
+                            draw_tile_at(img,x * 8 + sx,y * 8 + sy, id, tile_data);
+                            // fill_tile_at(img,x*8+sx,y*8+sy);
                         }
-                        if *tile_id < 127 {
-                            draw_tile_at(&mut screenstate.backbuffer,
-                                         x * 8 + (mmu.hardware.SCX as usize),
-                                         y * 8 + (mmu.hardware.SCY as usize),
-                                         tile_id,
-                                         tile_data);
-                        } else {
-                            // println!("drawing tile id {:02x}",tile_id);
+                        if id >= 128 && id <= 255 {
+                            let e = id - 128;
+                            draw_tile_at(img,x*8 + sx,y*8 + sy, e, td2);
+                            // fill_tile_at(img,x*8+sx,y*8+sy);
                         }
                     }
                 }
@@ -210,7 +211,7 @@ impl PPU {
                             println!("skipping big sprites");
                         } else {
                             // println!("drawing sprite");
-                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, &tile_id, tile_data);
+                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, tile_id, tile_data);
                         }
                     }
                 }
@@ -263,6 +264,14 @@ impl PPU {
         // println!("entering mode 1");
         // println!("all memory is available");
         self.wait_until += mode_1_length;//4560
+    }
+}
+
+fn fill_tile_at(img: &mut Bitmap, x: usize, y: usize) {
+    for j in 0..8 {
+        for i in 0..8 {
+            img.set_pixel_rgb((x+i) as i32, (y + j) as i32, 0,0,0);
+        }
     }
 }
 
