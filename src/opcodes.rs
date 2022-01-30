@@ -899,12 +899,12 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         Special::DisableInterrupts() => {
             cpu.inc_pc();
             mmu.hardware.IME = 0;
-            // info!("disabled interrupts");
+            info!("disabled interrupts");
         }
         Special::EnableInterrupts() => {
             cpu.inc_pc();
             mmu.hardware.IME = 1;
-            // info!("enabled interrupts");
+            info!("enabled interrupts");
         }
         Special::NOOP() => {
             cpu.inc_pc();
@@ -993,7 +993,7 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             cpu.set_pc(addr);
             mmu.hardware.IME = 1;
             mmu.hardware.interrupt_just_returned = true;
-            // println!("returned from interrupt handler. going back to {:04x}",self.cpu.get_pc());
+            println!("returned from interrupt handler. going back to {:04x}",cpu.get_pc());
         }
         Special::RETZ() => {
             cpu.inc_pc();
