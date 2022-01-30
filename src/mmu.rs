@@ -155,7 +155,7 @@ impl MMU {
             self.hardware.IF = set_bit(self.hardware.IF,0,false);
             match self.hardware.active_interrupt {
                 InterruptType::VBlank => {
-                    info!("ending VBLank Interrupt");
+                    // info!("ending VBLank Interrupt");
                 },
                 InterruptType::Timer => {
                     // info!("ending timer interrupt");
@@ -168,9 +168,9 @@ impl MMU {
         //vblank
         if ss.lock().unwrap().vblank_triggered {
             ss.lock().unwrap().vblank_triggered = false;
-            println!("vblank inside IME={} en = {}", self.hardware.IME, self.hardware.vblank_interrupt_enabled);
+            // println!("vblank inside IME={} en = {}", self.hardware.IME, self.hardware.vblank_interrupt_enabled);
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
-                info!("starting VBLank Interrupt");
+                // info!("starting VBLank Interrupt");
                 self.hardware.active_interrupt = InterruptType::VBlank;
                 self.hardware.IF = set_bit(self.hardware.IF,0,true);
                 self.hardware.IME = 0;
@@ -371,13 +371,13 @@ impl MMU {
             panic!("halting");
         }
         if addr == P1_JOYPAD_INFO {
-            info!("writing to JOYPAD register {:08b}",val);
+            // info!("writing to JOYPAD register {:08b}",val);
             if get_bit_as_bool(val,5) {
-                info!("Select Action Buttons");
+                // info!("Select Action Buttons");
                 self.joypad.readmode = JoypadReadMode::Action();
             }
             if get_bit_as_bool(val,4) {
-                info!("Select Direction Buttons");
+                // info!("Select Direction Buttons");
                 self.joypad.readmode = JoypadReadMode::Direction();
             }
             return;
@@ -417,14 +417,14 @@ impl MMU {
             return;
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            println!("writing in VRAM {:04x}  {:x}", addr, val);
+            // println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
             // info!("writing to hi ram {:04x} value = {:02x}",addr,val);
         }
         if addr == LCDC_LCDCONTROL {
             // println!("writing to turn on the LCD Display");
-            info!("writing to LCDC register {:08b}",val);
+            // info!("writing to LCDC register {:08b}",val);
             self.hardware.LCDC = val;
             // dump_lcdc_bits(val);
             return;
@@ -435,7 +435,7 @@ impl MMU {
             return;
         }
         if addr == DMA {
-            info!("DMA requested!");
+            // info!("DMA requested!");
             let src_addr = ((val as u16) << 8);
             let src_addr_end = src_addr + 0xA0;
             // println!("transferring from src address {:04x}",src_addr);
@@ -445,7 +445,7 @@ impl MMU {
                 let byte = self.read8(src_addr + (n as u16));
                 self.write8(dst_addr + (n as u16),byte);
             }
-            info!("DMA transfer complete");
+            // info!("DMA transfer complete");
             return;
         }
         if addr == INTERRUPT_ENABLE {

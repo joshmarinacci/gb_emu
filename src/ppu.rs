@@ -34,7 +34,7 @@ impl PPU {
             mmu.hardware.LY = screen_state.LY;
             mmu.hardware.STAT = set_bit(mmu.hardware.STAT,2,mmu.hardware.LY == mmu.hardware.LYC);
             if screen_state.current_scanline == 154 {
-                println!("end of the frame");
+                // println!("end of the frame");
                 self.draw_full_screen(mmu, &mut screen_state);
                 screen_state.current_scanline = 0;
             }
@@ -49,7 +49,7 @@ impl PPU {
             } else {
                 if prev_line == 0x8F && screen_state.current_scanline == 0x90 {
                     // self.do_vblank(&mut screen_state);
-                    println!("ppu triggered a vblank");
+                    // println!("ppu triggered a vblank");
                     screen_state.vblank_triggered = true;
                     do_redraw = true;
                 }
@@ -149,8 +149,8 @@ impl PPU {
         // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
         // let window_enabled = get_bit_as_bool(lcdc, 5);
-        // let sprites_enabled = get_bit_as_bool(lcdc, 1);
-        let sprites_enabled = false;
+        let sprites_enabled = get_bit_as_bool(mmu.hardware.LCDC, 1);
+        // let sprites_enabled = true;
         let bg_enabled = true; //bg is always enabled
         let sprite_big = get_bit_as_bool(screenstate.LCDC, 2);
         let mut bg_tilemap_start = 0x9800;
