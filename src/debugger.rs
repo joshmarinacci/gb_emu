@@ -34,6 +34,17 @@ struct Ctx {
 }
 
 impl Ctx {
+    pub(crate) fn jump_to_next_vblank(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, sender: &Sender<String>, receiver: &Receiver<InputEvent>) -> Result<()>{
+        println!("running to next frame done");
+        while self.mmu.hardware.LY > 1 {
+            // println!("LY is {}",ctx.mmu.hardware.LY);
+            self.execute(term, false, screenstate, sender, receiver)?;
+        }
+        Ok(())
+    }
+}
+
+impl Ctx {
     fn make_test_context(rom: &[u8]) -> Ctx {
         Ctx {
             cpu:Z80::init(),
@@ -100,6 +111,7 @@ pub enum InputEvent {
     Press(JoyPadKey),
     Release(JoyPadKey),
     Stop(),
+    JumpNextVBlank(),
 }
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
@@ -152,27 +164,33 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                 step_forward(&mut ctx, &mut term, &mut ss1, &to_screen, &receive_cpu).unwrap();
             } else {
                 ctx.execute(&mut term, verbose, &mut ss1, &to_screen, &receive_cpu ).unwrap();
-                if let Ok(evt) = receive_cpu.try_recv() {
-                    match evt {
-                        InputEvent::Press(JoyPadKey::A) => {        ctx.mmu.joypad.a = true;       }
-                        InputEvent::Release(JoyPadKey::A) => {      ctx.mmu.joypad.a = false;      }
-                        InputEvent::Press(JoyPadKey::B) => {        ctx.mmu.joypad.b = true;       }
-                        InputEvent::Release(JoyPadKey::B) => {      ctx.mmu.joypad.b = false;      }
-                        InputEvent::Press(JoyPadKey::Start) => {    ctx.mmu.joypad.start = true;   }
-                        InputEvent::Release(JoyPadKey::Start) => {  ctx.mmu.joypad.start = false;  }
-                        InputEvent::Press(JoyPadKey::Select) => {   ctx.mmu.joypad.select = true;  }
-                        InputEvent::Release(JoyPadKey::Select) => { ctx.mmu.joypad.select = false; }
-                        InputEvent::Press(JoyPadKey::Left) => {     ctx.mmu.joypad.left = true;    }
-                        InputEvent::Release(JoyPadKey::Left) => {   ctx.mmu.joypad.left = false;   }
-                        InputEvent::Press(JoyPadKey::Right) => {    ctx.mmu.joypad.right = true;   }
-                        InputEvent::Release(JoyPadKey::Right) => {  ctx.mmu.joypad.right = false;  }
-                        InputEvent::Press(JoyPadKey::Up) => {       ctx.mmu.joypad.up = true;      }
-                        InputEvent::Release(JoyPadKey::Up)=> {      ctx.mmu.joypad.up = false;     }
-                        InputEvent::Press(JoyPadKey::Down) => {     ctx.mmu.joypad.down = true;    }
-                        InputEvent::Release(JoyPadKey::Down)=> {    ctx.mmu.joypad.down = false;   }
-                        _ => {
-                            println!("unhandled event {:?}",evt);
+            }
+            if let Ok(evt) = receive_cpu.try_recv() {
+                match evt {
+                    InputEvent::Press(JoyPadKey::A) => {        ctx.mmu.joypad.a = true;       }
+                    InputEvent::Release(JoyPadKey::A) => {      ctx.mmu.joypad.a = false;      }
+                    InputEvent::Press(JoyPadKey::B) => {        ctx.mmu.joypad.b = true;       }
+                    InputEvent::Release(JoyPadKey::B) => {      ctx.mmu.joypad.b = false;      }
+                    InputEvent::Press(JoyPadKey::Start) => {    ctx.mmu.joypad.start = true;   }
+                    InputEvent::Release(JoyPadKey::Start) => {  ctx.mmu.joypad.start = false;  }
+                    InputEvent::Press(JoyPadKey::Select) => {   ctx.mmu.joypad.select = true;  }
+                    InputEvent::Release(JoyPadKey::Select) => { ctx.mmu.joypad.select = false; }
+                    InputEvent::Press(JoyPadKey::Left) => {     ctx.mmu.joypad.left = true;    }
+                    InputEvent::Release(JoyPadKey::Left) => {   ctx.mmu.joypad.left = false;   }
+                    InputEvent::Press(JoyPadKey::Right) => {    ctx.mmu.joypad.right = true;   }
+                    InputEvent::Release(JoyPadKey::Right) => {  ctx.mmu.joypad.right = false;  }
+                    InputEvent::Press(JoyPadKey::Up) => {       ctx.mmu.joypad.up = true;      }
+                    InputEvent::Release(JoyPadKey::Up)=> {      ctx.mmu.joypad.up = false;     }
+                    InputEvent::Press(JoyPadKey::Down) => {     ctx.mmu.joypad.down = true;    }
+                    InputEvent::Release(JoyPadKey::Down)=> {    ctx.mmu.joypad.down = false;   }
+                    InputEvent::JumpNextVBlank() => {
+                        if ctx.interactive {
+                            println!("got a jump next vblank");
+                            ctx.jump_to_next_vblank(&mut term, &mut ss1, &to_screen, &receive_cpu).unwrap();
                         }
+                    }
+                    _ => {
+                        println!("unhandled event {:?}",evt);
                     }
                 }
             }
@@ -335,11 +353,7 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
         'c' => dump_cart_rom(term, ctx)?,
         // 'v' => dump_vram(term, ctx)?,
         'v' => {
-            println!("running to next frame done");
-            while ctx.mmu.hardware.LY > 1 {
-                // println!("LY is {}",ctx.mmu.hardware.LY);
-                ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
-            }
+            ctx.jump_to_next_vblank(term, screenstate, to_screen, receive_cpu);
         }
         'o' => dump_oram(term, ctx)?,
         's' => {

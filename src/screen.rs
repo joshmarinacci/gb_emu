@@ -9,7 +9,7 @@ use sdl2::render::{Texture, TextureAccess, WindowCanvas};
 use sdl2::Sdl;
 use crate::common::Bitmap;
 use crate::debugger::{InputEvent, JoyPadKey};
-use crate::debugger::InputEvent::{Press, Release};
+use crate::debugger::InputEvent::{JumpNextVBlank, Press, Release};
 use crate::debugger::JoyPadKey::A;
 use crate::ppu::ScreenState;
 
@@ -59,6 +59,8 @@ impl Screen {
                     Event::KeyUp {keycode:Some(Keycode::Up),..} => {  to_cpu.send(Release(JoyPadKey::Up)); }
                     Event::KeyDown {keycode:Some(Keycode::Down),..} => { to_cpu.send(Press(JoyPadKey::Down));  }
                     Event::KeyUp {keycode:Some(Keycode::Down),..} => {  to_cpu.send(Release(JoyPadKey::Down)); }
+                    Event::KeyDown {keycode:Some(Keycode::V),..} => { to_cpu.send(JumpNextVBlank());  }
+                    Event::KeyUp {keycode:Some(Keycode::V),..} => {  to_cpu.send(JumpNextVBlank()); }
                     _ => {
                         // println!("othe event {:?}", event);
                     }
