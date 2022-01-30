@@ -5,6 +5,7 @@ use crate::{common, MMU};
 use crate::common::{Bitmap, get_bit_as_bool, set_bit};
 use crate::debugger::InputEvent;
 use crate::mmu::STAT_LCDCONTROL;
+use crate::opcodes::u8_as_i8;
 
 pub struct PPU {
     pub last_clock: u32,
@@ -108,13 +109,6 @@ impl ScreenState {
 }
 
 fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8]) {
-    // if x > 127 { return; }
-    // if y > 127 { return; }
-    if tile_id > 0x7F {
-        println!("tile id! {:02x}",tile_id);
-        return;
-    }
-    // println!("{} {}  id {:02x}",x,y,tile_id);
     let start:usize = ((tile_id as u16)*16) as usize;
     let stop:usize = start + 16;
     let tile = &tiledata[start..stop];
@@ -166,19 +160,20 @@ impl PPU {
             bg_tilemap_start = 0x9C00;
             bg_tilemap_end = 0x9FFF;
         }
-        let bg_tilemap = &mmu.data[bg_tilemap_start..bg_tilemap_end];
+        let bg_tilemap = &mmu.data[bg_tilemap_start .. (bg_tilemap_end +1)];
         let oam_table = &mmu.data[0xFE00..0xFEA0];
 
-        let mut td1_start = 0x9000;
+        let mut td1_start = 0x8800;
         let mut td1_end = 0x97FF;
-        let mut td2_start = 0x8800;
-        let mut td2_end = 0x8FFF;
+        let unsigned_mode = get_bit_as_bool(mmu.hardware.LCDC, 4);
         if get_bit_as_bool(mmu.hardware.LCDC, 4) {
             td1_start = 0x8000;
-            td1_end = 0x87FF;
+            td1_end = 0x8FFF;
         }
-        let tile_data = &mmu.data[td1_start..td1_end];
-        let td2 = &mmu.data[td2_start .. (td2_end + 1)];
+        let td1 = &mmu.data[td1_start .. (td1_end + 1)];
+        for row in bg_tilemap.chunks_exact(32) {
+            println!("{:?}",row);
+        }
 
             if bg_enabled {
                 let img = &mut screenstate.backbuffer;
@@ -187,14 +182,11 @@ impl PPU {
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
                     for (x, tile_id) in row.iter().enumerate() {
                         let id = *tile_id;
-                        if id >= 0 && id < 128 {
-                            draw_tile_at(img,x * 8 + sx,y * 8 + sy, id, tile_data);
-                            // fill_tile_at(img,x*8+sx,y*8+sy);
-                        }
-                        if id >= 128 && id <= 255 {
-                            let e = id - 128;
-                            draw_tile_at(img,x*8 + sx,y*8 + sy, e, td2);
-                            // fill_tile_at(img,x*8+sx,y*8+sy);
+                        if !unsigned_mode {
+                            let id2 = i16::from(id as i8) + 128;
+                            draw_tile_at(img, x * 9 + sx, y * 9 + sy, id2 as u8, td1);
+                        } else {
+                            draw_tile_at(img, x * 9 + sx, y * 9 + sy, id, td1);
                         }
                     }
                 }
@@ -211,7 +203,7 @@ impl PPU {
                             println!("skipping big sprites");
                         } else {
                             // println!("drawing sprite");
-                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, tile_id, tile_data);
+                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, tile_id, td1);
                         }
                     }
                 }
