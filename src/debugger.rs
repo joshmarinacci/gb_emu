@@ -385,6 +385,8 @@ fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
             0x8000 => println!("8 KiB Video RAM        (VRAM)\n  Tile Data Block 0"),
             0x8800 => println!("8 KiB Video RAM        (VRAM)\n  Tile Data Block 1"),
             0x9000 => println!("8 KiB Video RAM        (VRAM)\n  Tile Data Block 2"),
+            0x9800 => println!("                       (VRAM)\n  Tile Map  Block 0"),
+            0x9C00 => println!("                       (VRAM)\n  Tile Map  Block 1"),
             0xA000 => println!("8 KiB External RAM"),
             0xC000 => println!("4 KiB Work RAM         (WRAM)"),
             0xD000 => println!("4 KiB Work RAM         (WRAM)"),

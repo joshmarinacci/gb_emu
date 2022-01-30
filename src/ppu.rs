@@ -108,9 +108,12 @@ impl ScreenState {
     }
 }
 
-fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8]) {
+fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8], print:bool) {
     let start:usize = ((tile_id as u16)*16) as usize;
     let stop:usize = start + 16;
+    if print {
+        println!("id {:02x} maps to addr {:04x} - {:04x}  final {:04x}", tile_id, start, stop, ((start as u16) + 0x8800));
+    }
     let tile = &tiledata[start..stop];
     for (line,row) in tile.chunks_exact(2).enumerate() {
         for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
@@ -160,6 +163,7 @@ impl PPU {
             bg_tilemap_start = 0x9C00;
             bg_tilemap_end = 0x9FFF;
         }
+        println!("tilemap base address {:04x}",bg_tilemap_start);
         let bg_tilemap = &mmu.data[bg_tilemap_start .. (bg_tilemap_end +1)];
         let oam_table = &mmu.data[0xFE00..0xFEA0];
 
@@ -170,23 +174,39 @@ impl PPU {
             td1_start = 0x8000;
             td1_end = 0x8FFF;
         }
+        println!("tile data base address {:04x}",td1_start);
         let td1 = &mmu.data[td1_start .. (td1_end + 1)];
-        for row in bg_tilemap.chunks_exact(32) {
-            println!("{:?}",row);
+        for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
+            let line_str:String = row.iter()
+                .map(|b|format!("{:02x}",b))
+                .collect();
+            println!("{:04x} {}",bg_tilemap_start+n*32, line_str);
         }
 
+        println!("signed mode = {}",!unsigned_mode);
             if bg_enabled {
                 let img = &mut screenstate.backbuffer;
                 let sx = 0;//mmu.hardware.SCX as usize;
                 let sy = 0;//mmu.hardware.SCY as usize;
+                let spacing = 8;
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
+                    if y > 0x10 {
+                        continue;
+                    }
                     for (x, tile_id) in row.iter().enumerate() {
+                        if x> 0x13 {
+                            continue;
+                        }
                         let id = *tile_id;
                         if !unsigned_mode {
                             let id2 = i16::from(id as i8) + 128;
-                            draw_tile_at(img, x * 9 + sx, y * 9 + sy, id2 as u8, td1);
+                            draw_tile_at(img, x * spacing + sx, y * spacing + sy, id2 as u8, td1,false);
+                            if(id == 0x56) {
+                                println!("56  tile data = {:04x} - {:04x}",td1_start, td1_end);
+                                draw_tile_at(img, x * spacing + sx, y * spacing + sy, id2 as u8, td1, true);
+                            }
                         } else {
-                            draw_tile_at(img, x * 9 + sx, y * 9 + sy, id, td1);
+                            draw_tile_at(img, x * spacing + sx, y * spacing + sy, id, td1,false);
                         }
                     }
                 }
@@ -203,7 +223,7 @@ impl PPU {
                             println!("skipping big sprites");
                         } else {
                             // println!("drawing sprite");
-                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, tile_id, td1);
+                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, tile_id, td1, false);
                         }
                     }
                 }

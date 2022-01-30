@@ -116,15 +116,15 @@ impl MMU {
         &self.data[0x0100 .. 0x0200]
     }
     pub(crate) fn get_stack_16(&self) -> &[u8] { &self.data[0xFFF0 .. 0xFFFE] }
-    pub(crate) fn get_current_bg_display_data(&self) -> &[u8] {
-        let block = get_bit(self.hardware.LCDC,4);
-        let (start,end) = match block {
-            0 => (0x9800, 0x9BFF),
-            1 => (0x9C00, 0x9FFF),
-            _ => panic!("bad window tile map display select value")
-        };
-        &self.data[start .. end]
-    }
+    // pub(crate) fn get_current_bg_display_data(&self) -> &[u8] {
+    //     let block = get_bit(self.hardware.LCDC,4);
+    //     let (start,end) = match block {
+    //         0 => (0x9800, 0x9BFF),
+    //         1 => (0x9C00, 0x9FFF),
+    //         _ => panic!("bad window tile map display select value")
+    //     };
+    //     &self.data[start .. end]
+    // }
     pub(crate) fn fetch_vram(&self) -> &[u8] {
         &self.data[(VRAM_START as usize)..(VRAM_END as usize)]
     }
