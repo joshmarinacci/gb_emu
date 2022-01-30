@@ -35,7 +35,9 @@ impl PPU {
             mmu.hardware.STAT = set_bit(mmu.hardware.STAT,2,mmu.hardware.LY == mmu.hardware.LYC);
             if screen_state.current_scanline == 154 {
                 // println!("end of the frame");
+                self.draw_tile_data(mmu, &mut screen_state);
                 self.draw_full_screen(mmu, &mut screen_state);
+                self.draw_scanline_2(mmu,&mut screen_state, false);
                 screen_state.current_scanline = 0;
             }
             screen_state.LCDC = mmu.hardware.LCDC;
@@ -79,6 +81,7 @@ impl PPU {
 
 pub struct ScreenState {
     pub backbuffer: Bitmap,
+    pub vramdump: Bitmap,
     pub SCX: u8,
     pub SCY: u8,
     pub current_scanline: u8,
@@ -92,6 +95,7 @@ impl ScreenState {
     pub(crate) fn init() -> ScreenState {
         ScreenState {
             backbuffer: Bitmap::init(256,256),
+            vramdump: Bitmap::init(128,256),
             SCX:0,
             SCY:0,
             current_scanline: 0,
@@ -168,7 +172,7 @@ impl PPU {
             low_data_start = 0x8000;
             low_data_end = 0x87FF;
         }
-        let lo_data = &mmu.data[low_data_start..low_data_end];
+        let tile_data = &mmu.data[low_data_start..low_data_end];
 
         // if screen_on {
             if bg_enabled {
@@ -187,7 +191,7 @@ impl PPU {
                                          x * 8 + (mmu.hardware.SCX as usize),
                                          y * 8 + (mmu.hardware.SCY as usize),
                                          tile_id,
-                                         lo_data);
+                                         tile_data);
                         } else {
                             // println!("drawing tile id {:02x}",tile_id);
                         }
@@ -206,13 +210,35 @@ impl PPU {
                             println!("skipping big sprites");
                         } else {
                             // println!("drawing sprite");
-                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, &tile_id, lo_data);
+                            draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, &tile_id, tile_data);
                         }
                     }
                 }
             }
         // }
         Ok(())
+    }
+    fn draw_tile_data(&mut self, mmu: &mut MMU, screenstate:&mut ScreenState) {
+        let tile_data = &mmu.data[0x8000 .. 0x97FF];
+        let img = &mut screenstate.vramdump;
+        // println!("drawing tile data {}",tile_data.len());
+        for (n, tile) in tile_data.chunks_exact(16).enumerate() {
+            // println!("tile num {}",n);
+            let x = (n % 16) * 8;
+            let y = (n/16) * 8;
+            for (line, row) in tile.chunks_exact(2).enumerate() {
+                for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
+                    let (r,g,b) = match color {
+                        0 => (255,255,255),
+                        1 => (220,220,220),
+                        2 => (170,170,170),
+                        3 => (50,50,50),
+                        _ => (255,0,255),
+                    };
+                    img.set_pixel_rgb((x+7 - n) as i32, (y + line) as i32, r, g, b);
+                }
+            }
+        }
     }
     fn draw_scanline_2(&mut self, mmu: &mut MMU, screenstate: &mut MutexGuard<ScreenState>, draw: bool)  {
         // println!("entering mode 2 ");

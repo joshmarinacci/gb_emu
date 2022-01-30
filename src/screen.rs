@@ -25,6 +25,7 @@ pub struct Screen {
     texture:Texture,
     context: Sdl,
     pub scale: f32,
+    pub tex2: Texture,
 }
 
 impl Screen {
@@ -74,10 +75,8 @@ impl Screen {
 impl Screen {
     pub fn init(settings: &ScreenSettings) -> Screen {
         println!("using scale {}", settings.scale);
-        let win_w:u32 = (settings.scale * 256.0).floor() as u32;
+        let win_w:u32 = (settings.scale * (256.0 + 128.0)).floor() as u32;
         let win_h:u32 = (settings.scale * 256.0).floor() as u32;
-        let tex_w:u32 = 256;
-        let tex_h:u32 = 256;
         let sdl_context = sdl2::init().unwrap();
         let window = sdl_context.video().unwrap()
             .window("rust-sdl2 demo: Video", win_w, win_h)
@@ -87,11 +86,14 @@ impl Screen {
             .map_err(|e| e.to_string()).unwrap();
         let canvas:WindowCanvas = window.into_canvas().software().build().map_err(|e| e.to_string()).unwrap();
         let tex = canvas.texture_creator()
-            .create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, tex_w,tex_h).unwrap();
+            .create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, 256,256).unwrap();
+        let tex2 = canvas.texture_creator()
+            .create_texture(PixelFormatEnum::ARGB8888, TextureAccess::Target, 128,256).unwrap();
         Screen {
             context:sdl_context,
             canvas,
             texture:tex,
+            tex2:tex2,
             scale:settings.scale,
         }
     }
@@ -100,26 +102,32 @@ impl Screen {
         {
             let screenstate = screenstate_mutex.lock().unwrap();
             // println!("current scanline {}", screenstate.current_scanline);
-            self.canvas.with_texture_canvas(&mut self.texture, |can| {
-                for i in 0..screenstate.backbuffer.w {
-                    for j in 0..screenstate.backbuffer.h {
-                        let n: usize = ((j * screenstate.backbuffer.w + i) * 4) as usize;
-                        //let px = img.get_pixel_32argb(i,j);
-                        // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
-                        let (r, g, b) = screenstate.backbuffer.get_pixel_rgb(i, j);
-                        // println!("rgb {},{},{}",r,g,b);
-                        // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
-                        can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
-                        can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
-                    }
-                }
-            }).unwrap();
-            let w = (self.scale * screenstate.backbuffer.w as f32).floor() as u32;
-            let h = (self.scale * screenstate.backbuffer.h as f32).floor() as u32;
-            self.canvas.copy(&self.texture, None, Rect::new(0, 0, w,h));
-
+            copy_texture(&mut self.canvas, &mut self.texture, &screenstate.backbuffer, self.scale, 0,0);
+            copy_texture(&mut self.canvas, &mut self.tex2, &screenstate.vramdump, self.scale, 256,0);
         }
         self.canvas.present();
         ::std::thread::sleep(Duration::from_millis(1000/60));
     }
+}
+
+fn copy_texture(canvas: &mut WindowCanvas, texture: &mut Texture, bitmap: &Bitmap, scale:f32, x: i32, y: i32) {
+    canvas.with_texture_canvas(texture, |can| {
+        for i in 0..bitmap.w {
+            for j in 0..bitmap.h {
+                let n: usize = ((j * bitmap.w + i) * 4) as usize;
+                //let px = img.get_pixel_32argb(i,j);
+                // let ve = img.get_pixel_vec_argb(i as u32,j as u32);
+                let (r, g, b) = bitmap.get_pixel_rgb(i, j);
+                // println!("rgb {},{},{}",r,g,b);
+                // let col = Color::RGBA(ve[1],ve[2],ve[3], ve[0]);
+                can.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, 255));
+                can.fill_rect(Rect::new(i as i32, j as i32, 1, 1));
+            }
+        }
+    }).unwrap();
+    let w = (scale * bitmap.w as f32).floor() as u32;
+    let h = (scale * bitmap.h as f32).floor() as u32;
+    let xx = (scale*x as f32).floor() as i32;
+    let yy = (scale*y as f32).floor() as i32;
+    canvas.copy(texture, None, Rect::new(xx, yy, w,h));
 }

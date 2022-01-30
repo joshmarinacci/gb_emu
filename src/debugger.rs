@@ -333,7 +333,14 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
             }
         },
         'c' => dump_cart_rom(term, ctx)?,
-        'v' => dump_vram(term, ctx)?,
+        // 'v' => dump_vram(term, ctx)?,
+        'v' => {
+            println!("running to next frame done");
+            while ctx.mmu.hardware.LY > 1 {
+                // println!("LY is {}",ctx.mmu.hardware.LY);
+                ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
+            }
+        }
         'o' => dump_oram(term, ctx)?,
         's' => {
             // screenstate.clear_with(0, 0, 0);
