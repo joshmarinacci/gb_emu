@@ -8,7 +8,7 @@ use log::{debug, info};
 use Load::Load_R_u8;
 use crate::{common, MMU, opcodes, ScreenSettings, Z80};
 use crate::common::{Bitmap, get_bit_as_bool, RomFile};
-use crate::mmu::{TEST_ADDR, TIMER_INTERRUPT_ADDR};
+use crate::mmu::{P1_JOYPAD_INFO, TEST_ADDR, TIMER_INTERRUPT_ADDR};
 use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
 use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
@@ -498,6 +498,7 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     term.write_line(&format!("LCDC {:08b}  STAT {:08b}",regs.LCDC, regs.STAT))?;
     term.write_line(&format!("IME  {:08b}    IE {:08b}",regs.IME, regs.IE,))?;
     term.write_line(&format!("BGP  {:08b}",ctx.mmu.hardware.BGP))?;
+    term.write_line(&format!("Joy  {:08b}",ctx.mmu.read8(P1_JOYPAD_INFO)))?;
     // term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
     // term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
     // term.write_line(&format!("WY   {:8b}",ctx.mmu.hardware.WY))?;
