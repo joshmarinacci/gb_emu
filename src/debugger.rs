@@ -2,7 +2,7 @@ use std::{io, thread};
 use console::{Color, Style, Term};
 use io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use console::Color::{Black, Red, White};
 use log::{debug, info};
 use Load::Load_R_u8;
@@ -21,6 +21,7 @@ struct Ctx {
     cpu:Z80,
     mmu:MMU,
     clock:u32,
+    last_cpu_clock:u32,
     running:bool,
     interactive:bool,
     cart: Option<RomFile>,
@@ -28,14 +29,18 @@ struct Ctx {
     test_memory_visible: bool,
     show_interrupts:bool,
     last_status:String,
+    ppu: PPU,
+    screen_enabled:bool,
 }
 
 impl Ctx {
     fn make_test_context(rom: &[u8]) -> Ctx {
         Ctx {
             cpu:Z80::init(),
+            ppu:PPU::init(),
             mmu: MMU::init(rom),
             clock: 0,
+            last_cpu_clock: 0,
             running: true,
             interactive: false,
             cart: None,
@@ -43,12 +48,13 @@ impl Ctx {
             test_memory_visible: false,
             show_interrupts: false,
             last_status: String::from("--nothing--"),
+            screen_enabled: false
         }
     }
 }
 
 impl Ctx {
-    pub(crate) fn execute(&mut self, term: &mut Term, verbose: bool) -> Result<()>{
+    pub(crate) fn execute(&mut self, term: &mut Term, verbose: bool, ss: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) -> Result<()>{
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if verbose {
             term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode))?;
@@ -61,7 +67,8 @@ impl Ctx {
             println!("current memory is PC {:04x} ",self.cpu.get_pc());
             panic!("unknown op code");
         }
-        self.mmu.update(&mut self.cpu);
+        self.mmu.update(&mut self.cpu, ss, &mut self.clock);
+        self.ppu.update(&mut self.mmu, ss, &mut self.clock, to_screen, receive_cpu, self.screen_enabled);
         self.clock+=1;
         Ok(())
     }
@@ -101,30 +108,34 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       breakpoint:u16,
                       verbose:bool,
                       interactive:bool) -> Result<()> {
-    let mut ppu = PPU::init();
     let screen_state = ScreenState::init();
-    let shared_screen_state = Arc::new(Mutex::new(ScreenState::init()));
+    let mut shared_screen_state = Arc::new(Mutex::new(ScreenState::init()));
     let mut ctx = Ctx {
-        cpu, mmu, clock:0,
+        cpu, mmu,
+        ppu:PPU::init(),
+        clock:0,
+        last_cpu_clock: 0,
         running:true,
         interactive,
         cart,
         full_registers_visible:false,
         test_memory_visible: false,
         show_interrupts: false,
-        last_status: "".to_string()
+        last_status: "".to_string(),
+        screen_enabled: screen_settings.enabled,
     };
     let mut term = Term::stdout();
 
     println!("fast forwarding: {}",fast_forward);
-    for n in 0..fast_forward {
-        ctx.execute(&mut term, false)?;
-    }
 
     let (to_screen,receive_screen) = channel::<String>();
     let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
-    let bb2 = shared_screen_state.clone();
+    for n in 0..fast_forward {
+        ctx.execute(&mut term, false, &mut shared_screen_state, &to_screen, &receive_cpu )?;
+    }
+    let mut ss1 = shared_screen_state.clone();
+    let ss2 = shared_screen_state.clone();
     let screen_enabled = screen_settings.enabled;
     let hand = thread::spawn(move | |
         {
@@ -138,10 +149,9 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
 
             //step forward or execute next CPU clock cycle
             if ctx.interactive {
-                let mut bb = bb2.lock().unwrap();
-                step_forward(&mut ctx, &mut term, &mut bb).unwrap();
+                step_forward(&mut ctx, &mut term, &mut ss1, &to_screen, &receive_cpu).unwrap();
             } else {
-                ctx.execute(&mut term, verbose).unwrap();
+                ctx.execute(&mut term, verbose, &mut ss1, &to_screen, &receive_cpu ).unwrap();
                 if let Ok(evt) = receive_cpu.try_recv() {
                     match evt {
                         InputEvent::Press(JoyPadKey::A) => {        ctx.mmu.joypad.a = true;       }
@@ -166,23 +176,8 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                     }
                 }
             }
-            if ctx.mmu.refresh_requested && screen_enabled {
-                {
-                    let mut bb = bb2.lock().unwrap();
-                    // bb.clear_with(0, 0, 0);
-                    ppu.draw_vram(&mut ctx.mmu, &mut bb);
-                    // draw_vram(&mut ctx.mmu, &mut bb);
-                }
-                to_screen.send(String::from("go"));
-                if let Ok(str) = receive_cpu.recv() {
-                } else {
-                    println!("error coming back from cpu?");
-                }
-                ctx.mmu.refresh_requested = false;
-            }
         }
     });
-
     if screen_settings.enabled {
         let mut screen_obj = Screen::init(screen_settings);
         while true {
@@ -198,7 +193,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     Ok(())
 }
 
-fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut MutexGuard<ScreenState>) -> Result<()>{
+fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) -> Result<()>{
     let border = Style::new().bg(Color::Magenta).black();
     // term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
@@ -320,25 +315,25 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut MutexGuard<Scr
     let ch = term.read_char().unwrap();
     match ch{
         'r' => ctx.full_registers_visible = !ctx.full_registers_visible,
-        'j' => ctx.execute(term,false)?,
+        'j' => ctx.execute(term, false, screenstate, to_screen, receive_cpu)?,
         'J' => {
             term.write_line("doing 16 instructions")?;
             for n in 0..16 {
-                ctx.execute(term, false)?;
+                ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
             }
         },
         'u' => {
             for n in 0..256 {
-                ctx.execute(term, false)?;
+                ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
             }
         },
         'U' => {
             for n in 0..(256*16) {
-                ctx.execute(term, false)?;
+                ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
             }
         },
         'c' => dump_cart_rom(term, ctx)?,
-        // 'v' => dump_vram(term, ctx)?,
+        'v' => dump_vram(term, ctx)?,
         'o' => dump_oram(term, ctx)?,
         's' => {
             // screenstate.clear_with(0, 0, 0);
@@ -351,7 +346,7 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut MutexGuard<Scr
         'm' => dump_all_memory(term,ctx)?,
         'b' => {
             ctx.interactive = false;
-            ctx.execute(term,false)?;
+            ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
         },
         _ => {}
     };
@@ -408,6 +403,40 @@ fn dump_oram(term: &Term, ctx: &Ctx) -> Result<()>{
     Ok(())
 }
 
+fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()>{
+    term.write_line("vram memory")?;
+    {
+        term.write_line("tiledata block 0")?;
+        let data = ctx.mmu.fetch_tiledata_block0();
+        for line in data.chunks(64) {
+            let line_str: String = line.iter()
+                .map(|b| format!("{:02x}", b))
+                .collect();
+            term.write_line(&line_str)?;
+        }
+    }
+    {
+        term.write_line("tiledata block 1")?;
+        let data = ctx.mmu.fetch_tiledata_block1();
+        for line in data.chunks(64) {
+            let line_str: String = line.iter()
+                .map(|b| format!("{:02x}", b))
+                .collect();
+            term.write_line(&line_str)?;
+        }
+    }
+    {
+        term.write_line("tiledata block 2")?;
+        let data = ctx.mmu.fetch_tiledata_block2();
+        for line in data.chunks(64) {
+            let line_str: String = line.iter()
+                .map(|b| format!("{:02x}", b))
+                .collect();
+            term.write_line(&line_str)?;
+        }
+    }
+    Ok(())
+}
 fn show_test_memory(term: &Term, ctx: &Ctx) -> Result<()>{
     term.write_line(&format!("memory at {:04X}",TEST_ADDR))?;
     let data = ctx.mmu.fetch_test_memory();
@@ -483,7 +512,7 @@ impl Ctx {
             println!("unknown op code {:04x}",opcode);
             panic!("unknown op code");
         }
-        self.mmu.update(&mut self.cpu);
+        // self.mmu.update(&mut self.cpu, );
         self.clock+=1;
     }
 }

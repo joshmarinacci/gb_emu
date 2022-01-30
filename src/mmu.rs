@@ -1,7 +1,9 @@
 use std::cmp::{max, min};
+use std::sync::{Arc, Mutex};
 use log::info;
 use crate::bootrom::BOOT_ROM;
 use crate::common::{get_bit, get_bit_as_bool, set_bit};
+use crate::ppu::ScreenState;
 use crate::Z80;
 
 #[derive(Debug)]
@@ -42,7 +44,6 @@ pub struct Hardware {
     pub interrupt_just_returned:bool,
     pub active_interrupt:InterruptType,
 
-    pub clock: i32,
 }
 
 impl Hardware {
@@ -67,7 +68,6 @@ impl Hardware {
             lcdc_interrupt_enabled: false,
             serial_interrupt_enabled: false,
             transition_interrupt_enabled: false,
-            clock: 0,
             active_interrupt: InterruptType::None,
             interrupt_just_returned: false,
             TIMA:0,
@@ -78,13 +78,6 @@ impl Hardware {
         }
     }
     pub fn update(&mut self) {
-        self.clock += 1;
-        if self.clock % 20 == 0 {
-            self.LY = self.LY + 1;
-        }
-        if self.LY > 153 {
-            self.LY = 0;
-        }
         let (v2, overflowed) = self.DIV.overflowing_add(1);
         if overflowed {
             // println!("div overflowed");
@@ -115,7 +108,6 @@ pub struct MMU {
     lowest_used_iram:u16,
     highest_used_iram:u16,
     pub hardware:Hardware,
-    pub refresh_requested:bool,
     pub joypad:Joypad,
 }
 
@@ -155,8 +147,7 @@ impl MMU {
         &self.data[0xFE00 .. 0xFE9F]
     }
 
-    pub(crate) fn update(&mut self, cpu: &mut Z80) {
-        let old_LY = self.hardware.LY;
+    pub(crate) fn update(&mut self, cpu: &mut Z80, ss: &mut Arc<Mutex<ScreenState>>, clock: &mut u32) {
         self.hardware.update();
 
         if self.hardware.IME == 1  && self.hardware.interrupt_just_returned {
@@ -164,8 +155,7 @@ impl MMU {
             self.hardware.IF = set_bit(self.hardware.IF,0,false);
             match self.hardware.active_interrupt {
                 InterruptType::VBlank => {
-                    self.refresh_requested = true;
-                    // info!("ending VBLank Interrupt");
+                    info!("ending VBLank Interrupt");
                 },
                 InterruptType::Timer => {
                     // info!("ending timer interrupt");
@@ -176,9 +166,11 @@ impl MMU {
             self.hardware.active_interrupt = InterruptType::None;
         }
         //vblank
-        if old_LY > 0 && self.hardware.LY == 0 {
+        if ss.lock().unwrap().vblank_triggered {
+            ss.lock().unwrap().vblank_triggered = false;
+            println!("vblank inside IME={} en = {}", self.hardware.IME, self.hardware.vblank_interrupt_enabled);
             if self.hardware.IME > 0 && self.hardware.vblank_interrupt_enabled {
-                // info!("starting VBLank Interrupt");
+                info!("starting VBLank Interrupt");
                 self.hardware.active_interrupt = InterruptType::VBlank;
                 self.hardware.IF = set_bit(self.hardware.IF,0,true);
                 self.hardware.IME = 0;
@@ -188,13 +180,13 @@ impl MMU {
                 cpu.set_pc(VBLANK_INTERRUPT_ADDR);
             } else {
                 //otherwise just trigger a normal refresh?
-                self.refresh_requested = true;
+                // self.refresh_requested = true;
             }
         }
 
         // if timer is enabled
         if get_bit_as_bool(self.hardware.TAC,2) {
-            if self.hardware.clock % 5 == 0 {
+            if *clock % 5 == 0 {
                 let (val, overflowed) = self.hardware.TIMA.overflowing_add(1);
                 self.hardware.TIMA = val;
                 if overflowed {
@@ -253,7 +245,6 @@ impl MMU {
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
             hardware: Hardware::init(),
-            refresh_requested: false,
             joypad: Joypad {
                 a: false,
                 b: false,
