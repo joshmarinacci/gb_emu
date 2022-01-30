@@ -2,8 +2,9 @@ use std::io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::mpsc::{Receiver, Sender};
 use crate::{common, MMU};
-use crate::common::{Bitmap, get_bit_as_bool};
+use crate::common::{Bitmap, get_bit_as_bool, set_bit};
 use crate::debugger::InputEvent;
+use crate::mmu::STAT_LCDCONTROL;
 
 pub struct PPU {
     pub last_clock: u32,
@@ -27,24 +28,32 @@ impl PPU {
         let mut do_redraw = false;
         {
             let mut screen_state = screen_state_mutext.lock().unwrap();
+            let prev_line = screen_state.current_scanline;
             screen_state.current_scanline += 1;
             screen_state.LY = screen_state.current_scanline;
             mmu.hardware.LY = screen_state.LY;
+            mmu.hardware.STAT = set_bit(mmu.hardware.STAT,2,mmu.hardware.LY == mmu.hardware.LYC);
+            if screen_state.current_scanline == 154 {
+                println!("end of the frame");
+                self.draw_full_screen(mmu, &mut screen_state);
+                screen_state.current_scanline = 0;
+            }
             screen_state.LCDC = mmu.hardware.LCDC;
             let screen_on = true;
-            if screen_state.current_scanline < 144 {
+            if screen_state.current_scanline < 0x90 {
                 // println!("drawing scanline {}", screen_state.current_scanline);
                 if screen_on {
                     // self.draw_scanline(mmu, &mut screen_state, clock);
-                    self.draw_scanline_2(mmu,&mut screen_state);
+                    self.draw_scanline_2(mmu,&mut screen_state, true);
                 }
             } else {
-                self.draw_full_screen(mmu, &mut screen_state);
-                self.do_vblank(&mut screen_state);
-                // println!("did a vblank");
-                screen_state.current_scanline = 0;
-                screen_state.vblank_triggered = true;
-                do_redraw = true;
+                if prev_line == 0x8F && screen_state.current_scanline == 0x90 {
+                    // self.do_vblank(&mut screen_state);
+                    println!("ppu triggered a vblank");
+                    screen_state.vblank_triggered = true;
+                    do_redraw = true;
+                }
+                self.draw_scanline_2(mmu,&mut screen_state, false);
             }
         }
         if screen_attached && do_redraw {
@@ -205,7 +214,7 @@ impl PPU {
         // }
         Ok(())
     }
-    fn draw_scanline_2(&mut self, mmu: &mut MMU, screenstate: &mut MutexGuard<ScreenState>)  {
+    fn draw_scanline_2(&mut self, mmu: &mut MMU, screenstate: &mut MutexGuard<ScreenState>, draw: bool)  {
         // println!("entering mode 2 ");
         // println!("current LY is {:02}", screenstate.LY);
         // println!("LCDC reg is {:02}", screenstate.LCDC);

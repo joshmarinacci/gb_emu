@@ -269,12 +269,24 @@ impl MMU {
         if addr >= VRAM_START  && addr <= VRAM_END {
             // println!("reading from vram {:04x}",addr);
         }
-        if addr == LY_LCDC_Y_COORD { { return self.hardware.LY; } }
-        if addr == LYC_LCDC_Y_COMPARE { return self.hardware.LYC; }
+        if addr == LY_LCDC_Y_COORD {
+            // info!("reading LY {:02x}", self.hardware.LY);
+            return self.hardware.LY;
+        }
+        if addr == LYC_LCDC_Y_COMPARE {
+            info!("reading LYC");
+            return self.hardware.LYC;
+        }
         if addr == SCX_SCROLL_X { return self.hardware.SCX; }
-        if addr == SCY_SCROLL_Y { return self.hardware.SCY; }
+        if addr == SCY_SCROLL_Y {
+            info!("reading SCY");
+            return self.hardware.SCY; }
+        if addr == LCDC_LCDCONTROL {
+            info!("reading LCDC register");
+            return self.hardware.LCDC;
+        }
         if addr == STAT_LCDCONTROL {
-            // println!("reading STAT_LCDCONTROL register");
+            info!("reading STAT register");
             return self.hardware.STAT;
         }
         if addr == INTERRUPT_ENABLE {
@@ -359,13 +371,13 @@ impl MMU {
             panic!("halting");
         }
         if addr == P1_JOYPAD_INFO {
-            // info!("writing to JOYPAD register {:08b}",val);
+            info!("writing to JOYPAD register {:08b}",val);
             if get_bit_as_bool(val,5) {
-                // info!("Select Action Buttons");
+                info!("Select Action Buttons");
                 self.joypad.readmode = JoypadReadMode::Action();
             }
             if get_bit_as_bool(val,4) {
-                // info!("Select Direction Buttons");
+                info!("Select Direction Buttons");
                 self.joypad.readmode = JoypadReadMode::Direction();
             }
             return;
@@ -405,7 +417,7 @@ impl MMU {
             return;
         }
         if addr >= VRAM_START  && addr <= VRAM_END {
-            // println!("writing in VRAM {:04x}  {:x}", addr, val);
+            println!("writing in VRAM {:04x}  {:x}", addr, val);
         }
         if addr >= INTERNAL_RAM_HI_START && addr <= INTERNAL_RAM_HI_END {
             // info!("writing to hi ram {:04x} value = {:02x}",addr,val);
@@ -423,7 +435,7 @@ impl MMU {
             return;
         }
         if addr == DMA {
-            // println!("DMA requested!");
+            info!("DMA requested!");
             let src_addr = ((val as u16) << 8);
             let src_addr_end = src_addr + 0xA0;
             // println!("transferring from src address {:04x}",src_addr);
@@ -433,7 +445,7 @@ impl MMU {
                 let byte = self.read8(src_addr + (n as u16));
                 self.write8(dst_addr + (n as u16),byte);
             }
-            // info!("DMA transfer complete");
+            info!("DMA transfer complete");
             return;
         }
         if addr == INTERRUPT_ENABLE {
@@ -457,7 +469,7 @@ impl MMU {
             return;
         }
         if addr == BGP {
-            // info!("writing to BGP LCD register {:0b}",val);
+            info!("writing to BGP LCD register {:0b}",val);
             self.hardware.BGP = val;
             // dump_bgp_bits(val);
             return;
@@ -466,8 +478,17 @@ impl MMU {
         if addr == OBP1_ADDR  { self.hardware.OBP1 = val; return; }
         if addr == WX_ADDR  { self.hardware.WX = val; return; }
         if addr == WY_ADDR  { self.hardware.WY = val; return; }
-        if addr == SCX_SCROLL_X { self.hardware.SCX = val; return; }
-        if addr == SCY_SCROLL_Y { self.hardware.SCY = val; return; }
+        if addr == SCX_SCROLL_X {
+            info!("writing to SCX");
+            self.hardware.SCX = val; return;
+        }
+        if addr == LYC_LCDC_Y_COMPARE {
+            info!("writing to the LYC register");
+            self.hardware.LYC = val;
+        }
+        if addr == SCY_SCROLL_Y {
+            info!("writing to SCY");
+            self.hardware.SCY = val; return; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);
@@ -571,7 +592,7 @@ const NR52_SOUND:u16 = 0xFF26;
 //more sound stuff
 
 const LCDC_LCDCONTROL:u16 = 0xFF40;
-const STAT_LCDCONTROL:u16 = 0xFF41;
+pub const STAT_LCDCONTROL:u16 = 0xFF41;
 
 const SCY_SCROLL_Y:u16 = 0xFF42;
 const SCX_SCROLL_X:u16 = 0xFF43;

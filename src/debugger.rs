@@ -469,20 +469,16 @@ fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) ->Result<()>{
 
 fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
+    let regs = &ctx.mmu.hardware;
     term.write_line(&format!("registers are {} ",reg.apply_to("cool")))?;
-    term.write_line(&reg.apply_to(&format!("LY   {:02x}",ctx.mmu.hardware.LY)).to_string())?;
-    term.write_line(&format!("LYC  {}",ctx.mmu.hardware.LYC))?;
-    term.write_line(&format!("SCX  {}",ctx.mmu.hardware.SCX))?;
-    term.write_line(&format!("SCY  {}",ctx.mmu.hardware.SCY))?;
-    term.write_line(&format!("LCDC {:8b}",ctx.mmu.hardware.LCDC))?;
-    term.write_line(&format!("STAT {:8b}",ctx.mmu.hardware.STAT))?;
-    term.write_line(&format!("IME  {:8b}",ctx.mmu.hardware.IME))?;
-    term.write_line(&format!("IE   {:8b}",ctx.mmu.hardware.IE))?;
-    term.write_line(&format!("BGP  {:8b}",ctx.mmu.hardware.BGP))?;
-    term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
-    term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
-    term.write_line(&format!("WY   {:8b}",ctx.mmu.hardware.WY))?;
-    term.write_line(&format!("WX   {:8b}",ctx.mmu.hardware.WX))?;
+    term.write_line(&format!("LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",regs.LY, regs.LYC,  regs.SCX,  regs.SCY))?;
+    term.write_line(&format!("LCDC {:08b}  STAT {:08b}",regs.LCDC, regs.STAT))?;
+    term.write_line(&format!("IME  {:08b}    IE {:08b}",regs.IME, regs.IE,))?;
+    term.write_line(&format!("BGP  {:08b}",ctx.mmu.hardware.BGP))?;
+    // term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
+    // term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
+    // term.write_line(&format!("WY   {:8b}",ctx.mmu.hardware.WY))?;
+    // term.write_line(&format!("WX   {:8b}",ctx.mmu.hardware.WX))?;
     Ok(())
 }
 
