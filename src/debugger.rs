@@ -73,7 +73,7 @@ impl Ctx {
         if let Some(instr) = lookup_opcode(opcode) {
             self.execute_instruction(&instr);
         } else {
-            term.write_line(&format!("current cycle {}", self.clock))?;
+            term.write_line(&format!("current cycle {}  PPU wait {}", self.clock, self.ppu.wait_until))?;
             println!("unknown op code {:04x}",opcode);
             println!("current memory is PC {:04x} ",self.cpu.get_pc());
             panic!("unknown op code");
@@ -217,7 +217,7 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
     if let Some(cart) = &ctx.cart {
         term.write_line(&format!("executing rom {}", cart.path))?;
     }
-    term.write_line(&format!("clock {}",&ctx.clock))?;
+    term.write_line(&format!("cycle {}  PPU wait {}", ctx.clock, ctx.ppu.wait_until))?;
     term.write_line(&border.apply_to("========================================").to_string())?;
 
     // print the current memory
@@ -309,21 +309,7 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
     }
 
     // print info about the next opcode
-    let primary = Style::new().green().bold();
-    let bold = Style::new().reverse().red();
-    let italic = Style::new().italic();
-    let (opcode, _instr_len) = fetch_opcode(&ctx.cpu, &ctx.mmu);
-    let op = lookup_opcode(opcode);
-    if let Some(ld) = op {
-        term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
-                                                   ctx.cpu.r.pc,
-                                                   bold.apply_to(format!("{:02X}",opcode)),
-                                                   italic.apply_to(opcodes::lookup_opcode_info(ld)),
-        )).to_string())?;
-    } else {
-        println!("current cycle {}", ctx.clock);
-        panic!("unknown op code")
-    }
+    print_next_opcode(term,ctx);
 
     println!("{}",ctx.last_status);
 
@@ -372,6 +358,86 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
         _ => {}
     };
     Ok(())
+}
+
+fn print_next_opcode(term: &mut Term, ctx: &mut Ctx) {
+    let primary = Style::new().green().bold();
+    let bold = Style::new().reverse().red();
+    let italic = Style::new().italic();
+    let (opcode, _instr_len) = fetch_opcode(&ctx.cpu, &ctx.mmu);
+    let op = lookup_opcode(opcode);
+    if let Some(ld) = &op {
+        term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
+                                                   ctx.cpu.r.pc,
+                                                   bold.apply_to(format!("{:02X}", opcode)),
+                                                   italic.apply_to(opcodes::lookup_opcode_info(ld)),
+        )).to_string()).unwrap();
+    } else {
+        println!("current cycle {}", ctx.clock);
+        panic!("unknown op code")
+    }
+    {
+        //print detailed opcode
+        if let Some(ins) = &op {
+            match ins {
+                // LoadInstr(_) => {}
+                SpecialInstr(Special::NOOP()) => {
+                    println!("no op");
+                }
+                Instr::JumpInstr(Jump::Absolute_u16()) => {
+                    let val = ctx.mmu.read16(ctx.cpu.get_pc()+1);
+                    println!("Jump to {:04x}",val);
+                }
+                Instr::JumpInstr(Jump::Relative_cond_notzero_i8()) => {
+                    let val = ctx.mmu.read8(ctx.cpu.get_pc()+1);
+                    println!("if !z jump relative {}",u8_as_i8(val));
+                }
+                Instr::MathInst(Math::XOR_A_r(r)) => {
+                    println!("A <= ( {} xor {} )", ctx.cpu.r.get_u8reg(&A), ctx.cpu.r.get_u8reg(r));
+                }
+
+                LoadInstr(Load::Load_addr_R2_A_dec(rr)) => {
+                    println!("load {:02X} to ({}) ", ctx.cpu.r.get_u8reg(&A), addr_name(ctx.cpu.r.get_u16reg(rr)));
+                }
+                LoadInstr(Load::Load_R_u8(r)) => println!("{:02x} -> {}",ctx.mmu.read8(ctx.cpu.get_pc()+1),r),
+                LoadInstr(Load::Load_HI_R_U8(r)) => {
+                    let val = ctx.mmu.read8(ctx.cpu.get_pc()+1);
+                    let addr = 0xFF00+(val as u16);
+                    println!(" {} -> {}       ({:02x})",  addr_name(addr), r, ctx.cpu.r.get_u8reg(r));
+                }
+                LoadInstr(Load::Load_HI_U8_R(r)) => println!("{:02x} -> ({})",
+                                                             ctx.cpu.r.get_u8reg(r),
+                                                             addr_name(0xFF00 +(ctx.mmu.read8(ctx.cpu.get_pc()+1) as u16))),
+                // 0xE0 => Some(LoadInstr(Load_HI_U8_R(A))),
+
+                Instr::CompareInst(Compare::CP_A_n()) => {
+                    let val = ctx.mmu.read8(ctx.cpu.get_pc()+1);
+                    println!(" compare {} with {:02X} ", A,val);
+                }
+                // 0xF0 => Some(LoadInstr(Load_HI_R_U8(A))),
+                _ => {
+                    println!("unhandled");
+                }
+            }
+        }
+    }
+
+}
+
+fn addr_name(addr: u16) -> String {
+    match addr {
+        0xFF40 => String::from("LCDC"),
+        0xFF41 => String::from("STAT"),
+        0xFF44 => String::from("LY  "),
+        0xFF45 => String::from("LYC "),
+        0xFF46 => String::from("DMA "),
+        0xFF47 => String::from("BGP "),
+        0xFF48 => String::from("OBP0"),
+        0xFF49 => String::from("OBP1"),
+        0xFF25 => String::from("NR51"),
+        0xFF26 => String::from("NR52"),
+        _ => format!("${:04X}", addr),
+    }
 }
 
 fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {

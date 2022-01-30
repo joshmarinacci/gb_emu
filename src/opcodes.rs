@@ -775,7 +775,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
     }
 }
 
-pub fn lookup_opcode_info(op: Instr) -> String {
+pub fn lookup_opcode_info(op: &Instr) -> String {
     match op {
         LoadInstr(Load_R_u8(r)) => format!("LD {},n -- Load register from immediate u8", r),
         LoadInstr(Load_HI_R_U8(r)) => format!("LDH {},(n) -- Load contents of 0xFF00 + u8 into {}", r, r),

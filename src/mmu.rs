@@ -591,7 +591,7 @@ const NR51_SOUND:u16 = 0xFF25;
 const NR52_SOUND:u16 = 0xFF26;
 //more sound stuff
 
-const LCDC_LCDCONTROL:u16 = 0xFF40;
+pub const LCDC_LCDCONTROL:u16 = 0xFF40;
 pub const STAT_LCDCONTROL:u16 = 0xFF41;
 
 const SCY_SCROLL_Y:u16 = 0xFF42;
