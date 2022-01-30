@@ -13,6 +13,7 @@ use crate::debugger::InputEvent::{Press, Release};
 use crate::debugger::JoyPadKey::A;
 use crate::ppu::ScreenState;
 
+#[derive(Debug)]
 pub struct ScreenSettings {
     pub(crate) x:i32,
     pub(crate) y:i32,
@@ -98,7 +99,7 @@ impl Screen {
         //handle any pending inputs
         {
             let screenstate = screenstate_mutex.lock().unwrap();
-            println!("current scanline {}", screenstate.current_scanline);
+            // println!("current scanline {}", screenstate.current_scanline);
             self.canvas.with_texture_canvas(&mut self.texture, |can| {
                 for i in 0..screenstate.backbuffer.w {
                     for j in 0..screenstate.backbuffer.h {

@@ -1,16 +1,69 @@
 use std::io::Result;
-use std::sync::MutexGuard;
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::mpsc::{Receiver, Sender};
 use crate::{common, MMU};
 use crate::common::{Bitmap, get_bit_as_bool};
+use crate::debugger::InputEvent;
 
 pub struct PPU {
+    pub last_clock: u32,
+    drawing:bool,
+    pub wait_until:u32,
+}
+const dots_per_scanline:u32 = 456;
+const mode_0_length:u32 = 208;
+const mode_1_length:u32 = 4560;
+const mode_2_length:u32 = 80;
+const mode_3_length:u32 = 168;
 
+impl PPU {
+    // frame len  70224
+    pub(crate) fn update(&mut self, mmu: &mut MMU, screen_state_mutext: &mut Arc<Mutex<ScreenState>>, clock: &mut u32, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>, screen_attached: bool) {
+        if *clock < self.wait_until {
+            // println!("not yet. {} < {}",*clock, self.wait_until);
+            return;
+        }
+        //draw the current scanline
+        let mut do_redraw = false;
+        {
+            let mut screen_state = screen_state_mutext.lock().unwrap();
+            screen_state.current_scanline += 1;
+            screen_state.LY = screen_state.current_scanline;
+            mmu.hardware.LY = screen_state.LY;
+            screen_state.LCDC = mmu.hardware.LCDC;
+            let screen_on = true;
+            if screen_state.current_scanline < 144 {
+                // println!("drawing scanline {}", screen_state.current_scanline);
+                if screen_on {
+                    // self.draw_scanline(mmu, &mut screen_state, clock);
+                    self.draw_scanline_2(mmu,&mut screen_state);
+                }
+            } else {
+                self.draw_full_screen(mmu, &mut screen_state);
+                self.do_vblank(&mut screen_state);
+                // println!("did a vblank");
+                screen_state.current_scanline = 0;
+                screen_state.vblank_triggered = true;
+                do_redraw = true;
+            }
+        }
+        if screen_attached && do_redraw {
+            // println!("telling real screen to refresh");
+            to_screen.send(String::from("go"));
+            if let Ok(str) = receive_cpu.recv() {
+            } else {
+                // println!("error coming back from cpu?");
+            }
+        }
+    }
 }
 
 impl PPU {
     pub(crate) fn init() -> PPU {
         PPU {
-
+            last_clock:0,
+            drawing: false,
+            wait_until: 0
         }
     }
 }
@@ -21,6 +74,9 @@ pub struct ScreenState {
     pub SCY: u8,
     pub current_scanline: u8,
     pub LCDC:u8,
+    pub STAT:u8,
+    pub LY:u8,
+    pub vblank_triggered:bool,
 }
 
 impl ScreenState {
@@ -30,7 +86,10 @@ impl ScreenState {
             SCX:0,
             SCY:0,
             current_scanline: 0,
-            LCDC: 0
+            LCDC: 0,
+            STAT: 0,
+            LY: 0,
+            vblank_triggered: false
         }
     }
 }
@@ -70,9 +129,7 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
 }
 
 impl PPU {
-    pub fn draw_vram(&mut self, mmu: &mut MMU, screenstate: &mut MutexGuard<ScreenState>) -> Result<()> {
-        let lcdc = mmu.hardware.LCDC;
-        screenstate.LCDC = mmu.hardware.LCDC;
+    pub fn draw_full_screen(&mut self, mmu: &mut MMU, screenstate: &mut MutexGuard<ScreenState>) -> Result<()> {
         // println!("bg and window enable/priority? {}",get_bit_as_bool(lcdc,0));
         // println!("sprites displayed? {}",get_bit_as_bool(lcdc,1));
         // println!("sprite size. 8x8 or 8x16? {}",get_bit_as_bool(lcdc,2));
@@ -82,15 +139,14 @@ impl PPU {
         // println!("window tile map area? {}",get_bit_as_bool(lcdc,6));
         // println!("LCD enable? {}",get_bit_as_bool(lcdc,7));
 
-        let screen_on = get_bit_as_bool(lcdc, 7);
-        if !screen_on { return Ok(()) };
-        let window_enabled = get_bit_as_bool(lcdc, 5);
-        let sprites_enabled = get_bit_as_bool(lcdc, 1);
+        // let window_enabled = get_bit_as_bool(lcdc, 5);
+        // let sprites_enabled = get_bit_as_bool(lcdc, 1);
+        let sprites_enabled = false;
         let bg_enabled = true; //bg is always enabled
-        let sprite_big = get_bit_as_bool(lcdc, 2);
+        let sprite_big = get_bit_as_bool(screenstate.LCDC, 2);
         let mut bg_tilemap_start = 0x9800;
         let mut bg_tilemap_end = 0x9BFF;
-        if get_bit_as_bool(lcdc, 3) {
+        if get_bit_as_bool(mmu.hardware.LCDC, 3) {
             bg_tilemap_start = 0x9C00;
             bg_tilemap_end = 0x9FFF;
         }
@@ -99,20 +155,20 @@ impl PPU {
 
         let mut low_data_start = 0x9000;
         let mut low_data_end = 0x97FF;
-        if get_bit_as_bool(lcdc, 4) {
+        if get_bit_as_bool(mmu.hardware.LCDC, 4) {
             low_data_start = 0x8000;
             low_data_end = 0x87FF;
         }
         let lo_data = &mmu.data[low_data_start..low_data_end];
 
-        if screen_on {
+        // if screen_on {
             if bg_enabled {
                 // println!("low data {:04x} {:04x}",low_data_start, low_data_end);
                 // println!("tiledata = {:?}",lo_data);
                 // println!("bg map {:04x} {:04x}",bg_tilemap_start, bg_tilemap_end);
                 // println!("draw background. tilemap = {:?}", bg_tilemap);
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
-                    screenstate.current_scanline = y as u8;
+                    // screenstate.current_scanline = y as u8;
                     for (x, tile_id) in row.iter().enumerate() {
                         if *tile_id > 0 {
                             // println!("tile id is {}", tile_id);
@@ -146,7 +202,32 @@ impl PPU {
                     }
                 }
             }
-        }
+        // }
         Ok(())
     }
+    fn draw_scanline_2(&mut self, mmu: &mut MMU, screenstate: &mut MutexGuard<ScreenState>)  {
+        // println!("entering mode 2 ");
+        // println!("current LY is {:02}", screenstate.LY);
+        // println!("LCDC reg is {:02}", screenstate.LCDC);
+        // println!("STAT reg is {:02}", screenstate.STAT);
+        //search for sprites on current line
+        // println!("searching for sprites on the current line");
+        // println!("locking OAM memory");
+
+        self.wait_until += mode_2_length;
+        // println!("entering mode 3");
+        // println!("locking all vram ");
+        self.wait_until += mode_3_length;//* mode 3 is 168 to 291 dots long depending on the sprite count
+
+        // println!("entering mode 0 / hblank");
+        self.wait_until += mode_0_length;
+        // println!("cpu can access everything");
+
+    }
+    fn do_vblank(&mut self, screenstate: &mut MutexGuard<ScreenState>) {
+        // println!("entering mode 1");
+        // println!("all memory is available");
+        self.wait_until += mode_1_length;//4560
+    }
 }
+
