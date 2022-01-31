@@ -466,7 +466,43 @@ fn addr_name(addr: u16) -> String {
     }
 }
 
+#[derive(Debug)]
+struct RamChunk {
+    start:usize,
+    len:usize,
+    name: &'static str,
+}
 fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
+    let ranges = [
+        RamChunk{start:0x8000, len:0x800, name:"Tile Data Block 0"},
+        RamChunk{start:0x8800, len:0x800, name:"Tile Data Block 1"},
+        RamChunk{start:0x9000, len:0x800, name:"Tile Data Block 2"},
+        RamChunk{start:0x9800, len:0x400, name:"Tile Map Block 0"},
+        RamChunk{start:0x9C00, len:0x400, name:"Tile Map Block 1"},
+        RamChunk{start:0xFE00, len:0xA0,  name:"OAM: sprite attribute table"},
+        RamChunk{start:0xFF80, len:0x80,  name:"High RAM"},
+    ];
+    let mut selections:Vec<String> = vec![];
+    for reg in &ranges { selections.push(reg.name.to_string()); }
+    let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("view memory section:")
+        .default(0)
+        .items(&selections[..])
+        .interact()
+        .unwrap();
+    let range = &ranges[selection];
+    println!("chose range {:?}",range);
+    println!("total memory len {}",ctx.mmu.data.len());
+    let (data,_) = (ctx.mmu.data.split_at(range.start).1).split_at(range.len);
+    for (n, chunk) in data.chunks(32*2).enumerate() {
+        let line_str:String = chunk.iter().map(|b|format!("{:02x}", b)).collect();
+        println!("{:04X} {}",(n*32*2)+range.start,line_str);
+    }
+    /*
+    // let chunk = ctx.mmu.data[range.start .. (range.start+range.len)];
+    let line_str:String = data.iter().map(|b|format!("{:02x}", b)).collect();
+    println!("line is {}",line_str);
+
     for (n,chunk) in ctx.mmu.data.chunks(32*2).enumerate() {
         let line_str:String = chunk.iter().map(|b|format!("{:02x}",b)).collect();
         let addr:u32 = (n * 32 * 2) as u32;
@@ -490,7 +526,7 @@ fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
             _ => {}
         }
         term.write_line(&format!("{:04x}  {}", addr, line_str))?;
-    }
+    }*/
     Ok(())
 }
 

@@ -210,26 +210,6 @@ impl MMU {
 }
 
 impl MMU {
-    pub(crate) fn print_cram(&self)  {
-        println!("----");
-        println!("lowest and heighest {:04x} {:04x}",self.lowest_used_iram, self.highest_used_iram);
-        let iram:&[u8] = &self.data[(self.lowest_used_iram as usize)..(self.highest_used_iram as usize)];
-        let mut pc = self.lowest_used_iram;
-        for ch in iram.chunks_exact(16) {
-            println!("PC {:04x} = {:x?}",pc, ch);
-            pc+=16;
-        }
-        // for i in  {
-        //     print!("{:0x}",self.data[i as usize]);
-        //     if i % 0x2F == 0 {
-        //         println!("")
-        //     }
-        // }
-        println!("----");
-    }
-}
-
-impl MMU {
     pub fn init(rom:&[u8]) -> MMU {
         let mut data:Vec<u8> = vec![0x12; (0xFFFF+1)];
         info!("memory length is {} {:04x}",data.len(),data.len());
