@@ -65,7 +65,7 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
     Ok(())
 }
 
-fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
+pub fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
     let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
     let data:Vec<u8> = fs::read(pth)?;
     println!("0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",data[0x0104],data[0x0105]);

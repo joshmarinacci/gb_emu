@@ -1,14 +1,15 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use Carry::{No, Yes};
-use Math::Add8;
-use crate::{MMU, Z80};
+use Op::Add8;
+use crate::{load_romfile, MMU, Z80};
 use crate::opcodes::{DoubleRegister, RegisterName};
-use crate::optest::Math::Add16;
+use crate::optest::Op::{Add16, Jump, Noop};
 use crate::optest::R1::{A, B, C, D, E, H, L};
 use crate::optest::R2::{BC, DE, HL, SP};
 use crate::optest::Src::{Imu8, Mem, SrcR1};
 
-enum R1 {
+pub enum R1 {
     A,
     B,
     C,
@@ -53,7 +54,7 @@ impl R1 {
         }
     }
 }
-enum R2 {
+pub enum R2 {
     BC,
     HL,
     DE,
@@ -85,10 +86,66 @@ impl R2 {
         }
     }
 }
-enum Src {
+
+pub enum AddrSrc {
+    Imu16(),
+}
+
+impl AddrSrc {
+    pub(crate) fn real(&self, cpu: &Z80, mmu: &MMU) -> String {
+        match self {
+            AddrSrc::Imu16() => format!("{:04x}",mmu.read16(cpu.get_pc()+1))
+        }
+    }
+}
+
+impl AddrSrc {
+    pub(crate) fn get_addr(&self, cpu: &mut Z80, mmu: &mut MMU) -> u16 {
+        mmu.read16(cpu.get_pc()+1)
+    }
+}
+
+pub enum Src {
     SrcR1(R1),
     Mem(R2),
     Imu8(),
+}
+pub enum Dst {
+    DstR1(R1),
+}
+pub enum Carry {
+    Yes,
+    No
+}
+pub enum Op {
+    Add8(u16, Dst, Src, Carry, u8, u8),
+    Add16(u16, R2, R2, u8, u8),
+    Noop(u16,u8,u8),
+    Jump(u16,JumpType,AddrSrc,u8,u8),
+}
+
+impl Op {
+    pub(crate) fn real(&self, cpu:&Z80, mmu:&MMU) -> String {
+        match self {
+            // Add8(_, dst, src, _, _, _) => {}
+            Noop(_, _, _) => "NOOP".to_string(),
+            // Add16(_, _, _, _, _) => {}
+            Jump(_, typ, src, _, _) => format!("JP {}",src.real(cpu,mmu)),
+            _ => "unknown".to_string(),
+        }
+    }
+}
+
+pub enum JumpType {
+    Absolute(),
+}
+
+impl AddrSrc {
+    fn name(&self) -> String {
+        match self {
+            AddrSrc::Imu16() => "u16".to_string(),
+        }
+    }
 }
 impl Src {
     fn name(&self) -> String {
@@ -105,9 +162,6 @@ impl Src {
             Src::Imu8() => mmu.read8(cpu.get_pc()+1),
         }
     }
-}
-enum Dst {
-    DstR1(R1),
 }
 impl Dst {
     fn name(&self) -> &'static str {
@@ -126,16 +180,8 @@ impl Dst {
         }
     }
 }
-enum Carry {
-    Yes,
-    No
-}
-enum Math {
-    Add8(u16, Dst, Src, Carry, u8, u8),
-    Add16(u16, R2, R2, u8, u8),
-}
 
-impl Math {
+impl Op {
     pub(crate) fn execute(&self, cpu: &mut Z80, mmu: &mut MMU) {
         match self {
             Add8(_, dst, src, _, _, _) => {
@@ -158,22 +204,31 @@ impl Math {
                 cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
                 cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
             }
+            Op::Noop(_, _, _) => {}
+            Jump(_, jt, src, _, _) => {
+                let addr = src.get_addr(cpu,mmu);
+                cpu.set_pc(addr);
+            }
         }
 
     }
 }
 
-impl Math {
+impl Op {
     pub(crate) fn len(&self) -> u8 {
         match self {
             Add8(_, _, _, _, len, cycles) => *len,
             Add16(_, _, _, len, cy) => *len,
+            Op::Noop(_, len, _) => *len,
+            Jump(_, _, _, len, _) => *len,
         }
     }
     pub(crate) fn cycles(&self) -> &u8 {
         match self {
-            Add8(_, _, _, _, len, cycles) => cycles,
+            Add8(_, _, _, _, _, cycles) => cycles,
             Add16(_, _, _, _, cy) => cy,
+            Noop(_, _, cy) => cy,
+            Jump(_, _, _, _, cy) => cy,
         }
     }
     pub(crate) fn to_asm(&self) -> String {
@@ -187,18 +242,27 @@ impl Math {
             Add16(_, dst, src, _, _) => {
                 format!("ADD {},{}",dst.name(),src.name())
             }
+            Noop(_, _, _) => "NOOP".to_string(),
+            Jump(_, typ, src, _, _) => format!("JP {}",src.name())
         }
     }
     pub(crate) fn to_code(&self) -> &u16 {
         match self {
             Add8(hex, _, _, _, _, _) => hex,
             Add16(hex, _, _, _, _) => hex,
+            Noop(hex, _, _) => hex,
+            Jump(hex, _, _, _, _) => hex,
         }
     }
 }
 
-fn lookup_op(code:u16) -> Math {
+pub fn lookup_op(code:u16) -> Op {
     match code {
+
+        0x00 => Noop(0x00, 1,4),
+
+        0xc3 => Jump(0xC3, JumpType::Absolute(),AddrSrc::Imu16(),3,12),
+
         0x09 => Add16(0x09, HL, BC, 1, 8),
         0x19 => Add16(0x19, HL, DE, 1, 8),
         0x29 => Add16(0x29, HL, HL, 1, 8),
@@ -223,9 +287,10 @@ fn lookup_op(code:u16) -> Math {
         0xCE => Add8(0xCE, Dst::DstR1(A), Imu8(), Yes, 2, 8),
 
         0xC6 => Add8(0xC6, Dst::DstR1(A), Imu8(), No, 2, 8),
-        0xE8 => Add16(0xE8, Dst::DstR2(SP), Imu8(),  2,8),
+        // 0xE8 => Add16(0xE8, Dst::DstR2(SP), Imu8(),  2,8),
 
         _ => {
+            println!("unknown op code {:04x}",code);
             panic!("unknown op cde")
         }
     }
@@ -234,7 +299,7 @@ fn lookup_op(code:u16) -> Math {
 #[test]
 fn test1() {
     let code = 0xC6;
-    let op = lookup_op(code);
+    let op = lookup_op(code );
     println!("got the op {} == {}",code, op.to_code());
     println!("in assembly notation {}", op.to_asm());
     println!("cycles {}  instruction length {}", op.cycles(), op.len());
@@ -259,5 +324,18 @@ fn test1() {
         println!("in assembly notation {}", op.to_asm());
         println!("cycles {}  instruction length {}", op.cycles(), op.len());
         println!("no we will execute it ");
+    }
+}
+
+#[test]
+fn test_cpuins() {
+    if let Ok(cart) = load_romfile(&PathBuf::from("./resources/testroms/cpu_instrs/individual/10-bit ops.s")) {
+        let mut cpu = Z80::init();
+        let mut mmu = MMU::init(&cart.data);
+        cpu.reset();
+        cpu.r.pc = 0x100;
+        // loop {
+            // let op = lookup_op();
+        // }
     }
 }
