@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use Carry::{No, Yes};
-use Op::Add8;
+// use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
 use crate::opcodes::{DoubleRegister, RegisterName};
-use crate::optest::Op::{Add16, Jump, Noop};
+use crate::optest::AddrSrc::Imu16;
 use crate::optest::R1::{A, B, C, D, E, H, L};
 use crate::optest::R2::{BC, DE, HL, SP};
 use crate::optest::Src::{Imu8, Mem, SrcR1};
@@ -20,7 +20,7 @@ pub enum R1 {
 }
 
 impl R1 {
-    fn get_value(&self, cpu: &mut Z80) -> u8 {
+    fn get_value(&self, cpu: &Z80) -> u8 {
         match self {
             R1::A => cpu.r.a,
             R1::B => cpu.r.b,
@@ -61,7 +61,7 @@ pub enum R2 {
     SP,
 }
 impl R2 {
-    fn get_value(&self, cpu: &mut Z80) -> u16 {
+    fn get_value(&self, cpu: &Z80) -> u16 {
         match self {
             BC => cpu.r.get_u16reg(&DoubleRegister::BC),
             HL => cpu.r.get_u16reg(&DoubleRegister::HL),
@@ -87,57 +87,8 @@ impl R2 {
     }
 }
 
-pub enum AddrSrc {
+enum AddrSrc {
     Imu16(),
-}
-
-impl AddrSrc {
-    pub(crate) fn real(&self, cpu: &Z80, mmu: &MMU) -> String {
-        match self {
-            AddrSrc::Imu16() => format!("{:04x}",mmu.read16(cpu.get_pc()+1))
-        }
-    }
-}
-
-impl AddrSrc {
-    pub(crate) fn get_addr(&self, cpu: &mut Z80, mmu: &mut MMU) -> u16 {
-        mmu.read16(cpu.get_pc()+1)
-    }
-}
-
-pub enum Src {
-    SrcR1(R1),
-    Mem(R2),
-    Imu8(),
-}
-pub enum Dst {
-    DstR1(R1),
-}
-pub enum Carry {
-    Yes,
-    No
-}
-pub enum Op {
-    Add8(u16, Dst, Src, Carry, u8, u8),
-    Add16(u16, R2, R2, u8, u8),
-    Noop(u16,u8,u8),
-    Jump(u16,JumpType,AddrSrc,u8,u8),
-}
-
-impl Op {
-    pub(crate) fn real(&self, cpu:&Z80, mmu:&MMU) -> String {
-        match self {
-            // Add8(_, dst, src, _, _, _) => {}
-            Noop(_, _, _) => "NOOP".to_string(),
-            // Add16(_, _, _, _, _) => {}
-            Jump(_, typ, src, _, _) => format!("JP {}",src.real(cpu,mmu)),
-            _ => "unknown".to_string(),
-        }
-    }
-}
-
-pub enum JumpType {
-    Absolute(),
 }
 
 impl AddrSrc {
@@ -146,7 +97,91 @@ impl AddrSrc {
             AddrSrc::Imu16() => "u16".to_string(),
         }
     }
+    fn real(&self, gb:&GBState) -> String {
+        match self {
+            AddrSrc::Imu16() => format!("{:04x}",gb.mmu.read16(gb.cpu.get_pc()+1)),
+        }
+    }
+    pub(crate) fn get_addr(&self, gb:&mut GBState) -> u16 {
+        gb.mmu.read16(gb.cpu.get_pc()+1)
+    }
 }
+
+pub enum Src {
+    SrcR1(R1),
+    Mem(R2),
+    Imu8(),
+}
+
+
+pub enum Src16 {
+    Imu16(),
+}
+
+
+impl Src16 {
+    fn name(&self) -> String {
+        match self {
+            Src16::Imu16() => "nn".to_string(),
+        }
+    }
+    fn get_value(&self, gb:&GBState) -> u16 {
+        gb.mmu.read16(gb.cpu.get_pc()+1)
+    }
+    fn real(&self, gb: &GBState) -> String {
+        match self {
+            Src16::Imu16() => format!("{:04x}",gb.mmu.read16(gb.cpu.get_pc()+1))
+        }
+    }
+}
+pub enum Dst {
+    DstR1(R1),
+}
+
+pub enum Dst16 {
+    R2(R2),
+}
+
+
+impl Dst16 {
+    fn name(&self) -> String {
+        match self {
+            Dst16::R2(r2) => r2.name().to_string(),
+        }
+    }
+    fn set_value(&self, gb:&mut GBState, val:u16) {
+        match self {
+            Dst16::R2(r2) => r2.set_value(&mut gb.cpu,val)
+        }
+    }
+    fn real(&self, gb: &GBState) -> String {
+        self.name()
+    }
+}
+pub enum Carry {
+    Yes,
+    No
+}
+pub enum JumpType {
+    Absolute(),
+}
+enum OpType {
+    // Add8(u16, Dst, Src, Carry, u8, u8),
+    // Add16(u16, R2, R2, u8, u8),
+    Noop(),
+    Jump(JumpType,AddrSrc),
+    Load16(Dst16, Src16),
+    Load8(Dst, Src),
+}
+
+
+struct Op {
+    code:u16,
+    len:u16,
+    cycles:u16,
+    typ:OpType,
+}
+
 impl Src {
     fn name(&self) -> String {
         match self {
@@ -155,12 +190,15 @@ impl Src {
             Imu8() => "u8".to_string(),
         }
     }
-    fn get_value(&self, cpu:&mut Z80, mmu:&mut MMU) -> u8 {
+    fn get_value(&self, gb:&GBState) -> u8 {
         match self {
-            Src::SrcR1(r1) => r1.get_value(cpu),
-            Src::Mem(r2) => mmu.read8(r2.get_value(cpu)),
-            Src::Imu8() => mmu.read8(cpu.get_pc()+1),
+            Src::SrcR1(r1) => r1.get_value(&gb.cpu),
+            Src::Mem(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
+            Src::Imu8() => gb.mmu.read8(gb.cpu.get_pc()+1),
         }
+    }
+    fn real(&self, gb: &GBState) -> String {
+        format!("{:02x}",self.get_value(gb))
     }
 }
 impl Dst {
@@ -174,205 +212,126 @@ impl Dst {
             Dst::DstR1(r1) => r1.get_value(cpu),
         }
     }
-    fn set_value(&self,cpu:&mut Z80, mmu:&mut MMU, val:u8) {
+    fn set_value(&self,gb:&mut GBState, val:u8) {
         match self {
-            Dst::DstR1(r1) => r1.set_value(cpu,val),
+            Dst::DstR1(r1) => r1.set_value(&mut gb.cpu,val),
         }
+    }
+    fn real(&self, gb: &GBState) -> String {
+        self.name().to_string()
     }
 }
 
 impl Op {
-    pub(crate) fn execute(&self, cpu: &mut Z80, mmu: &mut MMU) {
-        match self {
-            Add8(_, dst, src, _, _, _) => {
-                let dst_v = dst.get_value(cpu, mmu);
-                let src_v = src.get_value(cpu, mmu);
-                let result = dst_v.wrapping_add(src_v);
-                dst.set_value(cpu,mmu,result);
-                cpu.r.zero_flag = result == 0;
-                cpu.r.subtract_n_flag = false;
-                cpu.r.half_flag = (dst_v & 0x0F) + (src_v & 0x0f) > 0xF;
-                cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
+    pub(crate) fn execute(&self, gb:&mut GBState) {
+        match &self.typ {
+            OpType::Noop() => {
+                gb.cpu.inc_pc();
             }
-            Add16(_, dst, src, _, _) => {
-                let src_v = src.get_value(cpu);
-                let dst_v = dst.get_value(cpu);
-                let result = dst_v.wrapping_add(src_v);
-                dst.set_value(cpu,result);
-                cpu.r.subtract_n_flag = false;
-                //dont modify the zero flag
-                cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
-                cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
+            OpType::Jump(typ,src) => {
+                let addr = src.get_addr(gb);
+                gb.cpu.set_pc(addr);
             }
-            Op::Noop(_, _, _) => {}
-            Jump(_, jt, src, _, _) => {
-                let addr = src.get_addr(cpu,mmu);
-                cpu.set_pc(addr);
+            OpType::Load16(dst,src) => {
+                let val = src.get_value(gb);
+                dst.set_value(gb,val);
+                gb.cpu.inc_pc();
+                gb.cpu.inc_pc();
+                gb.cpu.inc_pc();
             }
-        }
-
-    }
-}
-
-impl Op {
-    pub(crate) fn len(&self) -> u8 {
-        match self {
-            Add8(_, _, _, _, len, cycles) => *len,
-            Add16(_, _, _, len, cy) => *len,
-            Op::Noop(_, len, _) => *len,
-            Jump(_, _, _, len, _) => *len,
-        }
-    }
-    pub(crate) fn cycles(&self) -> &u8 {
-        match self {
-            Add8(_, _, _, _, _, cycles) => cycles,
-            Add16(_, _, _, _, cy) => cy,
-            Noop(_, _, cy) => cy,
-            Jump(_, _, _, _, cy) => cy,
+            OpType::Load8(dst,src) => {
+                let val = src.get_value(gb);
+                dst.set_value(gb,val);
+                gb.cpu.inc_pc();
+            }
         }
     }
     pub(crate) fn to_asm(&self) -> String {
-        match self {
-            Add8(_, dst, src, carry, _, _) => {
-                match carry {
-                    Yes => format!("ADC {},{}",dst.name(),src.name()),
-                    No  => format!("ADD {},{}",dst.name(),src.name()),
-                }
-            }
-            Add16(_, dst, src, _, _) => {
-                format!("ADD {},{}",dst.name(),src.name())
-            }
-            Noop(_, _, _) => "NOOP".to_string(),
-            Jump(_, typ, src, _, _) => format!("JP {}",src.name())
+        match &self.typ {
+            OpType::Noop() => "NOOP".to_string(),
+            OpType::Jump(typ, src,) => format!("JP {}",src.name()),
+            OpType::Load16(dst,src) => format!("LD {} {}", dst.name(), src.name()),
+            OpType::Load8(dst,src) => format!("LD {}, {}", dst.name(), src.name()),
         }
     }
-    pub(crate) fn to_code(&self) -> &u16 {
-        match self {
-            Add8(hex, _, _, _, _, _) => hex,
-            Add16(hex, _, _, _, _) => hex,
-            Noop(hex, _, _) => hex,
-            Jump(hex, _, _, _, _) => hex,
+    pub(crate) fn real(&self, gb:&GBState) -> String {
+        match &self.typ {
+            OpType::Noop() => "NOOP".to_string(),
+            OpType::Jump(typ,src) => format!("JP {}",src.real(gb)),
+            OpType::Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
+            OpType::Load16(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
         }
     }
 }
 
-pub fn lookup_op(code:u16) -> Option<Op> {
-    match code {
-        0x00 => Some(Noop(0x00, 1,4)),
-        0xc3 => Some(Jump(0xC3, JumpType::Absolute(),AddrSrc::Imu16(),3,12)),
-        _ => None,
-    }
-/*
 
-
-        0x09 => Add16(0x09, HL, BC, 1, 8),
-        0x19 => Add16(0x19, HL, DE, 1, 8),
-        0x29 => Add16(0x29, HL, HL, 1, 8),
-        0x39 => Add16(0x39, HL, SP, 1, 8),
-
-        0x80 => Add8(0x80, Dst::DstR1(A), Src::SrcR1(B), No, 1, 4),
-        0x81 => Add8(0x81, Dst::DstR1(A), Src::SrcR1(C), No, 1, 4),
-        0x82 => Add8(0x82, Dst::DstR1(A), Src::SrcR1(D), No, 1, 4),
-        0x83 => Add8(0x83, Dst::DstR1(A), Src::SrcR1(E), No, 1, 4),
-        0x84 => Add8(0x84, Dst::DstR1(A), Src::SrcR1(H), No, 1, 4),
-        0x85 => Add8(0x85, Dst::DstR1(A), Src::SrcR1(L), No, 1, 4),
-        0x86 => Add8(0x86, Dst::DstR1(A), Mem(HL), No, 2, 8),
-        0x87 => Add8(0x87, Dst::DstR1(A), Src::SrcR1(A), No, 1, 4),
-
-        0x88 => Add8(0x88, Dst::DstR1(A), Src::SrcR1(B), Yes, 1, 4),
-        0x89 => Add8(0x89, Dst::DstR1(A), Src::SrcR1(C), Yes, 1, 4),
-        0x8A => Add8(0x8A, Dst::DstR1(A), Src::SrcR1(D), Yes, 1, 4),
-        0x8B => Add8(0x8B, Dst::DstR1(A), Src::SrcR1(E), Yes, 1, 4),
-        0x8C => Add8(0x8c, Dst::DstR1(A), Src::SrcR1(H), Yes, 1, 4),
-        0x8D => Add8(0x8d, Dst::DstR1(A), Src::SrcR1(L), Yes, 1, 4),
-        0x8E => Add8(0x8e, Dst::DstR1(A), Mem(HL), Yes, 1, 8),
-        0xCE => Add8(0xCE, Dst::DstR1(A), Imu8(), Yes, 2, 8),
-
-        0xC6 => Add8(0xC6, Dst::DstR1(A), Imu8(), No, 2, 8),
-        // 0xE8 => Add16(0xE8, Dst::DstR2(SP), Imu8(),  2,8),
-
-        _ => {
-            UnknownOp(code)
-            // println!("unknown op code {:04x}",code);
-            // panic!("unknown op cde")
-        }
-    };
-    Some(res)
- */
-}
-
-#[test]
-fn test1() {
-    let code = 0xC6;
-    let op = lookup_op(code ).unwrap();
-    println!("got the op {} == {}",code, op.to_code());
-    println!("in assembly notation {}", op.to_asm());
-    println!("cycles {}  instruction length {}", op.cycles(), op.len());
-    println!("no we will execute it ");
-
-    let mut cpu = Z80::init();
-    let rom:[u8;3] = [
-        0xC6,0x05, // LD A, 0x05
-        0x09, // ADD HL, BC,
-    ];
-    let mut mmu = MMU::init(&rom.to_vec());
-    let mut clock = 0;
-    op.execute(&mut cpu, &mut mmu);
-    cpu.set_pc(cpu.get_pc()+(op.len() as u16));
-    clock += op.cycles();
-    println!("after register A is {} {}",cpu.r.a,0x05);
-    println!("clock = {} pc = {:04x}",clock,cpu.get_pc());
-
-    {
-        let op = lookup_op((rom[2]) as u16).unwrap();
-        println!("got the op {} == {}",code, op.to_code());
-        println!("in assembly notation {}", op.to_asm());
-        println!("cycles {}  instruction length {}", op.cycles(), op.len());
-        println!("no we will execute it ");
-    }
-}
-
-fn fetch_opcode_from_memory(cpu:&Z80, mmu:&MMU) -> (u16, u16) {
-    let pc = cpu.r.pc;
-    let fb:u8 = mmu.read8(pc);
+fn fetch_opcode_from_memory(gb:&GBState) -> u16 {
+    let pc = gb.cpu.r.pc;
+    let fb:u8 = gb.mmu.read8(pc);
     if fb == 0xcb {
-        let sb:u8 = mmu.read8(pc+1);
-        (0xcb00 | sb as u16,2)
+        let sb:u8 = gb.mmu.read8(pc+1);
+        0xcb00 | sb as u16
     } else {
-        (fb as u16, 1)
+        fb as u16
     }
 }
+
+struct GBState {
+    cpu:Z80,
+    mmu:MMU,
+    clock:u32,
+    count:u32,
+}
+
+
 
 #[test]
 fn test_cpuins() {
+    let mut op_table:HashMap<u16,Op> = HashMap::new();
+    op_table.insert(0x00, Op { code:0x00, len:1, cycles:4,  typ:OpType::Noop() });
+    op_table.insert(0xC3, Op { code:0xC3, len:3, cycles:12, typ:OpType::Jump(JumpType::Absolute(), AddrSrc::Imu16()) });
+    op_table.insert(0x21, Op { code:0x21, len:3, cycles:12, typ:OpType::Load16(Dst16::R2(HL),Src16::Imu16()) });
+    op_table.insert(0x47, Op { code:0x47, len:1, cycles:4,  typ:OpType::Load8(Dst::DstR1(R1::B),Src::SrcR1(R1::A))});
+
     let fname = "./resources/testroms/cpu_instrs/individual/10-bit ops.gb";
     if let Ok(cart) = load_romfile(&PathBuf::from(fname)) {
-        let mut cpu = Z80::init();
-        let mut mmu = MMU::init(&cart.data);
-        cpu.reset();
-        cpu.r.pc = 0x100;
-        let mut clock = 0;
-        let mut count = 0;
+        let mut gb = GBState {
+            cpu:Z80::init(),
+            mmu:MMU::init(&cart.data),
+            clock:0,
+            count:0,
+        };
+        gb.cpu.reset();
+        gb.cpu.r.pc = 0x100;
+
+
         loop {
-            println!("PC {:04x}",cpu.get_pc());
-            let (opcode,off) = fetch_opcode_from_memory(&cpu, &mmu);
-            let opop = lookup_op(opcode);
-            if let None = opop {
+            println!("PC {:04x}",gb.cpu.get_pc());
+            let opcode = fetch_opcode_from_memory(&gb);
+            // println!("opcode is {:04x}",opcode);
+            if let None = op_table.get(&opcode) {
                 println!("failed to lookup op for code {:04x}",opcode);
                 break;
             }
-            let op = opop.unwrap();
-            println!("PC {:04x} op {} {}  ({},{})",cpu.get_pc(), op.to_code(), op.to_asm(), op.len(),op.cycles());
-            println!("PC {:04x} {}",cpu.get_pc(),op.real(&cpu, &mmu));
-            op.execute(&mut cpu, &mut mmu);
-            cpu.set_pc(cpu.get_pc()+(op.len() as u16));
+            let op = op_table.get(&opcode).unwrap();
+            println!("PC {:04x} op {:04x} {}  ({},{})",gb.cpu.get_pc(), op.code, op.to_asm(), op.len,op.cycles);
+            println!("PC {:04x} {}",gb.cpu.get_pc(),op.real(&gb));
+            let prev_pc = gb.cpu.get_pc();
+            op.execute(&mut gb);
+            if gb.cpu.get_pc() == prev_pc {
+                panic!("stuck in an infinite loop");
+            }
+            // gb.cpu.set_pc(gb.cpu.get_pc()+op.len);
             // mmu.update(&mut cpu, ss, &mut clock);
             // ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
-            clock += (*op.cycles() as u32);
-            count += 1;
+            gb.clock += (op.cycles as u32);
+            gb.count += 1;
         }
-        assert_eq!(count>1,true);
+        let goal = 5;
+        println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
+        assert_eq!(gb.count>=goal,true);
     } else {
         println!("couldnt read file {}",fname);
+        panic!("test failed");
     }
 }
