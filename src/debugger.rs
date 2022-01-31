@@ -32,26 +32,28 @@ struct Ctx {
     last_status:String,
     ppu: PPU,
     screen_enabled:bool,
+    to_screen: Sender<String>,
+    receive_cpu: Receiver<InputEvent>,
 }
 
 impl Ctx {
-    pub(crate) fn execute_n_cycles(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, sender: &Sender<String>, receiver: &Receiver<InputEvent>, count:u32) -> Result<()>{
+    pub(crate) fn execute_n_cycles(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>,count:u32) -> Result<()>{
         for n in 0 .. count {
-            self.execute(term, screenstate, sender, receiver)?;
+            self.execute(term, screenstate)?;
         }
         Ok(())
     }
-    pub(crate) fn jump_to_next_vblank(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, sender: &Sender<String>, receiver: &Receiver<InputEvent>) -> Result<()>{
+    pub(crate) fn jump_to_next_vblank(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, ) -> Result<()>{
         println!("running to next frame done");
         while self.mmu.hardware.LY > 1 {
             // println!("LY is {}",ctx.mmu.hardware.LY);
-            self.execute(term,  screenstate, sender, receiver)?;
+            self.execute(term,  screenstate )?;
         }
         Ok(())
     }
-    pub(crate) fn run_until_write(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>, addr: u16) {
+    pub(crate) fn run_until_write(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
         loop {
-            self.execute(term, screenstate, to_screen, receive_cpu).unwrap();
+            self.execute(term, screenstate).unwrap();
             if self.mmu.last_write_addr == addr {
                 break;
             }
@@ -61,6 +63,8 @@ impl Ctx {
 
 impl Ctx {
     fn make_test_context(rom: &[u8]) -> Ctx {
+        let (to_screen,receive_screen) = channel::<String>();
+        let (to_cpu, receive_cpu) = channel::<InputEvent>();
         Ctx {
             cpu:Z80::init(),
             ppu:PPU::init(),
@@ -74,13 +78,15 @@ impl Ctx {
             test_memory_visible: false,
             show_interrupts: false,
             last_status: String::from("--nothing--"),
-            screen_enabled: false
+            screen_enabled: false,
+            to_screen: to_screen,
+            receive_cpu:receive_cpu,
         }
     }
 }
 
 impl Ctx {
-    pub(crate) fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) -> Result<()>{
+    pub(crate) fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>) -> Result<()>{
         self.mmu.last_write_addr = 0;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if let Some(instr) = lookup_opcode(opcode) {
@@ -92,7 +98,7 @@ impl Ctx {
             panic!("unknown op code");
         }
         self.mmu.update(&mut self.cpu, ss, &mut self.clock);
-        self.ppu.update(&mut self.mmu, ss, &mut self.clock, to_screen, receive_cpu, self.screen_enabled);
+        self.ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
         self.clock+=1;
         Ok(())
     }
@@ -134,6 +140,9 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       interactive:bool) -> Result<()> {
     let screen_state = ScreenState::init();
     let mut shared_screen_state = Arc::new(Mutex::new(ScreenState::init()));
+    let (to_screen,receive_screen) = channel::<String>();
+    let (to_cpu, receive_cpu) = channel::<InputEvent>();
+
     let mut ctx = Ctx {
         cpu, mmu,
         ppu:PPU::init(),
@@ -147,15 +156,15 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
         show_interrupts: false,
         last_status: "".to_string(),
         screen_enabled: screen_settings.enabled,
+        to_screen:to_screen,
+        receive_cpu:receive_cpu,
     };
     let mut term = Term::stdout();
 
     println!("fast forwarding: {}",fast_forward);
 
-    let (to_screen,receive_screen) = channel::<String>();
-    let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
-    ctx.execute_n_cycles(&mut term, &mut shared_screen_state, &to_screen, &receive_cpu,fast_forward )?;
+    ctx.execute_n_cycles(&mut term, &mut shared_screen_state,fast_forward )?;
     let mut ss1 = shared_screen_state.clone();
     let ss2 = shared_screen_state.clone();
     let screen_enabled = screen_settings.enabled;
@@ -171,11 +180,11 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
 
             //step forward or execute next CPU clock cycle
             if ctx.interactive {
-                step_forward(&mut ctx, &mut term, &mut ss1, &to_screen, &receive_cpu).unwrap();
+                step_forward(&mut ctx, &mut term, &mut ss1,).unwrap();
             } else {
-                ctx.execute(&mut term, &mut ss1, &to_screen, &receive_cpu ).unwrap();
+                ctx.execute(&mut term, &mut ss1 ).unwrap();
             }
-            if let Ok(evt) = receive_cpu.try_recv() {
+            if let Ok(evt) = ctx.receive_cpu.try_recv() {
                 match evt {
                     InputEvent::Press(JoyPadKey::A) => {        ctx.mmu.joypad.a = true;       }
                     InputEvent::Release(JoyPadKey::A) => {      ctx.mmu.joypad.a = false;      }
@@ -196,7 +205,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                     InputEvent::JumpNextVBlank() => {
                         if ctx.interactive {
                             println!("got a jump next vblank");
-                            ctx.jump_to_next_vblank(&mut term, &mut ss1, &to_screen, &receive_cpu).unwrap();
+                            ctx.jump_to_next_vblank(&mut term, &mut ss1, ).unwrap();
                         }
                     }
                     _ => {
@@ -221,7 +230,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     Ok(())
 }
 
-fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) -> Result<()>{
+fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, ) -> Result<()>{
     let border = Style::new().bg(Color::Magenta).black();
     // term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
@@ -311,13 +320,13 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
     let ch = term.read_char().unwrap();
     match ch{
         'r' => ctx.full_registers_visible = !ctx.full_registers_visible,
-        'j' => ctx.execute(term,  screenstate, to_screen, receive_cpu)?,
-        'J' => ctx.execute_n_cycles(term, screenstate, to_screen, receive_cpu,16)?,
-        'u' => ctx.execute_n_cycles(term, screenstate, to_screen, receive_cpu,256)?,
-        'U' => ctx.execute_n_cycles(term, screenstate, to_screen, receive_cpu,256*16)?,
+        'j' => ctx.execute(term,  screenstate)?,
+        'J' => ctx.execute_n_cycles(term, screenstate,  16)?,
+        'u' => ctx.execute_n_cycles(term, screenstate,  256)?,
+        'U' => ctx.execute_n_cycles(term, screenstate,  256*16)?,
         'c' => dump_cart_rom(term, ctx)?,
         // 'v' => dump_vram(term, ctx)?,
-        'v' => ctx.jump_to_next_vblank(term, screenstate, to_screen, receive_cpu)?,
+        'v' => ctx.jump_to_next_vblank(term, screenstate,  )?,
         'o' => dump_oram(term, ctx)?,
         's' => {
             // screenstate.clear_with(0, 0, 0);
@@ -330,17 +339,17 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
         'm' => dump_all_memory(term,ctx)?,
         'b' => {
             ctx.interactive = false;
-            ctx.execute(term, screenstate, to_screen, receive_cpu)?;
+            ctx.execute(term, screenstate, )?;
         },
         'w' => {
-            choose_watch_target(ctx,term, screenstate, to_screen, receive_cpu);
+            choose_watch_target(ctx,term, screenstate, );
         }
         _ => {}
     };
     Ok(())
 }
 
-fn choose_watch_target(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) {
+fn choose_watch_target(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>) {
     let regs = [LCDC, STAT, LY, SCX, SCY];
     let mut selections:Vec<String> = vec![];
     for reg in &regs { selections.push(reg.name.to_string()); }
@@ -352,7 +361,7 @@ fn choose_watch_target(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mut
         .unwrap();
     let reg = &regs[selection];
     println!("looping until write to {} {:04x}",reg.name, reg.addr);
-    ctx.run_until_write(term, screenstate, to_screen, receive_cpu, reg.addr);
+    ctx.run_until_write(term, screenstate, reg.addr);
 }
 
 
