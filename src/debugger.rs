@@ -15,7 +15,6 @@ use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
 use crate::opcodes::Instr::{LoadInstr, SpecialInstr};
 use crate::opcodes::RegisterName::{A, B, C, D};
-use crate::optest::lookup_op;
 use crate::ppu::{PPU, ScreenState};
 use crate::screen::Screen;
 
@@ -94,34 +93,34 @@ impl Ctx {
     }
 }
 
-const TEST_NEW_OPS:bool = false;
+// const TEST_NEW_OPS:bool = false;
 impl Ctx {
     pub(crate) fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>) -> Result<()>{
         self.mmu.last_write_addr = 0;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
-        if TEST_NEW_OPS {
-            println!("PC {:04x}",self.cpu.get_pc());
-            let op = lookup_op(opcode);
-            println!("PC {:04x} op {} {}  ({},{})",self.cpu.get_pc(), op.to_code(), op.to_asm(), op.len(),op.cycles());
-            println!("PC {:04x} {}",self.cpu.get_pc(),op.real(&self.cpu, &self.mmu));
-            op.execute(&mut self.cpu, &mut self.mmu);
-            self.cpu.set_pc(self.cpu.get_pc()+(op.len() as u16));
-            self.mmu.update(&mut self.cpu, ss, &mut self.clock);
-            self.ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
-            self.clock += (*op.cycles() as u32);
+        // if TEST_NEW_OPS {
+        //     println!("PC {:04x}",self.cpu.get_pc());
+        //     let op = lookup_op(opcode);
+        //     println!("PC {:04x} op {} {}  ({},{})",self.cpu.get_pc(), op.to_code(), op.to_asm(), op.len(),op.cycles());
+        //     println!("PC {:04x} {}",self.cpu.get_pc(),op.real(&self.cpu, &self.mmu));
+        //     op.execute(&mut self.cpu, &mut self.mmu);
+        //     self.cpu.set_pc(self.cpu.get_pc()+(op.len() as u16));
+        //     self.mmu.update(&mut self.cpu, ss, &mut self.clock);
+        //     self.ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
+        //     self.clock += (*op.cycles() as u32);
+        // } else {
+        if let Some(instr) = lookup_opcode(opcode) {
+            self.execute_instruction(&instr);
         } else {
-            if let Some(instr) = lookup_opcode(opcode) {
-                self.execute_instruction(&instr);
-            } else {
-                term.write_line(&format!("current cycle {}  PPU wait {}", self.clock, self.ppu.wait_until))?;
-                println!("unknown op code {:04x}",opcode);
-                println!("current memory is PC {:04x} ",self.cpu.get_pc());
-                panic!("unknown op code");
-            }
-            self.mmu.update(&mut self.cpu, ss, &mut self.clock);
-            self.ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
-            self.clock+=1;
+            term.write_line(&format!("current cycle {}  PPU wait {}", self.clock, self.ppu.wait_until))?;
+            println!("unknown op code {:04x}",opcode);
+            println!("current memory is PC {:04x} ",self.cpu.get_pc());
+            panic!("unknown op code");
         }
+        self.mmu.update(&mut self.cpu, ss, &mut self.clock);
+        self.ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
+        self.clock+=1;
+        // }
         Ok(())
     }
 

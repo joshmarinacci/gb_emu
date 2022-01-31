@@ -256,12 +256,14 @@ impl Op {
     }
 }
 
-pub fn lookup_op(code:u16) -> Op {
+pub fn lookup_op(code:u16) -> Option<Op> {
     match code {
+        0x00 => Some(Noop(0x00, 1,4)),
+        0xc3 => Some(Jump(0xC3, JumpType::Absolute(),AddrSrc::Imu16(),3,12)),
+        _ => None,
+    }
+/*
 
-        0x00 => Noop(0x00, 1,4),
-
-        0xc3 => Jump(0xC3, JumpType::Absolute(),AddrSrc::Imu16(),3,12),
 
         0x09 => Add16(0x09, HL, BC, 1, 8),
         0x19 => Add16(0x19, HL, DE, 1, 8),
@@ -290,16 +292,19 @@ pub fn lookup_op(code:u16) -> Op {
         // 0xE8 => Add16(0xE8, Dst::DstR2(SP), Imu8(),  2,8),
 
         _ => {
-            println!("unknown op code {:04x}",code);
-            panic!("unknown op cde")
+            UnknownOp(code)
+            // println!("unknown op code {:04x}",code);
+            // panic!("unknown op cde")
         }
-    }
+    };
+    Some(res)
+ */
 }
 
 #[test]
 fn test1() {
     let code = 0xC6;
-    let op = lookup_op(code );
+    let op = lookup_op(code ).unwrap();
     println!("got the op {} == {}",code, op.to_code());
     println!("in assembly notation {}", op.to_asm());
     println!("cycles {}  instruction length {}", op.cycles(), op.len());
@@ -319,7 +324,7 @@ fn test1() {
     println!("clock = {} pc = {:04x}",clock,cpu.get_pc());
 
     {
-        let op = lookup_op((rom[2]) as u16);
+        let op = lookup_op((rom[2]) as u16).unwrap();
         println!("got the op {} == {}",code, op.to_code());
         println!("in assembly notation {}", op.to_asm());
         println!("cycles {}  instruction length {}", op.cycles(), op.len());
@@ -327,15 +332,47 @@ fn test1() {
     }
 }
 
+fn fetch_opcode_from_memory(cpu:&Z80, mmu:&MMU) -> (u16, u16) {
+    let pc = cpu.r.pc;
+    let fb:u8 = mmu.read8(pc);
+    if fb == 0xcb {
+        let sb:u8 = mmu.read8(pc+1);
+        (0xcb00 | sb as u16,2)
+    } else {
+        (fb as u16, 1)
+    }
+}
+
 #[test]
 fn test_cpuins() {
-    if let Ok(cart) = load_romfile(&PathBuf::from("./resources/testroms/cpu_instrs/individual/10-bit ops.s")) {
+    let fname = "./resources/testroms/cpu_instrs/individual/10-bit ops.gb";
+    if let Ok(cart) = load_romfile(&PathBuf::from(fname)) {
         let mut cpu = Z80::init();
         let mut mmu = MMU::init(&cart.data);
         cpu.reset();
         cpu.r.pc = 0x100;
-        // loop {
-            // let op = lookup_op();
-        // }
+        let mut clock = 0;
+        let mut count = 0;
+        loop {
+            println!("PC {:04x}",cpu.get_pc());
+            let (opcode,off) = fetch_opcode_from_memory(&cpu, &mmu);
+            let opop = lookup_op(opcode);
+            if let None = opop {
+                println!("failed to lookup op for code {:04x}",opcode);
+                break;
+            }
+            let op = opop.unwrap();
+            println!("PC {:04x} op {} {}  ({},{})",cpu.get_pc(), op.to_code(), op.to_asm(), op.len(),op.cycles());
+            println!("PC {:04x} {}",cpu.get_pc(),op.real(&cpu, &mmu));
+            op.execute(&mut cpu, &mut mmu);
+            cpu.set_pc(cpu.get_pc()+(op.len() as u16));
+            // mmu.update(&mut cpu, ss, &mut clock);
+            // ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
+            clock += (*op.cycles() as u32);
+            count += 1;
+        }
+        assert_eq!(count>1,true);
+    } else {
+        println!("couldnt read file {}",fname);
     }
 }
