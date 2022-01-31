@@ -59,6 +59,14 @@ impl Ctx {
             }
         }
     }
+    pub(crate) fn run_until_pc(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
+        loop {
+            self.execute(term, screenstate).unwrap();
+            if self.cpu.get_pc() == addr {
+                break;
+            }
+        }
+    }
 }
 
 impl Ctx {
@@ -170,7 +178,9 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     let screen_enabled = screen_settings.enabled;
     let hand = thread::spawn(move | |
         {
-        while ctx.running {
+            //021b
+            // ctx.run_until_pc(&mut term, &mut ss1, 0x021b);
+            while ctx.running {
 
             //handle breakpoints
             if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
