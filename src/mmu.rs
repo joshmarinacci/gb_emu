@@ -2,9 +2,9 @@ use std::cmp::{max, min};
 use std::sync::{Arc, Mutex};
 use log::info;
 use crate::bootrom::BOOT_ROM;
-use crate::common::{get_bit, get_bit_as_bool, set_bit};
+use crate::common::{get_bit, get_bit_as_bool, HWReg, LCDC, SCX, set_bit};
 use crate::ppu::ScreenState;
-use crate::Z80;
+use crate::{common, Z80};
 
 #[derive(Debug)]
 pub enum InterruptType {
@@ -13,9 +13,10 @@ pub enum InterruptType {
     Serial,
     None,
 }
+#[derive()]
 pub struct Hardware {
-    pub SCY:u8,
-    pub SCX:u8,
+    pub SCY:HWReg,
+    pub SCX:HWReg,
     pub LY:u8,
     pub LYC:u8,
     pub WY:u8,
@@ -49,8 +50,8 @@ pub struct Hardware {
 impl Hardware {
     fn init() -> Hardware {
         Hardware {
-            SCY: 0,
-            SCX: 0,
+            SCY: common::SCY,
+            SCX: common::SCX,
             LY: 0,
             LYC: 0,
             WY: 0,
@@ -109,6 +110,7 @@ pub struct MMU {
     highest_used_iram:u16,
     pub hardware:Hardware,
     pub joypad:Joypad,
+    pub last_write_addr:u16,
 }
 
 impl MMU {
@@ -255,7 +257,8 @@ impl MMU {
                 left: false,
                 right: false,
                 readmode: JoypadReadMode::Action()
-            }
+            },
+            last_write_addr: 0
         }
     }
     pub(crate) fn overlay_boot(&mut self) {
@@ -265,6 +268,10 @@ impl MMU {
         }
     }
     pub fn read8(&self, addr:u16) -> u8 {
+        // if let Some(hwreg) = HWReg::register_from_addr(addr) {
+        //     println!("matched reading from {}",hwreg.name);
+        //     return hwreg.value;
+        // }
         // println!("reading from memory at location {:04x}",addr);
         if addr >= VRAM_START  && addr <= VRAM_END {
             // println!("reading from vram {:04x}",addr);
@@ -277,10 +284,8 @@ impl MMU {
             info!("reading LYC");
             return self.hardware.LYC;
         }
-        if addr == SCX_SCROLL_X { return self.hardware.SCX; }
-        if addr == SCY_SCROLL_Y {
-            info!("reading SCY");
-            return self.hardware.SCY; }
+        if addr == SCX_SCROLL_X { return self.hardware.SCX.value; }
+        if addr == SCY_SCROLL_Y { return self.hardware.SCY.value; }
         if addr == LCDC_LCDCONTROL {
             info!("reading LCDC register");
             return self.hardware.LCDC;
@@ -350,6 +355,10 @@ impl MMU {
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         // info!("writing {:02x} at {:04x}",val,addr);
+        // if let Some(r) = &mut HWReg::register_from_addr(addr) {
+        //     r.value = val;
+        // }
+        self.last_write_addr = addr;
         if addr < 0x8000 {
             if addr >= 0x0000 && addr <= 0x1FFF {
                 info!("writing to enable external RAM");
@@ -478,17 +487,12 @@ impl MMU {
         if addr == OBP1_ADDR  { self.hardware.OBP1 = val; return; }
         if addr == WX_ADDR  { self.hardware.WX = val; return; }
         if addr == WY_ADDR  { self.hardware.WY = val; return; }
-        if addr == SCX_SCROLL_X {
-            // info!("writing to SCX {}",val);
-            self.hardware.SCX = val; return;
-        }
+        if addr == SCX_SCROLL_X { self.hardware.SCX.value = val; return;  }
         if addr == LYC_LCDC_Y_COMPARE {
             // info!("writing to the LYC register");
             self.hardware.LYC = val;
         }
-        if addr == SCY_SCROLL_Y {
-            // info!("writing to SCY {}",val);
-            self.hardware.SCY = val; return; }
+        if addr == SCY_SCROLL_Y {  self.hardware.SCY.value = val; return; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);

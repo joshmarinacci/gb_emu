@@ -4,11 +4,12 @@ use io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use console::Color::{Black, Red, White};
+use dialoguer::theme::ColorfulTheme;
 use log::{debug, info};
 use Load::Load_R_u8;
 use crate::{common, MMU, opcodes, ScreenSettings, Z80};
-use crate::common::{Bitmap, get_bit_as_bool, RomFile};
-use crate::mmu::{P1_JOYPAD_INFO, TEST_ADDR, TIMER_INTERRUPT_ADDR};
+use crate::common::{Bitmap, get_bit_as_bool, HWReg, LCDC, LY, RomFile, SCX, SCY, STAT};
+use crate::mmu::{LCDC_LCDCONTROL, P1_JOYPAD_INFO, TEST_ADDR, TIMER_INTERRUPT_ADDR};
 use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
 use crate::opcodes::Compare::CP_A_r;
 use crate::opcodes::DoubleRegister::BC;
@@ -66,6 +67,7 @@ impl Ctx {
 
 impl Ctx {
     pub(crate) fn execute(&mut self, term: &mut Term, verbose: bool, ss: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) -> Result<()>{
+        self.mmu.last_write_addr = 0;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if verbose {
             term.write_line(&format!("--PC at {:04x}  op {:0x}", self.cpu.r.pc, opcode))?;
@@ -355,10 +357,34 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
             ctx.interactive = false;
             ctx.execute(term, false, screenstate, to_screen, receive_cpu)?;
         },
+        'w' => {
+            choose_watch_target(ctx,term, screenstate, to_screen, receive_cpu);
+        }
         _ => {}
     };
     Ok(())
 }
+
+fn choose_watch_target(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, to_screen: &Sender<String>, receive_cpu: &Receiver<InputEvent>) {
+    let regs = [LCDC, STAT, LY, SCX, SCY];
+    let mut selections:Vec<String> = vec![];
+    for reg in &regs { selections.push(reg.name.to_string()); }
+    let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("watch for write to:")
+        .default(0)
+        .items(&selections[..])
+        .interact()
+        .unwrap();
+    let reg = &regs[selection];
+    println!("looping until write to {} {:04x}",reg.name, reg.addr);
+    loop {
+        ctx.execute(term, false, screenstate, to_screen, receive_cpu).unwrap();
+        if ctx.mmu.last_write_addr == reg.addr {
+            break;
+        }
+    }
+}
+
 
 fn print_next_opcode(term: &mut Term, ctx: &mut Ctx) {
     let primary = Style::new().green().bold();
@@ -560,7 +586,7 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
     let regs = &ctx.mmu.hardware;
     term.write_line(&format!("registers are {} ",reg.apply_to("cool")))?;
-    term.write_line(&format!("LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",regs.LY, regs.LYC,  regs.SCX,  regs.SCY))?;
+    term.write_line(&format!("LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",regs.LY, regs.LYC,  regs.SCX.value,  regs.SCY.value))?;
     term.write_line(&format!("LCDC {:08b}  STAT {:08b}",regs.LCDC, regs.STAT))?;
     term.write_line(&format!("IME  {:08b}    IE {:08b}",regs.IME, regs.IE,))?;
     term.write_line(&format!("BGP  {:08b}",ctx.mmu.hardware.BGP))?;

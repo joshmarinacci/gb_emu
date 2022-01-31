@@ -176,18 +176,18 @@ impl PPU {
         }
         println!("tile data base address {:04x}",td1_start);
         let td1 = &mmu.data[td1_start .. (td1_end + 1)];
-        for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
-            let line_str:String = row.iter()
-                .map(|b|format!("{:02x}",b))
-                .collect();
-            println!("{:04x} {}",bg_tilemap_start+n*32, line_str);
-        }
+        // for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
+        //     let line_str:String = row.iter()
+        //         .map(|b|format!("{:02x}",b))
+        //         .collect();
+        //     println!("{:04x} {}",bg_tilemap_start+n*32, line_str);
+        // }
 
         println!("signed mode = {}",!unsigned_mode);
             if bg_enabled {
                 let img = &mut screenstate.backbuffer;
-                let sx = 0;//mmu.hardware.SCX as usize;
-                let sy = 0;//mmu.hardware.SCY as usize;
+                let sx = mmu.hardware.SCX.value as usize;
+                let sy = mmu.hardware.SCY.value as usize;
                 let spacing = 8;
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
                     if y > 0x10 {

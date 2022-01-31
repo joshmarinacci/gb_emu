@@ -112,3 +112,27 @@ impl Bitmap {
         }
     }
 }
+
+pub struct HWReg {
+    pub(crate) addr: u16,
+    pub(crate) name: &'static str,
+    pub(crate) value: u8,
+}
+pub const LCDC:HWReg = HWReg { addr: 0xFF40, name: "LCDC", value:0};
+pub const STAT:HWReg = HWReg { addr: 0xFF41, name: "STAT", value:0};
+pub const LY:HWReg   = HWReg { addr: 0xFF44, name: "LY",   value:0};
+pub const SCY:HWReg =  HWReg { addr: 0xFF42, name: "SCY",  value:0};
+pub const SCX:HWReg =  HWReg { addr: 0xFF43, name: "SCX",  value:0};
+
+impl HWReg {
+    pub fn register_from_addr(addr:u16) -> Option<HWReg> {
+        if addr == LCDC.addr { return Some(LCDC); }
+        if addr == STAT.addr { return Some(STAT); }
+        if addr == LY.addr { return Some(LY); }
+        if addr == SCX.addr { return Some(SCX); }
+        if addr == SCY.addr { return Some(SCY); }
+        return None;
+    }
+}
+
+
