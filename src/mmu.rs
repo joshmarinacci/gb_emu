@@ -412,8 +412,8 @@ impl MMU {
             // info!("writing to hi ram {:04x} value = {:02x}",addr,val);
         }
         if addr == LCDC_LCDCONTROL {
-            // println!("writing to turn on the LCD Display");
-            // info!("writing to LCDC register {:08b}",val);
+            println!("writing to turn on the LCD Display");
+            info!("writing to LCDC register {:08b}",val);
             self.hardware.LCDC = val;
             // dump_lcdc_bits(val);
             return;

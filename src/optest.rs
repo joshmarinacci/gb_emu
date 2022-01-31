@@ -6,19 +6,20 @@ use OpType::{Jump, Load16};
 use Src16::Im16;
 // use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
+use crate::mmu::LCDC_LCDCONTROL;
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::Dst8::DstR8;
 use crate::optest::OpType::Load8;
 use crate::optest::R8::{A, B, C, D, E, H, L};
 use crate::optest::R16::{BC, DE, HL, SP};
-use crate::optest::Src8::{Im8, Mem, SrcR8};
+use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 
 pub enum R8  { A, B, C, D, E, H, L,}
 pub enum R16 { BC, HL, DE, SP,}
 pub enum Src8  {  SrcR8(R8), Mem(R16),  Im8(), HiMemIm8(), MemIm16() }
 pub enum Src16 {  Im16(),   }
-pub enum Dst8  {  DstR8(R8), AddrDst(R16), MemIm16()  }
+pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16()  }
 pub enum Dst16 {  DstR16(R16), }
 pub enum Extra {
     Nothing,
@@ -224,6 +225,7 @@ impl Dst8 {
             Dst8::DstR8(r8) => r8.name(),
             AddrDst(r16) => r16.name(),
             Dst8::MemIm16() => "(nn)",
+            Dst8::HiMemIm8() => "($FF00+n)",
         }
     }
     fn set_value(&self,gb:&mut GBState, val:u8) {
@@ -231,6 +233,10 @@ impl Dst8 {
             Dst8::DstR8(r8) => r8.set_value(&mut gb.cpu, val),
             AddrDst(r16) => gb.mmu.write8(r16.get_value(&gb.cpu), val),
             Dst8::MemIm16() => gb.mmu.write8(gb.mmu.read16(gb.cpu.get_pc()+1),val),
+            Dst8::HiMemIm8() => {
+                let im = gb.mmu.read8(gb.cpu.get_pc()+1);
+                gb.mmu.write8(0xFF00 + im as u16,val)
+            }
         }
     }
     fn get_value(&self, gb:&GBState) -> u8 {
@@ -243,19 +249,34 @@ impl Dst8 {
                 let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
                 gb.mmu.read8(addr)
             }
+            Dst8::HiMemIm8() => {
+                let im = gb.mmu.read8(gb.cpu.get_pc()+1);
+                gb.mmu.read8(0xFF00 + im as u16)
+            }
         }
     }
     fn real(&self, gb: &GBState) -> String {
-        let val = match self {
-            DstR8(r8) => r8.get_value(&gb.cpu),
-            AddrDst(addr) => gb.mmu.read8(addr.get_value(&gb.cpu)),
+        match self {
+            DstR8(r8) =>  format!("{:02x}",r8.get_value(&gb.cpu)),
+            AddrDst(addr) => format!("{:02x}",gb.mmu.read8(addr.get_value(&gb.cpu))),
             Dst8::MemIm16() => {
                 let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
-                gb.mmu.read8(addr)
+                named_addr(addr,gb)
             }
-        };
-        return format!("{:02x}",val);
+            Dst8::HiMemIm8() => {
+                let im = gb.mmu.read8(gb.cpu.get_pc()+1);
+                let addr = 0xFF00 + im as u16;
+                named_addr(addr,gb)
+                // gb.mmu.read8(0xFF00 + im as u16)
+            }
+        }
     }
+}
+
+fn named_addr(addr: u16, gb: &GBState) -> String {
+    if addr == LCDC_LCDCONTROL { return "LCDC".to_string();  }
+    let val = gb.mmu.read8(addr);
+    format!("{:02x}",val)
 }
 
 impl Op {
@@ -428,6 +449,7 @@ fn make_op_table() -> OpTable {
         extra:Extra::Nothing});
 
     op_table.load8( 0x78, DstR8(A), SrcR8(B));
+    op_table.load8( 0x40, DstR8(B), SrcR8(B));
 
     op_table.load16(0x01, DstR16(BC), Im16()); // LD DE, nn
     op_table.load16(0x11, DstR16(DE), Im16()); // LD DE, nn
@@ -498,7 +520,11 @@ fn make_op_table() -> OpTable {
         extra: Extra::Nothing
     });
 
+    // 0xE0 => Some(LoadInstr(Load_HI_U8_R(A))),
+    op_table.load8(0xE0, Dst8::HiMemIm8(), SrcR8(A));
 
+    //        0x1a => Some(LoadInstr(Load_R_addr_R2(A, DE))),
+    op_table.load8(0x1A,DstR8(A), Src8::Mem(DE));
     op_table
 }
 
@@ -570,8 +596,8 @@ fn test_hellogithub() {
         println!("                 {}",op.real(&gb));
         let prev_pc = gb.cpu.get_pc();
         op.execute(&mut gb);
-        println!("after A:{:02x}  Z={}  C={}",
-                 gb.cpu.r.a,
+        println!("after A:{:02x} B:{:02x}  Z={}  C={}",
+                 gb.cpu.r.a, gb.cpu.r.b,
             gb.cpu.r.zero_flag,
             gb.cpu.r.carry_flag,
         );
