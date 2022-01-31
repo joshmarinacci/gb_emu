@@ -60,7 +60,7 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
         scale: args.scale,
         enabled: args.screen
     };
-    start_debugger(cpu, mmu, Some(cart), args.fastforward, &settings, args.breakpoint, args.verbose, args.interactive)?;
+    start_debugger(cpu, mmu, Some(cart), args.fastforward, &settings, args.breakpoint,  args.interactive)?;
     Ok(())
 }
 
