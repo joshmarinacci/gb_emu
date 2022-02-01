@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::format;
 use std::path::{Path, PathBuf};
 use Dst16::DstR16;
 use Dst8::AddrDst;
@@ -6,25 +7,34 @@ use OpType::{Jump, Load16};
 use Src16::Im16;
 // use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
-use crate::mmu::LCDC_LCDCONTROL;
+use crate::mmu::{BGP, LCDC_LCDCONTROL, NR52_SOUND};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::Dst8::DstR8;
+use crate::optest::Extra::Nothing;
 use crate::optest::OpType::Load8;
 use crate::optest::R8::{A, B, C, D, E, H, L};
 use crate::optest::R16::{BC, DE, HL, SP};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 
+#[derive(Debug)]
 pub enum R8  { A, B, C, D, E, H, L,}
+#[derive(Debug)]
 pub enum R16 { BC, HL, DE, SP,}
-pub enum Src8  {  SrcR8(R8), Mem(R16),  Im8(), HiMemIm8(), MemIm16() }
+#[derive(Debug)]
+pub enum Src8  {  SrcR8(R8), Mem(R16), MemWithInc(R16), Im8(), HiMemIm8(), MemIm16() }
+#[derive(Debug)]
 pub enum Src16 {  Im16(),   }
-pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16()  }
+#[derive(Debug)]
+pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16(), MemWithInc(R16)  }
+#[derive(Debug)]
 pub enum Dst16 {  DstR16(R16), }
+#[derive(Debug)]
 pub enum Extra {
     Nothing,
     Inc(R16),
 }
+#[derive(Debug)]
 enum OpType {
     Noop(),
     Jump(JumpType),
@@ -33,6 +43,10 @@ enum OpType {
     DisableInterrupts(),
     Compare(Dst8, Src8),
     Xor(Dst8, Src8),
+    Or(Dst8, Src8),
+    And(Dst8, Src8),
+    Inc(Dst16),
+    Dec(Dst16),
 }
 
 
@@ -85,8 +99,8 @@ impl R16 {
         match self {
             BC => cpu.r.get_u16reg(&DoubleRegister::BC),
             HL => cpu.r.get_u16reg(&DoubleRegister::HL),
-            DE => cpu.r.get_u16reg(&DoubleRegister::BC),
-            SP => cpu.r.get_u16reg(&DoubleRegister::BC),
+            DE => cpu.r.get_u16reg(&DoubleRegister::DE),
+            SP => cpu.r.get_u16reg(&DoubleRegister::SP),
         }
     }
     fn set_value(&self, cpu: &mut Z80, val:u16) {
@@ -107,6 +121,7 @@ impl R16 {
     }
 }
 
+#[derive(Debug)]
 enum AddrSrc {
     Imu16(),
 }
@@ -155,9 +170,17 @@ impl Dst16 {
         }
     }
     fn real(&self, gb: &GBState) -> String {
-        self.name()
+        match self {
+            DstR16(rr) => format!("{:04x}",rr.get_value(&gb.cpu)),
+        }
+    }
+    fn get_value(&self, gb:&GBState) -> u16 {
+        match self {
+            DstR16(rr) => rr.get_value(&gb.cpu),
+        }
     }
 }
+#[derive(Debug)]
 pub enum Cond {
     Carry(),
     NotCarry(),
@@ -165,10 +188,23 @@ pub enum Cond {
     NotZero(),
 }
 
+impl Cond {
+    pub(crate) fn get_value(&self, cpu: &Z80) -> bool {
+        match self {
+            Cond::Carry() => cpu.r.carry_flag,
+            Cond::NotCarry() => !cpu.r.carry_flag,
+            Cond::Zero() => cpu.r.zero_flag,
+            Cond::NotZero() => !cpu.r.zero_flag,
+        }
+    }
+}
 
+
+#[derive(Debug)]
 enum JumpType {
     Absolute(AddrSrc),
     RelativeCond(Cond,Src8),
+    Relative(Src8),
 }
 
 
@@ -198,12 +234,17 @@ impl Src8 {
             Im8() => "u8".to_string(),
             Src8::HiMemIm8() => "($FF00+n)".to_string(),
             Src8::MemIm16() => "(nn)".to_string(),
+            Src8::MemWithInc(r2) => format!("({}+)",r2.name()),
         }
     }
     fn get_value(&self, gb:&GBState) -> u8 {
         match self {
             Src8::SrcR8(r1) => r1.get_value(&gb.cpu),
-            Src8::Mem(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
+            Src8::Mem(r2) => {
+                // println!("reading memory at location {:04x}",r2.get_value(&gb.cpu));
+                gb.mmu.read8(r2.get_value(&gb.cpu))
+            },
+            Src8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
             Src8::Im8() => gb.mmu.read8(gb.cpu.get_pc()+1),
             Src8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
@@ -220,12 +261,13 @@ impl Src8 {
     }
 }
 impl Dst8 {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> String {
         match self {
-            Dst8::DstR8(r8) => r8.name(),
-            AddrDst(r16) => r16.name(),
-            Dst8::MemIm16() => "(nn)",
-            Dst8::HiMemIm8() => "($FF00+n)",
+            Dst8::DstR8(r8) => r8.name().to_string(),
+            AddrDst(r16) => r16.name().to_string(),
+            Dst8::MemIm16() => "(nn)".to_string(),
+            Dst8::HiMemIm8() => "($FF00+n)".to_string(),
+            Dst8::MemWithInc(r16) => format!("({}+)", r16.name()).to_string(),
         }
     }
     fn set_value(&self,gb:&mut GBState, val:u8) {
@@ -236,6 +278,9 @@ impl Dst8 {
             Dst8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.write8(0xFF00 + im as u16,val)
+            }
+            Dst8::MemWithInc(r16) => {
+                gb.mmu.write8(r16.get_value(&gb.cpu),val)
             }
         }
     }
@@ -253,6 +298,7 @@ impl Dst8 {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.read8(0xFF00 + im as u16)
             }
+            Dst8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu))
         }
     }
     fn real(&self, gb: &GBState) -> String {
@@ -267,14 +313,16 @@ impl Dst8 {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 let addr = 0xFF00 + im as u16;
                 named_addr(addr,gb)
-                // gb.mmu.read8(0xFF00 + im as u16)
             }
+            Dst8::MemWithInc(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(&gb.cpu))),
         }
     }
 }
 
 fn named_addr(addr: u16, gb: &GBState) -> String {
     if addr == LCDC_LCDCONTROL { return "LCDC".to_string();  }
+    if addr == BGP { return "BGP ".to_string();  }
+    if addr == NR52_SOUND { return "NR52".to_string();  }
     let val = gb.mmu.read8(addr);
     format!("{:02x}",val)
 }
@@ -295,11 +343,12 @@ impl Op {
                         let off = src.get_value(gb);
                         let e = u8_as_i8(off);
                         gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-                        if gb.cpu.r.carry_flag {
+                        if cond.get_value(&gb.cpu) {
                             let addr = (((gb.cpu.get_pc()) as i32) + (e as i32)) as u16;
                             gb.cpu.set_pc(addr);
                         }
                     }
+                    JumpType::Relative(_) => {}
                 }
             }
             Load16(dst,src) => {
@@ -308,8 +357,21 @@ impl Op {
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             Load8(dst,src) => {
+                // println!("executing Load8 dst = {:?} src = {:?}",dst,src);
                 let val = src.get_value(gb);
+                // println!("value from src is {:02x}",val);
                 dst.set_value(gb,val);
+                if let Src8::MemWithInc(r2) = src {
+                    let v = r2.get_value(&gb.cpu);
+                    let (v2,b) = v.overflowing_add(1);
+                    r2.set_value(&mut gb.cpu,v2);
+                }
+                if let Dst8::MemWithInc(r2) = dst {
+                    let v = r2.get_value(&gb.cpu);
+                    let (v2,b) = v.overflowing_add(1);
+                    r2.set_value(&mut gb.cpu,v2);
+                }
+                // println!("Len is {}",self.len);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             OpType::DisableInterrupts() => {
@@ -341,6 +403,41 @@ impl Op {
                 dst.set_value(gb,res);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
+            OpType::Inc(dst) => {
+                let v1 = dst.get_value(gb);
+                let v2 = v1.wrapping_add(1);
+                // println!(" ### INC {:04x}",v2);
+                dst.set_value(gb, v2);
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
+            OpType::Dec(dst) => {
+                let v1 = dst.get_value(gb);
+                let v2 = v1.wrapping_sub(1);
+                // println!(" ### DEC {:04x}",v2);
+                dst.set_value(gb, v2);
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
+            OpType::Or(dst, src) => {
+                let b = src.get_value(gb);
+                let a = dst.get_value(gb);
+                let res = a | b;
+                gb.cpu.r.zero_flag = res == 0;
+                gb.cpu.r.subtract_n_flag = false;
+                gb.cpu.r.half_flag = false;
+                gb.cpu.r.carry_flag = false;
+                dst.set_value(gb,res);
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
+            OpType::And(dst, src) => {
+                let res = dst.get_value(gb) & src.get_value(gb);
+                // println!("result is {}",res);
+                gb.cpu.r.zero_flag = res == 0;
+                gb.cpu.r.subtract_n_flag = false;
+                gb.cpu.r.half_flag = true;
+                gb.cpu.r.carry_flag = false;
+                dst.set_value(gb,res);
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
         }
     }
     pub(crate) fn to_asm(&self) -> String {
@@ -350,6 +447,7 @@ impl Op {
                 match typ {
                     JumpType::Absolute(src) => "XXXXX".to_string(),
                     JumpType::RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
+                    JumpType::Relative(src) => format!("JR i{}",src.name()),
                 }
             },
             Load16(dst,src) => format!("LD {} {}", dst.name(), src.name()),
@@ -357,6 +455,10 @@ impl Op {
             OpType::DisableInterrupts() => "DI".to_string(),
             OpType::Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
             OpType::Xor(dst, src) => format!("XOR {},{}",dst.name(),src.name()),
+            OpType::Inc(dst,) => format!("INC {}",dst.name()),
+            OpType::Dec(dst,) => format!("DEC {}",dst.name()),
+            OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
+            OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -371,6 +473,9 @@ impl Op {
                         // format!("JP {}",src.real(gb))
                         format!("JR {}, {}", cond.real(gb), src.real(gb))
                     }
+                    JumpType::Relative(src) => {
+                        format!("JR +/-{}", src.real(gb))
+                    }
                 }
             },
             OpType::Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
@@ -378,6 +483,10 @@ impl Op {
             OpType::DisableInterrupts() => format!("DI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
             OpType::Xor(dst, src) => format!("XOR {}, {}",dst.real(gb),src.real(gb)),
+            OpType::Inc(dst) => format!("INC {}",dst.real(gb)),
+            OpType::Dec(dst) => format!("DEC {}",dst.real(gb)),
+            OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
+            OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
         }
     }
 }
@@ -420,12 +529,17 @@ impl OpTable {
         self.ops.insert(code,op);
     }
     fn load8(&mut self, code: u16, dst: Dst8, src: Src8) {
-        let (len, cycles) = match src {
+        let (mut len, cycles) = match src {
             SrcR8(_) => (1, 4),
             Mem(_) => (1, 8),
             Im8() => (2, 8),
             Src8::HiMemIm8() => (2,12),
             Src8::MemIm16() => (3,16),
+            Src8::MemWithInc(_) => (1,8),
+        };
+        if let Dst8::HiMemIm8() = dst {
+            println!("hi mem. add one more");
+            len += 1;
         };
         self.insert(code, Op { code, len, cycles,  typ:OpType::Load8(dst, src), extra:Extra::Nothing});
     }
@@ -477,9 +591,6 @@ fn make_op_table() -> OpTable {
     op_table.load8( 0x77, AddrDst(HL), SrcR8(A)); // LD L,A
     op_table.load8( 0xEA, Dst8::MemIm16(), SrcR8(A)); // LD L,A
 
-    op_table.insert(0x2A, Op { code:0x2A, len:1, cycles:8,
-        typ:Load8(DstR8(A), Src8::Mem(HL) ), extra:Extra::Inc(HL),
-    });
 
 
     op_table.insert(0xF3, Op { code:0xF3, len: 1, cycles:4,
@@ -525,6 +636,70 @@ fn make_op_table() -> OpTable {
 
     //        0x1a => Some(LoadInstr(Load_R_addr_R2(A, DE))),
     op_table.load8(0x1A,DstR8(A), Src8::Mem(DE));
+    op_table.insert(0x2A, Op { code:0x2A, len:1, cycles:8,
+        typ:Load8(DstR8(A), Src8::MemWithInc(HL) ), extra:Nothing,
+    });
+    op_table.insert(0x22, Op { code:0x22, len:1, cycles:8,
+        typ:Load8(Dst8::MemWithInc(HL), Src8::SrcR8(A)),
+        extra:Extra::Inc(HL),
+    });
+
+
+    //        0x13 => Some(MathInst(Inc_rr(DE))),
+    op_table.insert(0x13, Op {
+        code:0x13,
+        len: 1,
+        cycles: 8,
+        typ: OpType::Inc(DstR16(DE)),
+        extra: Extra::Nothing
+    });
+    //        0x0B => Some(MathInst(Dec_rr(BC))),
+    op_table.insert(0x0B, Op {
+        code:0x0B,
+        len: 1,
+        cycles: 8,
+        typ: OpType::Dec(DstR16(BC)),
+        extra: Extra::Nothing
+    });
+    //        0xB1 => Some(MathInst(OR_A_r(C))),
+    op_table.insert(0xB1, Op {
+        code:0xB1,
+        len: 1,
+        cycles: 4,
+        typ: OpType::Or(Dst8::DstR8(A),Src8::SrcR8(C)),
+        extra: Extra::Nothing
+    });
+    //        0x20 => Some(JumpInstr(Relative_cond_notzero_i8())),
+    op_table.insert(0x20,Op {
+        code: 0x20,
+        len: 2,
+        cycles: 12,
+        typ: Jump(JumpType::RelativeCond(Cond::NotZero(),Src8::Im8())),
+        extra: Extra::Nothing
+    });
+    //        0xA7 => Some(MathInst(AND_A_r(A))),
+    op_table.insert(0xA7, Op {
+        code:0xA7,
+        len: 1,
+        cycles: 4,
+        typ: OpType::And(Dst8::DstR8(A),Src8::SrcR8(C)),
+        extra: Extra::Nothing
+    });
+
+
+    // 0x3E => Some(LoadInstr(Load_R_u8(A))),
+    op_table.load8(0x3E,Dst8::DstR8(A),Src8::Im8());
+
+    op_table.insert(0x18, Op {
+        code: 0x18,
+        len: 2,
+        cycles: 12,
+        typ: OpType::Jump(JumpType::Relative(Src8::Im8())),
+        extra: Extra::Nothing
+    });
+
+    // try to get through the memory setup routine that is copying everything to 9000
+    // aka: Tile Data Block 2 filled. probably somewhere around 40,000 cycles?
     op_table
 }
 
@@ -581,10 +756,18 @@ fn test_cpuins() {
 fn test_hellogithub() {
     let op_table = make_op_table();
     let mut gb = setup_test_rom("./resources/testroms/hello-world.gb").unwrap();
-    let goal = 4020;
+    let goal = 20_000;
+    gb.cpu.set_pc(0);
 
+    let mut debug = false;
     loop {
-        println!("PC {:04x}    clock = {}   count = {}",gb.cpu.get_pc(), gb.clock, gb.count);
+        if gb.cpu.get_pc() >= 0x001a {
+            debug = true;
+        }
+        if debug {
+            println!("==========");
+            println!("PC {:04x}    clock = {}   count = {}", gb.cpu.get_pc(), gb.clock, gb.count);
+        }
         let opcode = fetch_opcode_from_memory(&gb);
         // println!("opcode is {:04x}",opcode);
         if let None = op_table.lookup(&opcode) {
@@ -592,17 +775,30 @@ fn test_hellogithub() {
             break;
         }
         let op = op_table.lookup(&opcode).unwrap();
-        println!("PC {:04x} {:04x}  =  {}      ({},{})",gb.cpu.get_pc(), op.code, op.to_asm(), op.len,op.cycles);
-        println!("                 {}",op.real(&gb));
+        if debug {
+            println!("PC {:04x} {:04x}  =  {}      ({},{})", gb.cpu.get_pc(), op.code, op.to_asm(), op.len, op.cycles);
+            println!("                 {}", op.real(&gb));
+            // println!("contents of ram at 0x150 {:02x}", gb.mmu.read8(0x0150));
+            // println!("contents of ram at 0x9000 {:02x}", gb.mmu.read8(0x9000));
+        }
         let prev_pc = gb.cpu.get_pc();
         op.execute(&mut gb);
-        println!("after A:{:02x} B:{:02x}  Z={}  C={}",
-                 gb.cpu.r.a, gb.cpu.r.b,
-            gb.cpu.r.zero_flag,
-            gb.cpu.r.carry_flag,
-        );
+        if debug {
+            println!("after A:{:02x} B:{:02x} C:{:02x}     BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
+                     gb.cpu.r.a,
+                     gb.cpu.r.b,
+                     gb.cpu.r.c,
+                     gb.cpu.r.get_bc(),
+                     gb.cpu.r.get_de(),
+                     gb.cpu.r.get_hl(),
+                     gb.cpu.r.zero_flag,
+                     gb.cpu.r.carry_flag,
+            );
+        }
+        // println!("BC {:04x}",gb.cpu.r.get_bc());
         if gb.cpu.get_pc() == prev_pc {
-            panic!("stuck in an infinite loop");
+            // panic!("stuck in an infinite loop");
+            break;
         }
         // gb.cpu.set_pc(gb.cpu.get_pc()+op.len);
         // mmu.update(&mut cpu, ss, &mut clock);
@@ -611,8 +807,10 @@ fn test_hellogithub() {
         gb.count += 1;
 
         if gb.count % 20 == 0 {
-            println!("pretending to increment the LY register");
             gb.mmu.hardware.LY+=1;
+            if gb.mmu.hardware.LY >= 154 {
+                gb.mmu.hardware.LY = 0;
+            }
         }
 
         if gb.count > goal {
@@ -620,5 +818,6 @@ fn test_hellogithub() {
         }
     }
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
-    assert_eq!(gb.count>=goal,true);
+    assert_eq!(gb.cpu.get_pc(),0x35)
+    // assert_eq!(gb.count>=goal,true);
 }

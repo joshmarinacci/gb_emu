@@ -572,7 +572,7 @@ const NR42_SOUND:u16 = 0xFF21;
 const NR44_SOUND:u16 = 0xFF23;
 const NR50_SOUND:u16 = 0xFF24;
 const NR51_SOUND:u16 = 0xFF25;
-const NR52_SOUND:u16 = 0xFF26;
+pub const NR52_SOUND:u16 = 0xFF26;
 //more sound stuff
 
 pub const LCDC_LCDCONTROL:u16 = 0xFF40;
@@ -590,7 +590,7 @@ const LY_LCDC_Y_COORD:u16 = 0xFF44;
 const LYC_LCDC_Y_COMPARE:u16 = 0xFF45;
 
 const DMA:u16 = 0xFF46; // DMA Start and Transfer address
-const BGP:u16 = 0xFF47; // BG Palette Data (R/W)
+pub const BGP:u16 = 0xFF47; // BG Palette Data (R/W)
 const OBP0:u16 = 0xFF48; // Object Palette 0 Data (R/W)
 const OBP1:u16 = 0xFF49; // Object Palette 1 Data (R/W)
 
