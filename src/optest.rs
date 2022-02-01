@@ -586,7 +586,12 @@ fn make_op_table() -> OpTable {
     let mut op_table = OpTable::new();//:HashMap<u16,Op> = HashMap::new();
     op_table.add(Op { code:0x00, len:1, cycles:4,  typ:OpType::Noop() });
 
-    op_table.load8( 0x78, DstR8(A), SrcR8(B));
+
+    op_table.load16(0x01, DstR16(BC), Im16()); // LD DE, nn
+    op_table.load8( 0x02, AddrDst(BC), SrcR8(A)); // LD L,A
+    op_table.load8( 0x06, DstR8(B), Im8()); // LD B,n
+    op_table.load8( 0x0E, DstR8(C), Im8()); // LD C,n
+    op_table.load8( 0x1A,DstR8(A), Mem(DE));
 
     op_table.load8( 0x40, DstR8(B), SrcR8(B));
     op_table.load8( 0x41, DstR8(B), SrcR8(C));
@@ -622,13 +627,29 @@ fn make_op_table() -> OpTable {
     op_table.load8( 0x5E, DstR8(E), Mem(HL));
     op_table.load8( 0x5F, DstR8(E), SrcR8(A));
 
-    op_table.load16(0x01, DstR16(BC), Im16()); // LD DE, nn
+    op_table.load8( 0x60, DstR8(H), SrcR8(B));
+    op_table.load8( 0x61, DstR8(H), SrcR8(C));
+    op_table.load8( 0x62, DstR8(H), SrcR8(D));
+    op_table.load8( 0x63, DstR8(H), SrcR8(E));
+    op_table.load8( 0x64, DstR8(H), SrcR8(H));
+    op_table.load8( 0x65, DstR8(H), SrcR8(L));
+    op_table.load8( 0x66, DstR8(H), Mem(HL));
+    op_table.load8( 0x67, DstR8(H), SrcR8(A));
+    op_table.load8( 0x68, DstR8(L), SrcR8(B));
+    op_table.load8( 0x69, DstR8(L), SrcR8(C));
+    op_table.load8( 0x6A, DstR8(L), SrcR8(D));
+    op_table.load8( 0x6B, DstR8(L), SrcR8(E));
+    op_table.load8( 0x6C, DstR8(L), SrcR8(H));
+    op_table.load8( 0x6D, DstR8(L), SrcR8(L));
+    op_table.load8( 0x6E, DstR8(L), Mem(HL));
+    op_table.load8( 0x6F, DstR8(L), SrcR8(A));
+
+    op_table.load8( 0x78, DstR8(A), SrcR8(B));
+
     op_table.load16(0x11, DstR16(DE), Im16()); // LD DE, nn
     op_table.load16(0x21, DstR16(HL), Im16()); // LD HL, nn
     op_table.load16(0x31, DstR16(SP), Im16()); // LD HL, nn
 
-    op_table.load8( 0x06, DstR8(B), Im8()); // LD B,n
-    op_table.load8( 0x0E, DstR8(C), Im8()); // LD C,n
     op_table.load8( 0x16, DstR8(D), Im8()); // LD D,n
     op_table.load8( 0x1E, DstR8(E), Im8()); // LD E,n
     op_table.load8( 0x26, DstR8(H), Im8()); // LD H,n
@@ -636,16 +657,16 @@ fn make_op_table() -> OpTable {
 
 
     op_table.load8( 0x7F, DstR8(A), SrcR8(A)); // LD A,A
-    op_table.load8( 0x4F, DstR8(C), SrcR8(A)); // LD C,A
-    op_table.load8( 0x57, DstR8(D), SrcR8(A)); // LD D,A
-    op_table.load8( 0x5F, DstR8(E), SrcR8(A)); // LD E,A
-    op_table.load8( 0x67, DstR8(H), SrcR8(A)); // LD H,A
-    op_table.load8( 0x6F, DstR8(L), SrcR8(A)); // LD L,A
 
-    op_table.load8( 0x02, AddrDst(BC), SrcR8(A)); // LD L,A
     op_table.load8( 0x12, AddrDst(DE), SrcR8(A)); // LD L,A
     op_table.load8( 0x77, AddrDst(HL), SrcR8(A)); // LD L,A
     op_table.load8( 0xEA, Dst8::MemIm16(), SrcR8(A)); // LD L,A
+    op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
+    op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
+    op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
+    op_table.load8(0x3E,DstR8(A), Im8());
+    op_table.load8(0x2A,DstR8(A), Src8::MemWithInc(HL));
+    op_table.load8(0x22,Dst8::MemWithInc(HL), SrcR8(A));
 
 
 
@@ -658,13 +679,6 @@ fn make_op_table() -> OpTable {
     });
 
 
-    op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
-    op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
-    op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
-    op_table.load8(0x1A,DstR8(A), Mem(DE));
-    op_table.load8(0x3E,DstR8(A), Im8());
-    op_table.load8(0x2A,DstR8(A), Src8::MemWithInc(HL));
-    op_table.load8(0x22,Dst8::MemWithInc(HL), SrcR8(A));
 
 
     op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: OpType::Inc(DstR16(DE)) });
