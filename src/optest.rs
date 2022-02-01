@@ -3,11 +3,12 @@ use std::fmt::format;
 use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{And, Or, Xor};
+use BitOps::Bit;
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
 use Dst8::AddrDst;
 use JumpType::Absolute;
-use OpType::{Jump, Load16, Math};
+use OpType::{BitOp, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
 use Src16::Im16;
 // use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
@@ -44,7 +45,7 @@ enum BinOp {
 
 #[derive(Debug)]
 enum BitOps {
-    Bit(u8, Src8)
+    Bit(u8, R8)
 }
 
 #[derive(Debug)]
@@ -55,14 +56,14 @@ enum OpType {
     Load8(Dst8, Src8),
     DisableInterrupts(),
     Compare(Dst8, Src8),
-    Xor(Dst8, Src8),
-    Or(Dst8, Src8),
+    // Xor(Dst8, Src8),
+    // Or(Dst8, Src8),
     Math(BinOp, Dst8, Src8),
-    And(Dst8, Src8),
-    Inc(Dst16),
-    Dec(Dst16),
-    Inc8(Dst8),
-    Dec8(Dst8),
+    // And(Dst8, Src8),
+    Inc16(R16),
+    Dec16(R16),
+    Inc8(R8),
+    Dec8(R8),
     BitOp(BitOps),
 }
 
@@ -443,70 +444,69 @@ impl Op {
 
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            OpType::Xor(dst, src) => {
-                let b = src.get_value(gb);
-                let a = dst.get_value(gb);
-                let res = a ^ b;
-                gb.cpu.r.zero_flag = res == 0;
-                gb.cpu.r.subtract_n_flag = false;
-                gb.cpu.r.half_flag = false;
-                gb.cpu.r.carry_flag = false;
-                dst.set_value(gb,res);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-            }
-            OpType::Inc(dst) => {
-                let v1 = dst.get_value(gb);
+            // OpType::Xor(dst, src) => {
+            //     let b = src.get_value(gb);
+            //     let a = dst.get_value(gb);
+            //     let res = a ^ b;
+            //     gb.cpu.r.zero_flag = res == 0;
+            //     gb.cpu.r.subtract_n_flag = false;
+            //     gb.cpu.r.half_flag = false;
+            //     gb.cpu.r.carry_flag = false;
+            //     dst.set_value(gb,res);
+            //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            // }
+            Inc16(dst) => {
+                let v1 = dst.get_value(&gb.cpu);
                 let v2 = v1.wrapping_add(1);
-                // println!(" ### INC {:04x}",v2);
-                dst.set_value(gb, v2);
+                dst.set_value(&mut gb.cpu, v2);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            OpType::Inc8(dst) => {
-                let v1 = dst.get_value(gb);
+            Inc8(dst) => {
+                let v1 = dst.get_value(&gb.cpu);
                 let result = v1.wrapping_add(1);
-                dst.set_value(gb, result);
+                dst.set_value(&mut gb.cpu, result);
                 gb.cpu.r.zero_flag = result == 0;
                 gb.cpu.r.half_flag = (result & 0x0F) + 1 > 0x0F;
                 gb.cpu.r.subtract_n_flag = false;
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            OpType::Dec(dst) => {
-                let v1 = dst.get_value(gb);
+            Dec16(dst) => {
+                let v1 = dst.get_value(&gb.cpu);
                 let v2 = v1.wrapping_sub(1);
                 // println!(" ### DEC {:04x}",v2);
-                dst.set_value(gb, v2);
+                dst.set_value(&mut gb.cpu, v2);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            OpType::Dec8(dst) => {
-                let v1 = dst.get_value(gb);
+            Dec8(dst) => {
+                let v1 = dst.get_value(&gb.cpu);
                 let result = v1.wrapping_sub(1);
-                dst.set_value(gb, result);
+                dst.set_value(&mut gb.cpu, result);
                 gb.cpu.r.zero_flag = result == 0;
                 gb.cpu.r.half_flag = (result & 0x0F) == 0;
                 gb.cpu.r.subtract_n_flag = true;
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            OpType::Or(dst, src) => {
-                let b = src.get_value(gb);
-                let a = dst.get_value(gb);
-                let res = a | b;
-                gb.cpu.r.zero_flag = res == 0;
-                gb.cpu.r.subtract_n_flag = false;
-                gb.cpu.r.half_flag = false;
-                gb.cpu.r.carry_flag = false;
-                dst.set_value(gb,res);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-            }
-            OpType::And(dst, src) => {
-                let res = dst.get_value(gb) & src.get_value(gb);
-                // println!("result is {}",res);
-                gb.cpu.r.zero_flag = res == 0;
-                gb.cpu.r.subtract_n_flag = false;
-                gb.cpu.r.half_flag = true;
-                gb.cpu.r.carry_flag = false;
-                dst.set_value(gb,res);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-            }
+            // OpType::Or(dst, src) => {
+            //     let b = src.get_value(gb);
+            //     let a = dst.get_value(gb);
+            //     let res = a | b;
+            //     gb.cpu.r.zero_flag = res == 0;
+            //     gb.cpu.r.subtract_n_flag = false;
+            //     gb.cpu.r.half_flag = false;
+            //     gb.cpu.r.carry_flag = false;
+            //     dst.set_value(gb,res);
+            //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            // }
+            // OpType::And(dst, src) => {
+            //     let res = dst.get_value(gb) & src.get_value(gb);
+            //     // println!("result is {}",res);
+            //     gb.cpu.r.zero_flag = res == 0;
+            //     gb.cpu.r.subtract_n_flag = false;
+            //     gb.cpu.r.half_flag = true;
+            //     gb.cpu.r.carry_flag = false;
+            //     dst.set_value(gb,res);
+            //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            // }
             Math(binop, dst,src) => {
                 let b = src.get_value(gb);
                 let a = dst.get_value(gb);
@@ -522,8 +522,8 @@ impl Op {
                 dst.set_value(gb,res);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            OpType::BitOp(BitOps::Bit(n, src)) => {
-                let val = src.get_value(gb);
+            BitOp(Bit(n, src)) => {
+                let val = src.get_value(&gb.cpu);
                 gb.cpu.r.zero_flag = !get_bit_as_bool(val, *n);
                 gb.cpu.r.subtract_n_flag = false;
                 gb.cpu.r.half_flag = true;
@@ -545,15 +545,15 @@ impl Op {
             OpType::Load8(dst,src) => format!("LD {}, {}", dst.name(), src.name()),
             OpType::DisableInterrupts() => "DI".to_string(),
             OpType::Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
-            OpType::Xor(dst, src) => format!("XOR {},{}",dst.name(),src.name()),
-            OpType::Inc(dst,) => format!("INC {}",dst.name()),
-            OpType::Dec(dst,) => format!("DEC {}",dst.name()),
-            OpType::Inc8(dst) => format!("INC {}",dst.name()),
-            OpType::Dec8(dst) => format!("DEC {}",dst.name()),
-            OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
-            OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
+            // OpType::Xor(dst, src) => format!("XOR {},{}",dst.name(),src.name()),
+            Inc16(dst,) => format!("INC {}", dst.name()),
+            Dec16(dst,) => format!("DEC {}", dst.name()),
+            Inc8(dst) => format!("INC {}",dst.name()),
+            Dec8(dst) => format!("DEC {}",dst.name()),
+            // OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
+            // OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.name(),src.name()),
-            OpType::BitOp(BitOps::Bit(n,src)) => format!("BIT {}, {}",n,src.name()),
+            BitOp(Bit(n, src)) => format!("BIT {}, {}", n, src.name()),
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -570,15 +570,15 @@ impl Op {
             Load16(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
             OpType::DisableInterrupts() => format!("DI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
-            OpType::Xor(dst, src) => format!("XOR {}, {}",dst.real(gb),src.real(gb)),
-            OpType::Inc(dst) => format!("INC {}",dst.real(gb)),
-            OpType::Dec(dst) => format!("DEC {}",dst.real(gb)),
-            OpType::Inc8(dst) => format!("INC {}",dst.real(gb)),
-            OpType::Dec8(dst) => format!("DEC {}",dst.real(gb)),
-            OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
-            OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
+            // OpType::Xor(dst, src) => format!("XOR {}, {}",dst.real(gb),src.real(gb)),
+            Inc16(dst) => format!("INC {}", dst.get_value(&gb.cpu)),
+            Dec16(dst) => format!("DEC {}", dst.get_value(&gb.cpu)),
+            Inc8(dst) => format!("INC {}",dst.get_value(&gb.cpu)),
+            Dec8(dst) => format!("DEC {}",dst.get_value(&gb.cpu)),
+            // OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
+            // OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.real(gb),src.real(gb)),
-            OpType::BitOp(BitOps::Bit(n,src)) => format!("BIT {}, {}",n,src.real(gb)),
+            BitOp(Bit(n, src)) => format!("BIT {}, {}", n, src.get_value(&gb.cpu)),
         }
     }
 }
@@ -752,24 +752,24 @@ fn make_op_table() -> OpTable {
 
 
 
-    op_table.add(Op { code:0x03, len: 1, cycles: 8, typ: OpType::Inc(DstR16(BC))  });
-    op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: OpType::Inc(DstR16(DE))  });
-    op_table.add(Op { code:0x23, len: 1, cycles: 8, typ: OpType::Inc(DstR16(HL))  });
-    op_table.add(Op { code:0x33, len: 1, cycles: 8, typ: OpType::Inc(DstR16(SP))  });
+    op_table.add(Op { code:0x03, len: 1, cycles: 8, typ: Inc16(BC)  });
+    op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: Inc16(DE)  });
+    op_table.add(Op { code:0x23, len: 1, cycles: 8, typ: Inc16(HL)  });
+    op_table.add(Op { code:0x33, len: 1, cycles: 8, typ: Inc16(SP)  });
 
-    op_table.add(Op { code:0x0B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(BC))  });
-    op_table.add(Op { code:0x1B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(DE))  });
-    op_table.add(Op { code:0x2B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(HL))  });
-    op_table.add(Op { code:0x3B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(SP))  });
+    op_table.add(Op { code:0x0B, len: 1, cycles: 8, typ: Dec16(BC)  });
+    op_table.add(Op { code:0x1B, len: 1, cycles: 8, typ: Dec16(DE)  });
+    op_table.add(Op { code:0x2B, len: 1, cycles: 8, typ: Dec16(HL)  });
+    op_table.add(Op { code:0x3B, len: 1, cycles: 8, typ: Dec16(SP)  });
 
-    op_table.add(Op { code:0x04, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(B))   });
-    op_table.add(Op { code:0x05, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(B))   });
-    op_table.add(Op { code:0x0C, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(C))   });
-    op_table.add(Op { code:0x0D, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(C))   });
-    op_table.add(Op { code:0x14, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(D))   });
-    op_table.add(Op { code:0x15, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(D))   });
-    op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(E))   });
-    op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(E))   });
+    op_table.add(Op { code:0x04, len: 1, cycles: 4, typ: Inc8(B)   });
+    op_table.add(Op { code:0x05, len: 1, cycles: 4, typ: Dec8(B)   });
+    op_table.add(Op { code:0x0C, len: 1, cycles: 4, typ: Inc8(C)   });
+    op_table.add(Op { code:0x0D, len: 1, cycles: 4, typ: Dec8(C)   });
+    op_table.add(Op { code:0x14, len: 1, cycles: 4, typ: Inc8(D)   });
+    op_table.add(Op { code:0x15, len: 1, cycles: 4, typ: Dec8(D)   });
+    op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: Inc8(E)   });
+    op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: Dec8(E)   });
 
 
     op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(C)) });
@@ -782,13 +782,15 @@ fn make_op_table() -> OpTable {
     op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Carry(),   Im8())) });
     op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
+    op_table.add(Op{ code: 0xCB44, len: 2, cycles: 8,  typ: BitOp(Bit(0, H))  });
+    op_table.add(Op{ code: 0xCB4C, len: 2, cycles: 8,  typ: BitOp(Bit(1, H))  });
+    op_table.add(Op{ code: 0xCB54, len: 2, cycles: 8,  typ: BitOp(Bit(2, H))  });
+    op_table.add(Op{ code: 0xCB5C, len: 2, cycles: 8,  typ: BitOp(Bit(3, H))  });
+    op_table.add(Op{ code: 0xCB64, len: 2, cycles: 8,  typ: BitOp(Bit(4, H))  });
+    op_table.add(Op{ code: 0xCB6C, len: 2, cycles: 8,  typ: BitOp(Bit(5, H))  });
+    op_table.add(Op{ code: 0xCB74, len: 2, cycles: 8,  typ: BitOp(Bit(6, H))  });
+    op_table.add(Op{ code: 0xCB7C, len: 2, cycles: 8,  typ: BitOp(Bit(7, H))  });
 
-    op_table.add(Op{
-        code: 0xCB7C,
-        len: 2,
-        cycles: 8,
-        typ: OpType::BitOp(BitOps::Bit(7,Src8::SrcR8(H)))
-    });
     op_table
 }
 
