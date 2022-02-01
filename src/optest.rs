@@ -382,9 +382,7 @@ fn named_addr(addr: u16, gb: &GBState) -> String {
 impl Op {
     pub(crate) fn execute(&self, gb:&mut GBState) {
         match &self.typ {
-            OpType::Noop() => {
-                gb.cpu.inc_pc();
-            }
+            OpType::Noop() => gb.cpu.inc_pc(),
             Jump(typ) => {
                 match typ {
                     Absolute(src) => {
@@ -400,7 +398,9 @@ impl Op {
                             gb.cpu.set_pc(addr);
                         }
                     }
-                    Relative(_) => {}
+                    Relative(n) => {
+                        todo!("Jump Relative not impelmented")
+                    }
                 }
             }
             Load16(dst,src) => {
@@ -454,17 +454,6 @@ impl Op {
 
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            // OpType::Xor(dst, src) => {
-            //     let b = src.get_value(gb);
-            //     let a = dst.get_value(gb);
-            //     let res = a ^ b;
-            //     gb.cpu.r.zero_flag = res == 0;
-            //     gb.cpu.r.subtract_n_flag = false;
-            //     gb.cpu.r.half_flag = false;
-            //     gb.cpu.r.carry_flag = false;
-            //     dst.set_value(gb,res);
-            //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-            // }
             Inc16(dst) => {
                 let v1 = dst.get_value(gb);
                 let v2 = v1.wrapping_add(1);
@@ -496,27 +485,6 @@ impl Op {
                 gb.cpu.r.subtract_n_flag = true;
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            // OpType::Or(dst, src) => {
-            //     let b = src.get_value(gb);
-            //     let a = dst.get_value(gb);
-            //     let res = a | b;
-            //     gb.cpu.r.zero_flag = res == 0;
-            //     gb.cpu.r.subtract_n_flag = false;
-            //     gb.cpu.r.half_flag = false;
-            //     gb.cpu.r.carry_flag = false;
-            //     dst.set_value(gb,res);
-            //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-            // }
-            // OpType::And(dst, src) => {
-            //     let res = dst.get_value(gb) & src.get_value(gb);
-            //     // println!("result is {}",res);
-            //     gb.cpu.r.zero_flag = res == 0;
-            //     gb.cpu.r.subtract_n_flag = false;
-            //     gb.cpu.r.half_flag = true;
-            //     gb.cpu.r.carry_flag = false;
-            //     dst.set_value(gb,res);
-            //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-            // }
             Math(binop, dst,src) => {
                 let b = src.get_value(gb);
                 let a = dst.get_value(gb);
@@ -655,13 +623,10 @@ impl Op {
             OpType::Load8(dst,src) => format!("LD {}, {}", dst.name(), src.name()),
             OpType::DisableInterrupts() => "DI".to_string(),
             OpType::Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
-            // OpType::Xor(dst, src) => format!("XOR {},{}",dst.name(),src.name()),
             Inc16(dst,) => format!("INC {}", dst.name()),
             Dec16(dst,) => format!("DEC {}", dst.name()),
             Inc8(dst) => format!("INC {}",dst.name()),
             Dec8(dst) => format!("DEC {}",dst.name()),
-            // OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
-            // OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.name(),src.name()),
             BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.name()),
             BitOp(RES(n, src)) => format!("RES {}, {}", n, src.name()),
@@ -690,21 +655,18 @@ impl Op {
             Load16(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
             OpType::DisableInterrupts() => format!("DI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
-            // OpType::Xor(dst, src) => format!("XOR {}, {}",dst.real(gb),src.real(gb)),
             Inc16(dst) => format!("INC {}", dst.get_value(gb)),
             Dec16(dst) => format!("DEC {}", dst.get_value(gb)),
             Inc8(dst) => format!("INC {}",dst.get_value(gb)),
             Dec8(dst) => format!("DEC {}",dst.get_value(gb)),
-            // OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
-            // OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.real(gb),src.real(gb)),
             BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.get_value(gb)),
             BitOp(RES(n, src)) => format!("RES {}, {}", n, src.get_value(gb)),
             BitOp(SET(n, src)) => format!("SET {}, {}", n, src.get_value(gb)),
             BitOp(RLC(src)) => format!("RLC {}", src.get_value(gb)),
             BitOp(RRC(src)) => format!("RRC {}", src.get_value(gb)),
-            BitOp(RL(src)) => format!("RL {}", src.get_value(gb)),
-            BitOp(RR(src)) => format!("RR {}", src.get_value(gb)),
+            BitOp(RL(src))  => format!("RL {}", src.get_value(gb)),
+            BitOp(RR(src))  => format!("RR {}", src.get_value(gb)),
             BitOp(SLA(src)) => format!("SLA  {}", src.get_value(gb)),
             BitOp(SRA(src)) => format!("SRA  {}", src.get_value(gb)),
             BitOp(SRL(src)) => format!("SRL  {}", src.get_value(gb)),
