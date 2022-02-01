@@ -15,6 +15,7 @@ use crate::common::{get_bit_as_bool, set_bit};
 use crate::mmu::{BGP, LCDC_LCDCONTROL, NR52_SOUND};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
+use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{Relative, RelativeCond};
 use crate::optest::OpType::Load8;
@@ -47,14 +48,14 @@ enum BitOps {
     BIT(u8, R8),
     RES(u8, R8),
     SET(u8, R8),
-    // RLC(R8),
-    // RRC(R8),
-    // RL(R8),
-    // RR(R8),
-    // SLA(R8),
-    // SRA(R8),
-    // SWAP(R8),
-    // SRL(R8),
+    RLC(R8),
+    RRC(R8),
+    RL(R8),
+    RR(R8),
+    SLA(R8),
+    SRA(R8),
+    SRL(R8),
+    SWAP(R8),
 }
 
 #[derive(Debug)]
@@ -549,14 +550,92 @@ impl Op {
                         let val2 = set_bit(val,*n,true);
                         r8.set_value(gb,val2);
                     }
-                    // BitOps::RLC(_) => {}
-                    // BitOps::RRC(_) => {}
-                    // BitOps::RL(_) => {}
-                    // BitOps::RR(_) => {}
-                    // BitOps::SLA(_) => {}
-                    // BitOps::SRA(_) => {}
-                    // BitOps::SWAP(_) => {}
-                    // BitOps::SRL(_) => {}
+                    BitOps::RLC(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x80 == 0x80;
+                        let r = (a << 1) | if c { 1 } else { 0 };
+                        r8.set_value(gb,r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                        // set_sr_flags(cpu, r,c);
+                    }
+                    BitOps::RRC(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x01 == 0x01;
+                        let r = (a >> 1) | (if c {0x80} else { 0x00 });
+                        r8.set_value(gb,r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                        // set_sr_flags(cpu,r,c);
+                    }
+                    BitOps::RL(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x80 == 0x80;
+                        let r = (a << 1) | (if gb.cpu.r.carry_flag { 1 } else { 0 });
+                        r8.set_value(gb,r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                        // set_sr_flags(cpu,r,c);
+                    }
+                    BitOps::RR(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x01 == 0x01;
+                        let r = (a >> 1) | (if gb.cpu.r.carry_flag { 0x80 } else { 0x00 });
+                        r8.set_value(gb,r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                        // set_sr_flags(cpu, r, c);
+                    }
+                    BitOps::SLA(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x80 == 0x80;
+                        let r = a << 1;
+                        r8.set_value(gb,r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                        // set_sr_flags(cpu,r,c);
+                    }
+                    BitOps::SRA(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x01 == 0x01;
+                        let r = (a >> 1) | (a &0x80);
+                        r8.set_value(gb,r);
+                        // set_sr_flags(cpu,r,c);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                    }
+                    BitOps::SRL(r8) => {
+                        let a = r8.get_value(gb);
+                        let c = a & 0x01 == 0x01;
+                        let r = a >> 1;
+                        r8.set_value(gb,r);
+                        // set_sr_flags(cpu,r,c);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                    }
+                    BitOps::SWAP(r8) => {
+                        let a = r8.get_value(gb);
+                        let r = ((a & 0x0f) << 4) | ((a & 0xf0) >> 4);
+                        r8.set_value(gb, r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = false;
+                    }
                 }
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
@@ -587,6 +666,14 @@ impl Op {
             BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.name()),
             BitOp(RES(n, src)) => format!("RES {}, {}", n, src.name()),
             BitOp(SET(n, src)) => format!("SET {}, {}", n, src.name()),
+            BitOp(RL(src)) => format!("RL {}", src.name()),
+            BitOp(RLC(src)) => format!("RLC {}", src.name()),
+            BitOp(RRC(src)) => format!("RLC {}", src.name()),
+            BitOp(RR(src)) => format!("RLC {}", src.name()),
+            BitOp(SLA(src)) => format!("RLC {}", src.name()),
+            BitOp(SRA(src)) => format!("RLC {}", src.name()),
+            BitOp(SRL(src)) => format!("RLC {}", src.name()),
+            BitOp(SWAP(src)) => format!("RLC {}", src.name()),
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -614,6 +701,14 @@ impl Op {
             BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.get_value(gb)),
             BitOp(RES(n, src)) => format!("RES {}, {}", n, src.get_value(gb)),
             BitOp(SET(n, src)) => format!("SET {}, {}", n, src.get_value(gb)),
+            BitOp(RLC(src)) => format!("RLC {}", src.get_value(gb)),
+            BitOp(RRC(src)) => format!("RRC {}", src.get_value(gb)),
+            BitOp(RL(src)) => format!("RL {}", src.get_value(gb)),
+            BitOp(RR(src)) => format!("RR {}", src.get_value(gb)),
+            BitOp(SLA(src)) => format!("SLA  {}", src.get_value(gb)),
+            BitOp(SRA(src)) => format!("SRA  {}", src.get_value(gb)),
+            BitOp(SRL(src)) => format!("SRL  {}", src.get_value(gb)),
+            BitOp(SWAP(src)) => format!("SWAP {}",src.get_value(gb)),
         }
     }
 }
@@ -823,22 +918,22 @@ fn make_op_table() -> OpTable {
     let r8list = [B,C,D,E,H,L];
     for (i, r8) in r8list.iter().enumerate() {
         let col = (i as u16);
-        // op_table.add(Op{code: 0xCB_00 + col, len:2, cycles:8, typ:  BitOp(BitOps::RLC(*r8)) });
-        // op_table.add(Op{code: 0xCB_08 + col, len:2, cycles:8, typ:  BitOp(BitOps::RRC(*r8)) });
-        // op_table.add(Op{code: 0xCB_10 + col, len:2, cycles:8, typ:  BitOp(BitOps::RL(*r8)) });
-        // op_table.add(Op{code: 0xCB_18 + col, len:2, cycles:8, typ:  BitOp(BitOps::RR(*r8)) });
-        // op_table.add(Op{code: 0xCB_20 + col, len:2, cycles:8, typ:  BitOp(BitOps::SLA(*r8)) });
-        // op_table.add(Op{code: 0xCB_28 + col, len:2, cycles:8, typ:  BitOp(BitOps::SRA(*r8)) });
-        // op_table.add(Op{code: 0xCB_30 + col, len:2, cycles:8, typ:  BitOp(BitOps::SWAP(*r8)) });
-        // op_table.add(Op{code: 0xCB_38 + col, len:2, cycles:8, typ:  BitOp(BitOps::SRL(*r8)) });
-        // op_table.add(Op{code: 0xCB_40 + col, len:2, cycles:8, typ:  BitOp(BitOps::Bit(0, *r8)) });
-        op_table.bitop(0xCB_48 + col, BIT(1,*r8));
-        op_table.bitop(0xCB_50 + col, BIT(2,*r8));
-        op_table.bitop(0xCB_58 + col, BIT(3,*r8));
-        op_table.bitop(0xCB_60 + col, BIT(4,*r8));
-        op_table.bitop(0xCB_68 + col, BIT(5,*r8));
-        op_table.bitop(0xCB_70 + col, BIT(6,*r8));
-        op_table.bitop(0xCB_78 + col, BIT(7,*r8));
+        op_table.bitop(0xCB_00 + col,RLC(*r8));
+        op_table.bitop(0xCB_08 + col,RRC(*r8));
+        op_table.bitop(0xCB_10 + col,RL(*r8));
+        op_table.bitop(0xCB_18 + col,RR(*r8));
+        op_table.bitop(0xCB_20 + col,SLA(*r8));
+        op_table.bitop(0xCB_28 + col,SRA(*r8));
+        op_table.bitop(0xCB_30 + col,SWAP(*r8));
+        op_table.bitop(0xCB_38 + col,SRL(*r8));
+        op_table.bitop(0xCB_40 + col,BIT(0,*r8));
+        op_table.bitop(0xCB_48 + col,BIT(1,*r8));
+        op_table.bitop(0xCB_50 + col,BIT(2,*r8));
+        op_table.bitop(0xCB_58 + col,BIT(3,*r8));
+        op_table.bitop(0xCB_60 + col,BIT(4,*r8));
+        op_table.bitop(0xCB_68 + col,BIT(5,*r8));
+        op_table.bitop(0xCB_70 + col,BIT(6,*r8));
+        op_table.bitop(0xCB_78 + col,BIT(7,*r8));
 
         op_table.bitop(0xCB_80 + col,RES(0, *r8));
         op_table.bitop(0xCB_88 + col,RES(1, *r8));
