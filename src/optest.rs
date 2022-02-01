@@ -782,14 +782,22 @@ fn make_op_table() -> OpTable {
     op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Carry(),   Im8())) });
     op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
-    op_table.add(Op{ code: 0xCB44, len: 2, cycles: 8,  typ: BitOp(Bit(0, H))  });
-    op_table.add(Op{ code: 0xCB4C, len: 2, cycles: 8,  typ: BitOp(Bit(1, H))  });
-    op_table.add(Op{ code: 0xCB54, len: 2, cycles: 8,  typ: BitOp(Bit(2, H))  });
-    op_table.add(Op{ code: 0xCB5C, len: 2, cycles: 8,  typ: BitOp(Bit(3, H))  });
-    op_table.add(Op{ code: 0xCB64, len: 2, cycles: 8,  typ: BitOp(Bit(4, H))  });
-    op_table.add(Op{ code: 0xCB6C, len: 2, cycles: 8,  typ: BitOp(Bit(5, H))  });
-    op_table.add(Op{ code: 0xCB74, len: 2, cycles: 8,  typ: BitOp(Bit(6, H))  });
-    op_table.add(Op{ code: 0xCB7C, len: 2, cycles: 8,  typ: BitOp(Bit(7, H))  });
+    for n in 0..4 {
+        op_table.add(Op{code: 0xCB_44 + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, H)) });
+        op_table.add(Op{code: 0xCB_4C + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, H)) });
+    }
+    for n in 0..4 {
+        op_table.add(Op{code: 0xCB_45 + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, L)) });
+        op_table.add(Op{code: 0xCB_4D + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, L)) });
+    }
+    // op_table.add(Op{ code: 0xCB44, len: 2, cycles: 8,  typ: BitOp(Bit(0, H))  });
+    // op_table.add(Op{ code: 0xCB4C, len: 2, cycles: 8,  typ: BitOp(Bit(1, H))  });
+    // op_table.add(Op{ code: 0xCB54, len: 2, cycles: 8,  typ: BitOp(Bit(2, H))  });
+    // op_table.add(Op{ code: 0xCB5C, len: 2, cycles: 8,  typ: BitOp(Bit(3, H))  });
+    // op_table.add(Op{ code: 0xCB64, len: 2, cycles: 8,  typ: BitOp(Bit(4, H))  });
+    // op_table.add(Op{ code: 0xCB6C, len: 2, cycles: 8,  typ: BitOp(Bit(5, H))  });
+    // op_table.add(Op{ code: 0xCB74, len: 2, cycles: 8,  typ: BitOp(Bit(6, H))  });
+    // op_table.add(Op{ code: 0xCB7C, len: 2, cycles: 8,  typ: BitOp(Bit(7, H))  });
 
     op_table
 }
