@@ -12,6 +12,7 @@ use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::Dst8::DstR8;
 use crate::optest::Extra::Nothing;
+use crate::optest::JumpType::{Relative, RelativeCond};
 use crate::optest::OpType::Load8;
 use crate::optest::R8::{A, B, C, D, E, H, L};
 use crate::optest::R16::{BC, DE, HL, SP};
@@ -55,7 +56,6 @@ struct Op {
     len:u16,
     cycles:u16,
     typ:OpType,
-    extra: Extra,
 }
 
 
@@ -466,19 +466,12 @@ impl Op {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => {
                 match typ {
-                    JumpType::Absolute(src) => {
-                        "XXXX".to_string()
-                    }
-                    JumpType::RelativeCond(cond, src) => {
-                        // format!("JP {}",src.real(gb))
-                        format!("JR {}, {}", cond.real(gb), src.real(gb))
-                    }
-                    JumpType::Relative(src) => {
-                        format!("JR +/-{}", src.real(gb))
-                    }
+                    JumpType::Absolute(src) =>  "XXXX".to_string(),
+                    JumpType::RelativeCond(cond, src) =>  format!("JR {}, {}", cond.real(gb), src.real(gb)),
+                    JumpType::Relative(src) => format!("JR +/-{}", src.real(gb)),
                 }
             },
-            OpType::Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
+            Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
             Load16(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
             OpType::DisableInterrupts() => format!("DI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
@@ -528,6 +521,9 @@ impl OpTable {
         }
         self.ops.insert(code,op);
     }
+    fn add(&mut self, op:Op) {
+        self.insert(op.code,op);
+    }
     fn load8(&mut self, code: u16, dst: Dst8, src: Src8) {
         let (mut len, cycles) = match src {
             SrcR8(_) => (1, 4),
@@ -541,13 +537,13 @@ impl OpTable {
             println!("hi mem. add one more");
             len += 1;
         };
-        self.insert(code, Op { code, len, cycles,  typ:OpType::Load8(dst, src), extra:Extra::Nothing});
+        self.insert(code, Op { code, len, cycles,  typ:OpType::Load8(dst, src)});
     }
     fn load16(&mut self, code: u16, dst: Dst16, src: Src16) {
         let (len, cycles) = match src {
             Im16() => (3,12)
         };
-        self.insert(code, Op { code:code, len:len, cycles:cycles, typ: Load16(dst, src), extra:Extra::Nothing});
+        self.insert(code, Op { code:code, len:len, cycles:cycles, typ: Load16(dst, src), });
     }
     fn lookup(&self, code: &u16) -> Option<&Op> {
         self.ops.get(code)
@@ -557,10 +553,8 @@ impl OpTable {
 
 fn make_op_table() -> OpTable {
     let mut op_table = OpTable::new();//:HashMap<u16,Op> = HashMap::new();
-    op_table.insert(0x00, Op { code:0x00, len:1, cycles:4,  typ:OpType::Noop(), extra:Extra::Nothing });
-    op_table.insert(0xC3, Op { code:0xC3, len:3, cycles:12,
-        typ: Jump(JumpType::Absolute(AddrSrc::Imu16()) ) ,
-        extra:Extra::Nothing});
+    op_table.add(Op { code:0x00, len:1, cycles:4,  typ:OpType::Noop() });
+    op_table.add( Op { code:0xC3, len:3, cycles:12, typ: Jump(JumpType::Absolute(AddrSrc::Imu16()) )  });
 
     op_table.load8( 0x78, DstR8(A), SrcR8(B));
     op_table.load8( 0x40, DstR8(B), SrcR8(B));
@@ -593,10 +587,7 @@ fn make_op_table() -> OpTable {
 
 
 
-    op_table.insert(0xF3, Op { code:0xF3, len: 1, cycles:4,
-        typ:OpType::DisableInterrupts(),
-        extra:Extra::Nothing,
-    });
+    op_table.add(Op { code:0xF3, len: 1, cycles:4, typ:OpType::DisableInterrupts(), });
 
     // 0xF0 => Some(LoadInstr(Load_HI_R_U8(A))),
     op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
@@ -607,99 +598,29 @@ fn make_op_table() -> OpTable {
         len: 2,
         cycles: 8,
         typ: OpType::Compare(DstR8(A),Src8::Im8()),
-        extra: Extra::Nothing
+
     });
 
-    //        0x38 => Some(JumpInstr(Relative_cond_carry_i8())), //2 bytes, if carry, relative signed
-    op_table.insert(0x38, Op{
-        code: 0x38,
-        len: 2,
-        cycles: 8,
-        typ: OpType::Jump(JumpType::RelativeCond(Cond::Carry(), Src8::Im8())),
-        extra: Extra::Nothing
-    });
 
-    //        0xFA => Some(LoadInstr(Load_A_addr_u16())),
     op_table.load8(0xFA, DstR8(A),Src8::MemIm16());
-
-    // xAF => XOR A, A
-    op_table.insert(0xAF, Op {
-        code: 0xAF,
-        len: 1,
-        cycles: 4,
-        typ: OpType::Xor(DstR8(A),SrcR8(A)),
-        extra: Extra::Nothing
-    });
-
-    // 0xE0 => Some(LoadInstr(Load_HI_U8_R(A))),
     op_table.load8(0xE0, Dst8::HiMemIm8(), SrcR8(A));
-
-    //        0x1a => Some(LoadInstr(Load_R_addr_R2(A, DE))),
     op_table.load8(0x1A,DstR8(A), Src8::Mem(DE));
-    op_table.insert(0x2A, Op { code:0x2A, len:1, cycles:8,
-        typ:Load8(DstR8(A), Src8::MemWithInc(HL) ), extra:Nothing,
-    });
-    op_table.insert(0x22, Op { code:0x22, len:1, cycles:8,
-        typ:Load8(Dst8::MemWithInc(HL), Src8::SrcR8(A)),
-        extra:Extra::Inc(HL),
-    });
-
-
-    //        0x13 => Some(MathInst(Inc_rr(DE))),
-    op_table.insert(0x13, Op {
-        code:0x13,
-        len: 1,
-        cycles: 8,
-        typ: OpType::Inc(DstR16(DE)),
-        extra: Extra::Nothing
-    });
-    //        0x0B => Some(MathInst(Dec_rr(BC))),
-    op_table.insert(0x0B, Op {
-        code:0x0B,
-        len: 1,
-        cycles: 8,
-        typ: OpType::Dec(DstR16(BC)),
-        extra: Extra::Nothing
-    });
-    //        0xB1 => Some(MathInst(OR_A_r(C))),
-    op_table.insert(0xB1, Op {
-        code:0xB1,
-        len: 1,
-        cycles: 4,
-        typ: OpType::Or(Dst8::DstR8(A),Src8::SrcR8(C)),
-        extra: Extra::Nothing
-    });
-    //        0x20 => Some(JumpInstr(Relative_cond_notzero_i8())),
-    op_table.insert(0x20,Op {
-        code: 0x20,
-        len: 2,
-        cycles: 12,
-        typ: Jump(JumpType::RelativeCond(Cond::NotZero(),Src8::Im8())),
-        extra: Extra::Nothing
-    });
-    //        0xA7 => Some(MathInst(AND_A_r(A))),
-    op_table.insert(0xA7, Op {
-        code:0xA7,
-        len: 1,
-        cycles: 4,
-        typ: OpType::And(Dst8::DstR8(A),Src8::SrcR8(C)),
-        extra: Extra::Nothing
-    });
-
-
-    // 0x3E => Some(LoadInstr(Load_R_u8(A))),
     op_table.load8(0x3E,Dst8::DstR8(A),Src8::Im8());
+    op_table.insert(0x2A, Op { code:0x2A, len:1, cycles:8, typ:Load8(DstR8(A), Src8::MemWithInc(HL) ), });
+    op_table.insert(0x22, Op { code:0x22, len:1, cycles:8, typ:Load8(Dst8::MemWithInc(HL), Src8::SrcR8(A)), });
 
-    op_table.insert(0x18, Op {
-        code: 0x18,
-        len: 2,
-        cycles: 12,
-        typ: OpType::Jump(JumpType::Relative(Src8::Im8())),
-        extra: Extra::Nothing
-    });
 
-    // try to get through the memory setup routine that is copying everything to 9000
-    // aka: Tile Data Block 2 filled. probably somewhere around 40,000 cycles?
+    op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: OpType::Inc(DstR16(DE)) });
+    op_table.add(Op { code:0x0B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(BC))   });
+    op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: OpType::Or(Dst8::DstR8(A),Src8::SrcR8(C))  });
+    op_table.add(Op { code:0xA7, len: 1, cycles: 4, typ: OpType::And(Dst8::DstR8(A),Src8::SrcR8(C)) });
+    op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: OpType::Xor(DstR8(A),SrcR8(A))             });
+
+    op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(Cond::NotZero(),Src8::Im8()))    });
+    op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Cond::Carry(), Src8::Im8())), });
+    op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Src8::Im8()))                      });
+
+
     op_table
 }
 
