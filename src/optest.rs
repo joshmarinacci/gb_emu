@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::format;
+use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{And, Or, Xor};
 use Cond::{Carry, NotCarry, NotZero, Zero};
@@ -10,6 +11,7 @@ use OpType::{Jump, Load16, Math};
 use Src16::Im16;
 // use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
+use crate::common::get_bit_as_bool;
 use crate::mmu::{BGP, LCDC_LCDCONTROL, NR52_SOUND};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
@@ -25,11 +27,11 @@ pub enum R8  { A, B, C, D, E, H, L,}
 #[derive(Debug)]
 pub enum R16 { BC, HL, DE, SP,}
 #[derive(Debug)]
-pub enum Src8  {  SrcR8(R8), Mem(R16), MemWithInc(R16), Im8(), HiMemIm8(), MemIm16() }
+pub enum Src8  {  SrcR8(R8), Mem(R16), MemWithInc(R16), MemWithDec(R16), Im8(), HiMemIm8(), MemIm16() }
 #[derive(Debug)]
 pub enum Src16 {  Im16(),   }
 #[derive(Debug)]
-pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16(), MemWithInc(R16)  }
+pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16(), MemWithInc(R16), MemWithDec(R16)  }
 #[derive(Debug)]
 pub enum Dst16 {  DstR16(R16), }
 
@@ -38,6 +40,11 @@ enum BinOp {
     Or,
     Xor,
     And,
+}
+
+#[derive(Debug)]
+enum BitOps {
+    Bit(u8, Src8)
 }
 
 #[derive(Debug)]
@@ -54,6 +61,7 @@ enum OpType {
     And(Dst8, Src8),
     Inc(Dst16),
     Dec(Dst16),
+    BitOp(BitOps),
 }
 
 
@@ -249,6 +257,7 @@ impl Src8 {
             Src8::HiMemIm8() => "($FF00+n)".to_string(),
             Src8::MemIm16() => "(nn)".to_string(),
             Src8::MemWithInc(r2) => format!("({}+)",r2.name()),
+            Src8::MemWithDec(r2) => format!("({}-)",r2.name()),
         }
     }
     fn get_value(&self, gb:&GBState) -> u8 {
@@ -259,6 +268,7 @@ impl Src8 {
                 gb.mmu.read8(r2.get_value(&gb.cpu))
             },
             Src8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
+            Src8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
             Im8() => gb.mmu.read8(gb.cpu.get_pc()+1),
             Src8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
@@ -282,6 +292,7 @@ impl Dst8 {
             Dst8::MemIm16() => "(nn)".to_string(),
             Dst8::HiMemIm8() => "($FF00+n)".to_string(),
             Dst8::MemWithInc(r16) => format!("({}+)", r16.name()).to_string(),
+            Dst8::MemWithDec(r16) => format!("({}-)", r16.name()).to_string(),
         }
     }
     fn set_value(&self,gb:&mut GBState, val:u8) {
@@ -293,9 +304,8 @@ impl Dst8 {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.write8(0xFF00 + im as u16,val)
             }
-            Dst8::MemWithInc(r16) => {
-                gb.mmu.write8(r16.get_value(&gb.cpu),val)
-            }
+            Dst8::MemWithInc(r16) => gb.mmu.write8(r16.get_value(&gb.cpu),val),
+            Dst8::MemWithDec(r16) => gb.mmu.write8(r16.get_value(&gb.cpu),val),
         }
     }
     fn get_value(&self, gb:&GBState) -> u8 {
@@ -312,7 +322,8 @@ impl Dst8 {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.read8(0xFF00 + im as u16)
             }
-            Dst8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu))
+            Dst8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
+            Dst8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
         }
     }
     fn real(&self, gb: &GBState) -> String {
@@ -329,6 +340,7 @@ impl Dst8 {
                 named_addr(addr,gb)
             }
             Dst8::MemWithInc(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(&gb.cpu))),
+            Dst8::MemWithDec(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(&gb.cpu))),
         }
     }
 }
@@ -380,9 +392,19 @@ impl Op {
                     let (v2,b) = v.overflowing_add(1);
                     r2.set_value(&mut gb.cpu,v2);
                 }
+                if let Src8::MemWithDec(r2) = src {
+                    let v = r2.get_value(&gb.cpu);
+                    let (v2,b) = v.overflowing_sub(1);
+                    r2.set_value(&mut gb.cpu,v2);
+                }
                 if let Dst8::MemWithInc(r2) = dst {
                     let v = r2.get_value(&gb.cpu);
                     let (v2,b) = v.overflowing_add(1);
+                    r2.set_value(&mut gb.cpu,v2);
+                }
+                if let Dst8::MemWithDec(r2) = dst {
+                    let v = r2.get_value(&gb.cpu);
+                    let (v2,b) = v.overflowing_sub(1);
                     r2.set_value(&mut gb.cpu,v2);
                 }
                 // println!("Len is {}",self.len);
@@ -467,6 +489,13 @@ impl Op {
                 dst.set_value(gb,res);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
+            OpType::BitOp(BitOps::Bit(n, src)) => {
+                let val = src.get_value(gb);
+                gb.cpu.r.zero_flag = !get_bit_as_bool(val, *n);
+                gb.cpu.r.subtract_n_flag = false;
+                gb.cpu.r.half_flag = true;
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
         }
     }
     pub(crate) fn to_asm(&self) -> String {
@@ -489,6 +518,7 @@ impl Op {
             OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
             OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.name(),src.name()),
+            OpType::BitOp(BitOps::Bit(n,src)) => format!("BIT {}, {}",n,src.name()),
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -511,6 +541,7 @@ impl Op {
             OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
             OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.real(gb),src.real(gb)),
+            OpType::BitOp(BitOps::Bit(n,src)) => format!("BIT {}, {}",n,src.real(gb)),
         }
     }
 }
@@ -563,6 +594,7 @@ impl OpTable {
             Src8::HiMemIm8() => (2,12),
             Src8::MemIm16() => (3,16),
             Src8::MemWithInc(_) => (1,8),
+            Src8::MemWithDec(_) => (1,8),
         };
         if let Dst8::HiMemIm8() = dst {
             println!("hi mem. add one more");
@@ -666,8 +698,9 @@ fn make_op_table() -> OpTable {
     op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
     op_table.load8(0x3E,DstR8(A), Im8());
     op_table.load8(0x2A,DstR8(A), Src8::MemWithInc(HL));
+    op_table.load8(0x3A,DstR8(A), Src8::MemWithDec(HL));
     op_table.load8(0x22,Dst8::MemWithInc(HL), SrcR8(A));
-
+    op_table.load8(0x32,Dst8::MemWithDec(HL), SrcR8(A));
 
 
     op_table.add(Op { code:0xF3, len: 1, cycles:4, typ:OpType::DisableInterrupts(), });
@@ -693,6 +726,13 @@ fn make_op_table() -> OpTable {
     op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Carry(),   Im8())) });
     op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
+
+    op_table.add(Op{
+        code: 0xCB7C,
+        len: 2,
+        cycles: 8,
+        typ: OpType::BitOp(BitOps::Bit(7,Src8::SrcR8(H)))
+    });
     op_table
 }
 
@@ -812,5 +852,85 @@ fn test_hellogithub() {
     }
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
     assert_eq!(gb.cpu.get_pc(),0x35)
+    // assert_eq!(gb.count>=goal,true);
+}
+
+
+#[test]
+fn test_bootrom() {
+    let op_table = make_op_table();
+    let pth = Path::new("./resources/testroms/dmg_boot.bin");
+    let data:Vec<u8> = fs::read(pth).unwrap();
+
+    let mut gb = GBState {
+        cpu: Z80::init(),
+        mmu: MMU::init(&data),
+        clock: 0,
+        count: 0,
+    };
+
+    let goal = 40_000;
+    gb.cpu.set_pc(0);
+
+    let mut debug = false;
+    loop {
+        // println!("HL is {:04x}",gb.cpu.r.get_hl());
+        if gb.cpu.get_pc() >= 0x00_0c {
+            println!("reached 0c");
+            // break;
+            debug = true;
+        }
+        if gb.count > 35_000 { debug = true;  }
+        // if gb.cpu.r.h < 0x9a {
+        //     debug = true;
+        // }
+        if debug {
+            println!("==========");
+            println!("PC {:04x}    clock = {}   count = {}", gb.cpu.get_pc(), gb.clock, gb.count);
+        }
+        let opcode = fetch_opcode_from_memory(&gb);
+        if let None = op_table.lookup(&opcode) {
+            println!("failed to lookup op for code {:04x}",opcode);
+            break;
+        }
+        let op = op_table.lookup(&opcode).unwrap();
+        if debug {
+            println!("PC {:04x} {:04x}  =  {}      ({},{})", gb.cpu.get_pc(), op.code, op.to_asm(), op.len, op.cycles);
+            println!("                 {}", op.real(&gb));
+        }
+        let prev_pc = gb.cpu.get_pc();
+        op.execute(&mut gb);
+        if debug {
+            println!("after A:{:02x} B:{:02x} C:{:02x}  H:{:02x}    BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
+                     gb.cpu.r.a,
+                     gb.cpu.r.b,
+                     gb.cpu.r.c,
+                     gb.cpu.r.h,
+                     gb.cpu.r.get_bc(),
+                     gb.cpu.r.get_de(),
+                     gb.cpu.r.get_hl(),
+                     gb.cpu.r.zero_flag,
+                     gb.cpu.r.carry_flag,
+            );
+        }
+        if gb.cpu.get_pc() == prev_pc {
+            panic!("stuck in an infinite loop");
+            break;
+        }
+        gb.clock += (op.cycles as u32);
+        gb.count += 1;
+        if gb.count % 20 == 0 {
+            gb.mmu.hardware.LY+=1;
+            if gb.mmu.hardware.LY >= 154 {
+                gb.mmu.hardware.LY = 0;
+            }
+        }
+
+        if gb.count > goal {
+            break;
+        }
+    }
+    println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
+    assert_eq!(gb.cpu.get_pc(),0x0C);
     // assert_eq!(gb.count>=goal,true);
 }
