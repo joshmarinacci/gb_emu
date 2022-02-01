@@ -3,16 +3,15 @@ use std::fmt::format;
 use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{And, Or, Xor};
-use BitOps::Bit;
+use BitOps::{BIT, RES, SET};
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
 use Dst8::AddrDst;
 use JumpType::Absolute;
 use OpType::{BitOp, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
 use Src16::Im16;
-// use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
-use crate::common::get_bit_as_bool;
+use crate::common::{get_bit_as_bool, set_bit};
 use crate::mmu::{BGP, LCDC_LCDCONTROL, NR52_SOUND};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
@@ -23,7 +22,7 @@ use crate::optest::R8::{A, B, C, D, E, H, L};
 use crate::optest::R16::{BC, DE, HL, SP};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum R8  { A, B, C, D, E, H, L,}
 #[derive(Debug)]
 pub enum R16 { BC, HL, DE, SP,}
@@ -45,7 +44,17 @@ enum BinOp {
 
 #[derive(Debug)]
 enum BitOps {
-    Bit(u8, R8)
+    BIT(u8, R8),
+    RES(u8, R8),
+    SET(u8, R8),
+    // RLC(R8),
+    // RRC(R8),
+    // RL(R8),
+    // RR(R8),
+    // SLA(R8),
+    // SRA(R8),
+    // SWAP(R8),
+    // SRL(R8),
 }
 
 #[derive(Debug)]
@@ -77,26 +86,26 @@ struct Op {
 
 
 impl R8 {
-    fn get_value(&self, cpu: &Z80) -> u8 {
+    fn get_value(&self, gb: &GBState) -> u8 {
         match self {
-            R8::A => cpu.r.a,
-            R8::B => cpu.r.b,
-            R8::C => cpu.r.c,
-            R8::D => cpu.r.d,
-            R8::E => cpu.r.e,
-            R8::H => cpu.r.h,
-            R8::L => cpu.r.l,
+            R8::A => gb.cpu.r.a,
+            R8::B => gb.cpu.r.b,
+            R8::C => gb.cpu.r.c,
+            R8::D => gb.cpu.r.d,
+            R8::E => gb.cpu.r.e,
+            R8::H => gb.cpu.r.h,
+            R8::L => gb.cpu.r.l,
         }
     }
-    fn set_value(&self, cpu: &mut Z80, value:u8) {
+    fn set_value(&self, gb: &mut GBState, value:u8) {
         match self {
-            R8::A => cpu.r.set_u8reg(&RegisterName::A, value),
-            R8::B => cpu.r.set_u8reg(&RegisterName::B, value),
-            R8::C => cpu.r.set_u8reg(&RegisterName::C, value),
-            R8::D => cpu.r.set_u8reg(&RegisterName::D, value),
-            R8::E => cpu.r.set_u8reg(&RegisterName::E, value),
-            R8::H => cpu.r.set_u8reg(&RegisterName::H, value),
-            R8::L => cpu.r.set_u8reg(&RegisterName::L, value),
+            R8::A => gb.cpu.r.set_u8reg(&RegisterName::A, value),
+            R8::B => gb.cpu.r.set_u8reg(&RegisterName::B, value),
+            R8::C => gb.cpu.r.set_u8reg(&RegisterName::C, value),
+            R8::D => gb.cpu.r.set_u8reg(&RegisterName::D, value),
+            R8::E => gb.cpu.r.set_u8reg(&RegisterName::E, value),
+            R8::H => gb.cpu.r.set_u8reg(&RegisterName::H, value),
+            R8::L => gb.cpu.r.set_u8reg(&RegisterName::L, value),
         }
     }
     fn name(&self) -> &'static str{
@@ -112,20 +121,20 @@ impl R8 {
     }
 }
 impl R16 {
-    fn get_value(&self, cpu: &Z80) -> u16 {
+    fn get_value(&self, gb: &GBState) -> u16 {
         match self {
-            BC => cpu.r.get_u16reg(&DoubleRegister::BC),
-            HL => cpu.r.get_u16reg(&DoubleRegister::HL),
-            DE => cpu.r.get_u16reg(&DoubleRegister::DE),
-            SP => cpu.r.get_u16reg(&DoubleRegister::SP),
+            BC => gb.cpu.r.get_u16reg(&DoubleRegister::BC),
+            HL => gb.cpu.r.get_u16reg(&DoubleRegister::HL),
+            DE => gb.cpu.r.get_u16reg(&DoubleRegister::DE),
+            SP => gb.cpu.r.get_u16reg(&DoubleRegister::SP),
         }
     }
-    fn set_value(&self, cpu: &mut Z80, val:u16) {
+    fn set_value(&self, gb: &mut GBState, val:u16) {
         match self {
-            BC => cpu.r.set_u16reg(&DoubleRegister::BC,val),
-            HL => cpu.r.set_u16reg(&DoubleRegister::HL,val),
-            DE => cpu.r.set_u16reg(&DoubleRegister::DE,val),
-            SP => cpu.r.set_u16reg(&DoubleRegister::SP,val),
+            BC => gb.cpu.r.set_u16reg(&DoubleRegister::BC,val),
+            HL => gb.cpu.r.set_u16reg(&DoubleRegister::HL,val),
+            DE => gb.cpu.r.set_u16reg(&DoubleRegister::DE,val),
+            SP => gb.cpu.r.set_u16reg(&DoubleRegister::SP,val),
         }
     }
     fn name(&self) -> &'static str{
@@ -183,17 +192,17 @@ impl Dst16 {
     }
     fn set_value(&self, gb:&mut GBState, val:u16) {
         match self {
-            DstR16(r2) => r2.set_value(&mut gb.cpu, val)
+            DstR16(r2) => r2.set_value(gb, val)
         }
     }
     fn real(&self, gb: &GBState) -> String {
         match self {
-            DstR16(rr) => format!("{:04x}",rr.get_value(&gb.cpu)),
+            DstR16(rr) => format!("{:04x}",rr.get_value(gb)),
         }
     }
     fn get_value(&self, gb:&GBState) -> u16 {
         match self {
-            DstR16(rr) => rr.get_value(&gb.cpu),
+            DstR16(rr) => rr.get_value(gb),
         }
     }
 }
@@ -206,12 +215,12 @@ pub enum Cond {
 }
 
 impl Cond {
-    pub(crate) fn get_value(&self, cpu: &Z80) -> bool {
+    fn get_value(&self, gb: &GBState) -> bool {
         match self {
-            Carry() => cpu.r.carry_flag,
-            NotCarry() => !cpu.r.carry_flag,
-            Zero() => cpu.r.zero_flag,
-            NotZero() => !cpu.r.zero_flag,
+            Carry() => gb.cpu.r.carry_flag,
+            NotCarry() => !gb.cpu.r.carry_flag,
+            Zero() => gb.cpu.r.zero_flag,
+            NotZero() => !gb.cpu.r.zero_flag,
         }
     }
 }
@@ -265,13 +274,13 @@ impl Src8 {
     }
     fn get_value(&self, gb:&GBState) -> u8 {
         match self {
-            SrcR8(r1) => r1.get_value(&gb.cpu),
+            SrcR8(r1) => r1.get_value(gb),
             Mem(r2) => {
                 // println!("reading memory at location {:04x}",r2.get_value(&gb.cpu));
-                gb.mmu.read8(r2.get_value(&gb.cpu))
+                gb.mmu.read8(r2.get_value(gb))
             },
-            Src8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
-            Src8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
+            Src8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(gb)),
+            Src8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(gb)),
             Im8() => gb.mmu.read8(gb.cpu.get_pc()+1),
             Src8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
@@ -301,26 +310,26 @@ impl Dst8 {
     }
     fn set_value(&self,gb:&mut GBState, val:u8) {
         match self {
-            DstR8(r8) => r8.set_value(&mut gb.cpu, val),
-            AddrDst(r16) => gb.mmu.write8(r16.get_value(&gb.cpu), val),
+            DstR8(r8) => r8.set_value(gb, val),
+            AddrDst(r16) => gb.mmu.write8(r16.get_value(gb), val),
             Dst8::MemIm16() => gb.mmu.write8(gb.mmu.read16(gb.cpu.get_pc()+1),val),
             Dst8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.write8(0xFF00 + im as u16,val)
             }
             Dst8::HiMemR8(r8) => {
-                let addr = 0xFF00 + (r8.get_value(&gb.cpu) as u16);
+                let addr = 0xFF00 + (r8.get_value(gb) as u16);
                 gb.mmu.write8(addr,val)
             }
-            Dst8::MemWithInc(r16) => gb.mmu.write8(r16.get_value(&gb.cpu),val),
-            Dst8::MemWithDec(r16) => gb.mmu.write8(r16.get_value(&gb.cpu),val),
+            Dst8::MemWithInc(r16) => gb.mmu.write8(r16.get_value(gb),val),
+            Dst8::MemWithDec(r16) => gb.mmu.write8(r16.get_value(gb),val),
         }
     }
     fn get_value(&self, gb:&GBState) -> u8 {
         match self {
-            DstR8(r1) => r1.get_value(&gb.cpu),
+            DstR8(r1) => r1.get_value(gb),
             Dst8::AddrDst(r2) => {
-                gb.mmu.read8(r2.get_value(&gb.cpu))
+                gb.mmu.read8(r2.get_value(gb))
             }
             Dst8::MemIm16() => {
                 let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
@@ -331,17 +340,17 @@ impl Dst8 {
                 gb.mmu.read8(0xFF00 + im as u16)
             }
             Dst8::HiMemR8(r8) => {
-                let addr = 0xFF00 + (r8.get_value(&gb.cpu) as u16);
+                let addr = 0xFF00 + (r8.get_value(gb) as u16);
                 gb.mmu.read8(addr)
             }
-            Dst8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
-            Dst8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
+            Dst8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(gb)),
+            Dst8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(gb)),
         }
     }
     fn real(&self, gb: &GBState) -> String {
         match self {
-            DstR8(r8) =>  format!("{:02x}",r8.get_value(&gb.cpu)),
-            AddrDst(addr) => format!("{:02x}",gb.mmu.read8(addr.get_value(&gb.cpu))),
+            DstR8(r8) =>  format!("{:02x}",r8.get_value(gb)),
+            AddrDst(addr) => format!("{:02x}",gb.mmu.read8(addr.get_value(gb))),
             Dst8::MemIm16() => {
                 let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
                 named_addr(addr,gb)
@@ -352,11 +361,11 @@ impl Dst8 {
                 named_addr(addr,gb)
             }
             Dst8::HiMemR8(r8) => {
-                let addr = 0xFF00 + (r8.get_value(&gb.cpu) as u16);
+                let addr = 0xFF00 + (r8.get_value(gb) as u16);
                 named_addr(addr,gb)
             }
-            Dst8::MemWithInc(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(&gb.cpu))),
-            Dst8::MemWithDec(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(&gb.cpu))),
+            Dst8::MemWithInc(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(gb))),
+            Dst8::MemWithDec(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(gb))),
         }
     }
 }
@@ -381,16 +390,16 @@ impl Op {
                         let addr = src.get_addr(gb);
                         gb.cpu.set_pc(addr);
                     }
-                    JumpType::RelativeCond(cond,src) => {
+                    RelativeCond(cond,src) => {
                         let off = src.get_value(gb);
                         let e = u8_as_i8(off);
                         gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-                        if cond.get_value(&gb.cpu) {
+                        if cond.get_value(gb) {
                             let addr = (((gb.cpu.get_pc()) as i32) + (e as i32)) as u16;
                             gb.cpu.set_pc(addr);
                         }
                     }
-                    JumpType::Relative(_) => {}
+                    Relative(_) => {}
                 }
             }
             Load16(dst,src) => {
@@ -404,24 +413,24 @@ impl Op {
                 // println!("value from src is {:02x}",val);
                 dst.set_value(gb,val);
                 if let Src8::MemWithInc(r2) = src {
-                    let v = r2.get_value(&gb.cpu);
+                    let v = r2.get_value(gb);
                     let (v2,b) = v.overflowing_add(1);
-                    r2.set_value(&mut gb.cpu,v2);
+                    r2.set_value(gb,v2);
                 }
                 if let Src8::MemWithDec(r2) = src {
-                    let v = r2.get_value(&gb.cpu);
+                    let v = r2.get_value(gb);
                     let (v2,b) = v.overflowing_sub(1);
-                    r2.set_value(&mut gb.cpu,v2);
+                    r2.set_value(gb,v2);
                 }
                 if let Dst8::MemWithInc(r2) = dst {
-                    let v = r2.get_value(&gb.cpu);
+                    let v = r2.get_value(gb);
                     let (v2,b) = v.overflowing_add(1);
-                    r2.set_value(&mut gb.cpu,v2);
+                    r2.set_value(gb,v2);
                 }
                 if let Dst8::MemWithDec(r2) = dst {
-                    let v = r2.get_value(&gb.cpu);
+                    let v = r2.get_value(gb);
                     let (v2,b) = v.overflowing_sub(1);
-                    r2.set_value(&mut gb.cpu,v2);
+                    r2.set_value(gb,v2);
                 }
                 // println!("Len is {}",self.len);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
@@ -456,31 +465,31 @@ impl Op {
             //     gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             // }
             Inc16(dst) => {
-                let v1 = dst.get_value(&gb.cpu);
+                let v1 = dst.get_value(gb);
                 let v2 = v1.wrapping_add(1);
-                dst.set_value(&mut gb.cpu, v2);
+                dst.set_value(gb, v2);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             Inc8(dst) => {
-                let v1 = dst.get_value(&gb.cpu);
+                let v1 = dst.get_value(gb);
                 let result = v1.wrapping_add(1);
-                dst.set_value(&mut gb.cpu, result);
+                dst.set_value(gb, result);
                 gb.cpu.r.zero_flag = result == 0;
                 gb.cpu.r.half_flag = (result & 0x0F) + 1 > 0x0F;
                 gb.cpu.r.subtract_n_flag = false;
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             Dec16(dst) => {
-                let v1 = dst.get_value(&gb.cpu);
+                let v1 = dst.get_value(gb);
                 let v2 = v1.wrapping_sub(1);
                 // println!(" ### DEC {:04x}",v2);
-                dst.set_value(&mut gb.cpu, v2);
+                dst.set_value(gb, v2);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             Dec8(dst) => {
-                let v1 = dst.get_value(&gb.cpu);
+                let v1 = dst.get_value(gb);
                 let result = v1.wrapping_sub(1);
-                dst.set_value(&mut gb.cpu, result);
+                dst.set_value(gb, result);
                 gb.cpu.r.zero_flag = result == 0;
                 gb.cpu.r.half_flag = (result & 0x0F) == 0;
                 gb.cpu.r.subtract_n_flag = true;
@@ -522,11 +531,33 @@ impl Op {
                 dst.set_value(gb,res);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
-            BitOp(Bit(n, src)) => {
-                let val = src.get_value(&gb.cpu);
-                gb.cpu.r.zero_flag = !get_bit_as_bool(val, *n);
-                gb.cpu.r.subtract_n_flag = false;
-                gb.cpu.r.half_flag = true;
+            BitOp(bop) => {
+                match bop {
+                    BIT(n, r8) => {
+                        let val = r8.get_value(gb);
+                        gb.cpu.r.zero_flag = !get_bit_as_bool(val, *n);
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = true;
+                    }
+                    RES(n, r8) => {
+                        let val = r8.get_value(gb);
+                        let val2 = set_bit(val,*n,false);
+                        r8.set_value(gb,val2);
+                    }
+                    SET(n, r8) => {
+                        let val = r8.get_value(gb);
+                        let val2 = set_bit(val,*n,true);
+                        r8.set_value(gb,val2);
+                    }
+                    // BitOps::RLC(_) => {}
+                    // BitOps::RRC(_) => {}
+                    // BitOps::RL(_) => {}
+                    // BitOps::RR(_) => {}
+                    // BitOps::SLA(_) => {}
+                    // BitOps::SRA(_) => {}
+                    // BitOps::SWAP(_) => {}
+                    // BitOps::SRL(_) => {}
+                }
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
         }
@@ -537,8 +568,8 @@ impl Op {
             Jump(typ) => {
                 match typ {
                     Absolute(src) => "XXXXX".to_string(),
-                    JumpType::RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
-                    JumpType::Relative(src) => format!("JR i{}",src.name()),
+                    RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
+                    Relative(src) => format!("JR i{}",src.name()),
                 }
             },
             Load16(dst,src) => format!("LD {} {}", dst.name(), src.name()),
@@ -553,7 +584,9 @@ impl Op {
             // OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
             // OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.name(),src.name()),
-            BitOp(Bit(n, src)) => format!("BIT {}, {}", n, src.name()),
+            BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.name()),
+            BitOp(RES(n, src)) => format!("RES {}, {}", n, src.name()),
+            BitOp(SET(n, src)) => format!("SET {}, {}", n, src.name()),
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -562,8 +595,8 @@ impl Op {
             Jump(typ) => {
                 match typ {
                     Absolute(src) =>  "XXXX".to_string(),
-                    JumpType::RelativeCond(cond, src) =>  format!("JR {}, {}", cond.real(gb), src.real(gb)),
-                    JumpType::Relative(src) => format!("JR +/-{}", src.real(gb)),
+                    RelativeCond(cond, src) =>  format!("JR {}, {}", cond.real(gb), src.real(gb)),
+                    Relative(src) => format!("JR +/-{}", src.real(gb)),
                 }
             },
             Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
@@ -571,14 +604,16 @@ impl Op {
             OpType::DisableInterrupts() => format!("DI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
             // OpType::Xor(dst, src) => format!("XOR {}, {}",dst.real(gb),src.real(gb)),
-            Inc16(dst) => format!("INC {}", dst.get_value(&gb.cpu)),
-            Dec16(dst) => format!("DEC {}", dst.get_value(&gb.cpu)),
-            Inc8(dst) => format!("INC {}",dst.get_value(&gb.cpu)),
-            Dec8(dst) => format!("DEC {}",dst.get_value(&gb.cpu)),
+            Inc16(dst) => format!("INC {}", dst.get_value(gb)),
+            Dec16(dst) => format!("DEC {}", dst.get_value(gb)),
+            Inc8(dst) => format!("INC {}",dst.get_value(gb)),
+            Dec8(dst) => format!("DEC {}",dst.get_value(gb)),
             // OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
             // OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.real(gb),src.real(gb)),
-            BitOp(Bit(n, src)) => format!("BIT {}, {}", n, src.get_value(&gb.cpu)),
+            BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.get_value(gb)),
+            BitOp(RES(n, src)) => format!("RES {}, {}", n, src.get_value(gb)),
+            BitOp(SET(n, src)) => format!("SET {}, {}", n, src.get_value(gb)),
         }
     }
 }
@@ -647,6 +682,9 @@ impl OpTable {
     }
     fn lookup(&self, code: &u16) -> Option<&Op> {
         self.ops.get(code)
+    }
+    fn bitop(&mut self, code: u16, bop: BitOps) {
+        self.add(Op{code, len:2, cycles:8, typ:  BitOp(bop)});
     }
 }
 
@@ -782,23 +820,44 @@ fn make_op_table() -> OpTable {
     op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Carry(),   Im8())) });
     op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
-    for n in 0..4 {
-        op_table.add(Op{code: 0xCB_44 + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, H)) });
-        op_table.add(Op{code: 0xCB_4C + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, H)) });
-    }
-    for n in 0..4 {
-        op_table.add(Op{code: 0xCB_45 + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, L)) });
-        op_table.add(Op{code: 0xCB_4D + ((n * 0x10) as u16), len:2, cycles:8, typ:  BitOp(Bit(n*2+1, L)) });
-    }
-    // op_table.add(Op{ code: 0xCB44, len: 2, cycles: 8,  typ: BitOp(Bit(0, H))  });
-    // op_table.add(Op{ code: 0xCB4C, len: 2, cycles: 8,  typ: BitOp(Bit(1, H))  });
-    // op_table.add(Op{ code: 0xCB54, len: 2, cycles: 8,  typ: BitOp(Bit(2, H))  });
-    // op_table.add(Op{ code: 0xCB5C, len: 2, cycles: 8,  typ: BitOp(Bit(3, H))  });
-    // op_table.add(Op{ code: 0xCB64, len: 2, cycles: 8,  typ: BitOp(Bit(4, H))  });
-    // op_table.add(Op{ code: 0xCB6C, len: 2, cycles: 8,  typ: BitOp(Bit(5, H))  });
-    // op_table.add(Op{ code: 0xCB74, len: 2, cycles: 8,  typ: BitOp(Bit(6, H))  });
-    // op_table.add(Op{ code: 0xCB7C, len: 2, cycles: 8,  typ: BitOp(Bit(7, H))  });
+    let r8list = [B,C,D,E,H,L];
+    for (i, r8) in r8list.iter().enumerate() {
+        let col = (i as u16);
+        // op_table.add(Op{code: 0xCB_00 + col, len:2, cycles:8, typ:  BitOp(BitOps::RLC(*r8)) });
+        // op_table.add(Op{code: 0xCB_08 + col, len:2, cycles:8, typ:  BitOp(BitOps::RRC(*r8)) });
+        // op_table.add(Op{code: 0xCB_10 + col, len:2, cycles:8, typ:  BitOp(BitOps::RL(*r8)) });
+        // op_table.add(Op{code: 0xCB_18 + col, len:2, cycles:8, typ:  BitOp(BitOps::RR(*r8)) });
+        // op_table.add(Op{code: 0xCB_20 + col, len:2, cycles:8, typ:  BitOp(BitOps::SLA(*r8)) });
+        // op_table.add(Op{code: 0xCB_28 + col, len:2, cycles:8, typ:  BitOp(BitOps::SRA(*r8)) });
+        // op_table.add(Op{code: 0xCB_30 + col, len:2, cycles:8, typ:  BitOp(BitOps::SWAP(*r8)) });
+        // op_table.add(Op{code: 0xCB_38 + col, len:2, cycles:8, typ:  BitOp(BitOps::SRL(*r8)) });
+        // op_table.add(Op{code: 0xCB_40 + col, len:2, cycles:8, typ:  BitOp(BitOps::Bit(0, *r8)) });
+        op_table.bitop(0xCB_48 + col, BIT(1,*r8));
+        op_table.bitop(0xCB_50 + col, BIT(2,*r8));
+        op_table.bitop(0xCB_58 + col, BIT(3,*r8));
+        op_table.bitop(0xCB_60 + col, BIT(4,*r8));
+        op_table.bitop(0xCB_68 + col, BIT(5,*r8));
+        op_table.bitop(0xCB_70 + col, BIT(6,*r8));
+        op_table.bitop(0xCB_78 + col, BIT(7,*r8));
 
+        op_table.bitop(0xCB_80 + col,RES(0, *r8));
+        op_table.bitop(0xCB_88 + col,RES(1, *r8));
+        op_table.bitop(0xCB_90 + col,RES(2, *r8));
+        op_table.bitop(0xCB_98 + col,RES(3, *r8));
+        op_table.bitop(0xCB_A0 + col,RES(4, *r8));
+        op_table.bitop(0xCB_A8 + col,RES(5, *r8));
+        op_table.bitop(0xCB_B0 + col,RES(6, *r8));
+        op_table.bitop(0xCB_B8 + col,RES(7, *r8));
+
+        op_table.bitop(0xCB_C0 + col,SET(0, *r8));
+        op_table.bitop(0xCB_C8 + col,SET(1, *r8));
+        op_table.bitop(0xCB_D0 + col,SET(2, *r8));
+        op_table.bitop(0xCB_D8 + col,SET(3, *r8));
+        op_table.bitop(0xCB_E0 + col,SET(4, *r8));
+        op_table.bitop(0xCB_E8 + col,SET(5, *r8));
+        op_table.bitop(0xCB_F0 + col,SET(6, *r8));
+        op_table.bitop(0xCB_F8 + col,SET(7, *r8));
+    }
     op_table
 }
 
