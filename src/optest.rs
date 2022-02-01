@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::format;
 use std::path::{Path, PathBuf};
+use BinOp::{And, Or, Xor};
 use Dst16::DstR16;
 use Dst8::AddrDst;
-use OpType::{Jump, Load16};
+use JumpType::Absolute;
+use OpType::{Jump, Load16, Math};
 use Src16::Im16;
 // use Op::Add8;
 use crate::{load_romfile, MMU, Z80};
@@ -11,7 +13,6 @@ use crate::mmu::{BGP, LCDC_LCDCONTROL, NR52_SOUND};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::Dst8::DstR8;
-use crate::optest::Extra::Nothing;
 use crate::optest::JumpType::{Relative, RelativeCond};
 use crate::optest::OpType::Load8;
 use crate::optest::R8::{A, B, C, D, E, H, L};
@@ -30,11 +31,14 @@ pub enum Src16 {  Im16(),   }
 pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16(), MemWithInc(R16)  }
 #[derive(Debug)]
 pub enum Dst16 {  DstR16(R16), }
+
 #[derive(Debug)]
-pub enum Extra {
-    Nothing,
-    Inc(R16),
+enum BinOp {
+    Or,
+    Xor,
+    And,
 }
+
 #[derive(Debug)]
 enum OpType {
     Noop(),
@@ -45,6 +49,7 @@ enum OpType {
     Compare(Dst8, Src8),
     Xor(Dst8, Src8),
     Or(Dst8, Src8),
+    Math(BinOp, Dst8, Src8),
     And(Dst8, Src8),
     Inc(Dst16),
     Dec(Dst16),
@@ -207,7 +212,15 @@ enum JumpType {
     Relative(Src8),
 }
 
-
+impl BinOp {
+    fn name(&self) -> &str {
+        match self {
+            Or => "OR",
+            Xor => "XOR",
+            And => "AND",
+        }
+    }
+}
 impl Cond {
     fn name(&self) -> &str {
         match self {
@@ -229,7 +242,7 @@ impl Cond {
 impl Src8 {
     fn name(&self) -> String {
         match self {
-            Src8::SrcR8(r1) => r1.name().to_string(),
+            SrcR8(r1) => r1.name().to_string(),
             Mem(r2) => format!("({})",r2.name()),
             Im8() => "u8".to_string(),
             Src8::HiMemIm8() => "($FF00+n)".to_string(),
@@ -239,7 +252,7 @@ impl Src8 {
     }
     fn get_value(&self, gb:&GBState) -> u8 {
         match self {
-            Src8::SrcR8(r1) => r1.get_value(&gb.cpu),
+            SrcR8(r1) => r1.get_value(&gb.cpu),
             Src8::Mem(r2) => {
                 // println!("reading memory at location {:04x}",r2.get_value(&gb.cpu));
                 gb.mmu.read8(r2.get_value(&gb.cpu))
@@ -263,7 +276,7 @@ impl Src8 {
 impl Dst8 {
     fn name(&self) -> String {
         match self {
-            Dst8::DstR8(r8) => r8.name().to_string(),
+            DstR8(r8) => r8.name().to_string(),
             AddrDst(r16) => r16.name().to_string(),
             Dst8::MemIm16() => "(nn)".to_string(),
             Dst8::HiMemIm8() => "($FF00+n)".to_string(),
@@ -272,7 +285,7 @@ impl Dst8 {
     }
     fn set_value(&self,gb:&mut GBState, val:u8) {
         match self {
-            Dst8::DstR8(r8) => r8.set_value(&mut gb.cpu, val),
+            DstR8(r8) => r8.set_value(&mut gb.cpu, val),
             AddrDst(r16) => gb.mmu.write8(r16.get_value(&gb.cpu), val),
             Dst8::MemIm16() => gb.mmu.write8(gb.mmu.read16(gb.cpu.get_pc()+1),val),
             Dst8::HiMemIm8() => {
@@ -286,7 +299,7 @@ impl Dst8 {
     }
     fn get_value(&self, gb:&GBState) -> u8 {
         match self {
-            Dst8::DstR8(r1) => r1.get_value(&gb.cpu),
+            DstR8(r1) => r1.get_value(&gb.cpu),
             Dst8::AddrDst(r2) => {
                 gb.mmu.read8(r2.get_value(&gb.cpu))
             }
@@ -335,7 +348,7 @@ impl Op {
             }
             Jump(typ) => {
                 match typ {
-                    JumpType::Absolute(src) => {
+                    Absolute(src) => {
                         let addr = src.get_addr(gb);
                         gb.cpu.set_pc(addr);
                     }
@@ -438,6 +451,21 @@ impl Op {
                 dst.set_value(gb,res);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
+            Math(binop, dst,src) => {
+                let b = src.get_value(gb);
+                let a = dst.get_value(gb);
+                let (res, half) = match binop {
+                    Or  => (a | b, false),
+                    Xor => (a ^ b, false),
+                    And => (a & b, true),
+                };
+                gb.cpu.r.zero_flag = res == 0;
+                gb.cpu.r.subtract_n_flag = false;
+                gb.cpu.r.half_flag = half;
+                gb.cpu.r.carry_flag = false;
+                dst.set_value(gb,res);
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
         }
     }
     pub(crate) fn to_asm(&self) -> String {
@@ -445,7 +473,7 @@ impl Op {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => {
                 match typ {
-                    JumpType::Absolute(src) => "XXXXX".to_string(),
+                    Absolute(src) => "XXXXX".to_string(),
                     JumpType::RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
                     JumpType::Relative(src) => format!("JR i{}",src.name()),
                 }
@@ -459,6 +487,7 @@ impl Op {
             OpType::Dec(dst,) => format!("DEC {}",dst.name()),
             OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
             OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
+            Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.name(),src.name()),
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -466,7 +495,7 @@ impl Op {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => {
                 match typ {
-                    JumpType::Absolute(src) =>  "XXXX".to_string(),
+                    Absolute(src) =>  "XXXX".to_string(),
                     JumpType::RelativeCond(cond, src) =>  format!("JR {}, {}", cond.real(gb), src.real(gb)),
                     JumpType::Relative(src) => format!("JR +/-{}", src.real(gb)),
                 }
@@ -480,6 +509,7 @@ impl Op {
             OpType::Dec(dst) => format!("DEC {}",dst.real(gb)),
             OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
             OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
+            Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.real(gb),src.real(gb)),
         }
     }
 }
@@ -554,7 +584,6 @@ impl OpTable {
 fn make_op_table() -> OpTable {
     let mut op_table = OpTable::new();//:HashMap<u16,Op> = HashMap::new();
     op_table.add(Op { code:0x00, len:1, cycles:4,  typ:OpType::Noop() });
-    op_table.add( Op { code:0xC3, len:3, cycles:12, typ: Jump(JumpType::Absolute(AddrSrc::Imu16()) )  });
 
     op_table.load8( 0x78, DstR8(A), SrcR8(B));
     op_table.load8( 0x40, DstR8(B), SrcR8(B));
@@ -588,38 +617,33 @@ fn make_op_table() -> OpTable {
 
 
     op_table.add(Op { code:0xF3, len: 1, cycles:4, typ:OpType::DisableInterrupts(), });
-
-    // 0xF0 => Some(LoadInstr(Load_HI_R_U8(A))),
-    op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
-
-    //0xFE => Some(CompareInst(CP_A_n())),
     op_table.insert(0xFE, Op {
         code: 0xFE,
         len: 2,
         cycles: 8,
         typ: OpType::Compare(DstR8(A),Src8::Im8()),
-
     });
 
 
-    op_table.load8(0xFA, DstR8(A),Src8::MemIm16());
-    op_table.load8(0xE0, Dst8::HiMemIm8(), SrcR8(A));
+    op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
+    op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
+    op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
     op_table.load8(0x1A,DstR8(A), Src8::Mem(DE));
-    op_table.load8(0x3E,Dst8::DstR8(A),Src8::Im8());
-    op_table.insert(0x2A, Op { code:0x2A, len:1, cycles:8, typ:Load8(DstR8(A), Src8::MemWithInc(HL) ), });
-    op_table.insert(0x22, Op { code:0x22, len:1, cycles:8, typ:Load8(Dst8::MemWithInc(HL), Src8::SrcR8(A)), });
+    op_table.load8(0x3E,DstR8(A), Src8::Im8());
+    op_table.load8(0x2A,DstR8(A), Src8::MemWithInc(HL));
+    op_table.load8(0x22,Dst8::MemWithInc(HL), SrcR8(A));
 
 
     op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: OpType::Inc(DstR16(DE)) });
     op_table.add(Op { code:0x0B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(BC))   });
-    op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: OpType::Or(Dst8::DstR8(A),Src8::SrcR8(C))  });
-    op_table.add(Op { code:0xA7, len: 1, cycles: 4, typ: OpType::And(Dst8::DstR8(A),Src8::SrcR8(C)) });
-    op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: OpType::Xor(DstR8(A),SrcR8(A))             });
+    op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(C)) });
+    op_table.add(Op { code:0xA7, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(C)) });
+    op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
 
-    op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(Cond::NotZero(),Src8::Im8()))    });
-    op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Cond::Carry(), Src8::Im8())), });
-    op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Src8::Im8()))                      });
-
+    op_table.add(Op{ code: 0xC3, len: 3, cycles: 12, typ: Jump(Absolute(AddrSrc::Imu16()) )});
+    op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(Cond::NotZero(),Src8::Im8())) });
+    op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Cond::Carry(), Src8::Im8())) });
+    op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Src8::Im8())) });
 
     op_table
 }
