@@ -31,7 +31,7 @@ pub enum Src8  {  SrcR8(R8), Mem(R16), MemWithInc(R16), MemWithDec(R16), Im8(), 
 #[derive(Debug)]
 pub enum Src16 {  Im16(),   }
 #[derive(Debug)]
-pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), MemIm16(), MemWithInc(R16), MemWithDec(R16)  }
+pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), HiMemR8(R8), MemIm16(), MemWithInc(R16), MemWithDec(R16)  }
 #[derive(Debug)]
 pub enum Dst16 {  DstR16(R16), }
 
@@ -61,6 +61,8 @@ enum OpType {
     And(Dst8, Src8),
     Inc(Dst16),
     Dec(Dst16),
+    Inc8(Dst8),
+    Dec8(Dst8),
     BitOp(BitOps),
 }
 
@@ -291,6 +293,7 @@ impl Dst8 {
             AddrDst(r16) => r16.name().to_string(),
             Dst8::MemIm16() => "(nn)".to_string(),
             Dst8::HiMemIm8() => "($FF00+n)".to_string(),
+            Dst8::HiMemR8(r8) => format!("($FF00+{})",r8.name()).to_string(),
             Dst8::MemWithInc(r16) => format!("({}+)", r16.name()).to_string(),
             Dst8::MemWithDec(r16) => format!("({}-)", r16.name()).to_string(),
         }
@@ -303,6 +306,10 @@ impl Dst8 {
             Dst8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.write8(0xFF00 + im as u16,val)
+            }
+            Dst8::HiMemR8(r8) => {
+                let addr = 0xFF00 + (r8.get_value(&gb.cpu) as u16);
+                gb.mmu.write8(addr,val)
             }
             Dst8::MemWithInc(r16) => gb.mmu.write8(r16.get_value(&gb.cpu),val),
             Dst8::MemWithDec(r16) => gb.mmu.write8(r16.get_value(&gb.cpu),val),
@@ -322,6 +329,10 @@ impl Dst8 {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.read8(0xFF00 + im as u16)
             }
+            Dst8::HiMemR8(r8) => {
+                let addr = 0xFF00 + (r8.get_value(&gb.cpu) as u16);
+                gb.mmu.read8(addr)
+            }
             Dst8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
             Dst8::MemWithDec(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
         }
@@ -337,6 +348,10 @@ impl Dst8 {
             Dst8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 let addr = 0xFF00 + im as u16;
+                named_addr(addr,gb)
+            }
+            Dst8::HiMemR8(r8) => {
+                let addr = 0xFF00 + (r8.get_value(&gb.cpu) as u16);
                 named_addr(addr,gb)
             }
             Dst8::MemWithInc(r16) => format!("{:02x}",gb.mmu.read8(r16.get_value(&gb.cpu))),
@@ -446,11 +461,29 @@ impl Op {
                 dst.set_value(gb, v2);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
+            OpType::Inc8(dst) => {
+                let v1 = dst.get_value(gb);
+                let result = v1.wrapping_add(1);
+                dst.set_value(gb, result);
+                gb.cpu.r.zero_flag = result == 0;
+                gb.cpu.r.half_flag = (result & 0x0F) + 1 > 0x0F;
+                gb.cpu.r.subtract_n_flag = false;
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
             OpType::Dec(dst) => {
                 let v1 = dst.get_value(gb);
                 let v2 = v1.wrapping_sub(1);
                 // println!(" ### DEC {:04x}",v2);
                 dst.set_value(gb, v2);
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
+            OpType::Dec8(dst) => {
+                let v1 = dst.get_value(gb);
+                let result = v1.wrapping_sub(1);
+                dst.set_value(gb, result);
+                gb.cpu.r.zero_flag = result == 0;
+                gb.cpu.r.half_flag = (result & 0x0F) == 0;
+                gb.cpu.r.subtract_n_flag = true;
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             OpType::Or(dst, src) => {
@@ -515,6 +548,8 @@ impl Op {
             OpType::Xor(dst, src) => format!("XOR {},{}",dst.name(),src.name()),
             OpType::Inc(dst,) => format!("INC {}",dst.name()),
             OpType::Dec(dst,) => format!("DEC {}",dst.name()),
+            OpType::Inc8(dst) => format!("INC {}",dst.name()),
+            OpType::Dec8(dst) => format!("DEC {}",dst.name()),
             OpType::Or(dst, src) => format!("OR {},{}",dst.name(),src.name()),
             OpType::And(dst, src) => format!("AND {},{}",dst.name(),src.name()),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.name(),src.name()),
@@ -538,6 +573,8 @@ impl Op {
             OpType::Xor(dst, src) => format!("XOR {}, {}",dst.real(gb),src.real(gb)),
             OpType::Inc(dst) => format!("INC {}",dst.real(gb)),
             OpType::Dec(dst) => format!("DEC {}",dst.real(gb)),
+            OpType::Inc8(dst) => format!("INC {}",dst.real(gb)),
+            OpType::Dec8(dst) => format!("DEC {}",dst.real(gb)),
             OpType::Or(dst, src) => format!("OR {}, {}", dst.real(gb),src.real(gb)),
             OpType::And(dst, src) => format!("AND {}, {}", dst.real(gb),src.real(gb)),
             Math(binop, dst, src) => format!("{} {},{}",binop.name(),dst.real(gb),src.real(gb)),
@@ -696,6 +733,7 @@ fn make_op_table() -> OpTable {
     op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
     op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
     op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
+    op_table.load8(0xE2,Dst8::HiMemR8(C), SrcR8(A));
     op_table.load8(0x3E,DstR8(A), Im8());
     op_table.load8(0x2A,DstR8(A), Src8::MemWithInc(HL));
     op_table.load8(0x3A,DstR8(A), Src8::MemWithDec(HL));
@@ -714,8 +752,26 @@ fn make_op_table() -> OpTable {
 
 
 
-    op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: OpType::Inc(DstR16(DE)) });
-    op_table.add(Op { code:0x0B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(BC))   });
+    op_table.add(Op { code:0x03, len: 1, cycles: 8, typ: OpType::Inc(DstR16(BC))  });
+    op_table.add(Op { code:0x13, len: 1, cycles: 8, typ: OpType::Inc(DstR16(DE))  });
+    op_table.add(Op { code:0x23, len: 1, cycles: 8, typ: OpType::Inc(DstR16(HL))  });
+    op_table.add(Op { code:0x33, len: 1, cycles: 8, typ: OpType::Inc(DstR16(SP))  });
+
+    op_table.add(Op { code:0x0B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(BC))  });
+    op_table.add(Op { code:0x1B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(DE))  });
+    op_table.add(Op { code:0x2B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(HL))  });
+    op_table.add(Op { code:0x3B, len: 1, cycles: 8, typ: OpType::Dec(DstR16(SP))  });
+
+    op_table.add(Op { code:0x04, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(B))   });
+    op_table.add(Op { code:0x05, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(B))   });
+    op_table.add(Op { code:0x0C, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(C))   });
+    op_table.add(Op { code:0x0D, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(C))   });
+    op_table.add(Op { code:0x14, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(D))   });
+    op_table.add(Op { code:0x15, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(D))   });
+    op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: OpType::Inc8(DstR8(E))   });
+    op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: OpType::Dec8(DstR8(E))   });
+
+
     op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(C)) });
     op_table.add(Op { code:0xA7, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(C)) });
     op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
