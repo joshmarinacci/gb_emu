@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::format;
 use std::path::{Path, PathBuf};
 use BinOp::{And, Or, Xor};
+use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
 use Dst8::AddrDst;
 use JumpType::Absolute;
@@ -196,10 +197,10 @@ pub enum Cond {
 impl Cond {
     pub(crate) fn get_value(&self, cpu: &Z80) -> bool {
         match self {
-            Cond::Carry() => cpu.r.carry_flag,
-            Cond::NotCarry() => !cpu.r.carry_flag,
-            Cond::Zero() => cpu.r.zero_flag,
-            Cond::NotZero() => !cpu.r.zero_flag,
+            Carry() => cpu.r.carry_flag,
+            NotCarry() => !cpu.r.carry_flag,
+            Zero() => cpu.r.zero_flag,
+            NotZero() => !cpu.r.zero_flag,
         }
     }
 }
@@ -224,18 +225,18 @@ impl BinOp {
 impl Cond {
     fn name(&self) -> &str {
         match self {
-            Cond::Carry() => "C",
-            Cond::NotCarry() => "NC",
-            Cond::Zero() => "Z",
-            Cond::NotZero() => "NZ",
+            Carry() => "C",
+            NotCarry() => "NC",
+            Zero() => "Z",
+            NotZero() => "NZ",
         }
     }
     fn real(&self, gb: &GBState) -> bool {
         match self {
-            Cond::Carry() => gb.cpu.r.carry_flag,
-            Cond::NotCarry() => !gb.cpu.r.carry_flag,
-            Cond::Zero() => gb.cpu.r.zero_flag,
-            Cond::NotZero() => !gb.cpu.r.zero_flag,
+            Carry() => gb.cpu.r.carry_flag,
+            NotCarry() => !gb.cpu.r.carry_flag,
+            Zero() => gb.cpu.r.zero_flag,
+            NotZero() => !gb.cpu.r.zero_flag,
         }
     }
 }
@@ -253,12 +254,12 @@ impl Src8 {
     fn get_value(&self, gb:&GBState) -> u8 {
         match self {
             SrcR8(r1) => r1.get_value(&gb.cpu),
-            Src8::Mem(r2) => {
+            Mem(r2) => {
                 // println!("reading memory at location {:04x}",r2.get_value(&gb.cpu));
                 gb.mmu.read8(r2.get_value(&gb.cpu))
             },
             Src8::MemWithInc(r2) => gb.mmu.read8(r2.get_value(&gb.cpu)),
-            Src8::Im8() => gb.mmu.read8(gb.cpu.get_pc()+1),
+            Im8() => gb.mmu.read8(gb.cpu.get_pc()+1),
             Src8::HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc()+1);
                 gb.mmu.read8(0xFF00 + im as u16)
@@ -586,7 +587,40 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0x00, len:1, cycles:4,  typ:OpType::Noop() });
 
     op_table.load8( 0x78, DstR8(A), SrcR8(B));
+
     op_table.load8( 0x40, DstR8(B), SrcR8(B));
+    op_table.load8( 0x41, DstR8(B), SrcR8(C));
+    op_table.load8( 0x42, DstR8(B), SrcR8(D));
+    op_table.load8( 0x43, DstR8(B), SrcR8(E));
+    op_table.load8( 0x44, DstR8(B), SrcR8(H));
+    op_table.load8( 0x45, DstR8(B), SrcR8(L));
+    op_table.load8( 0x46, DstR8(B), Mem(HL));
+    op_table.load8( 0x47, DstR8(B), SrcR8(A));
+    op_table.load8( 0x48, DstR8(C), SrcR8(B));
+    op_table.load8( 0x49, DstR8(C), SrcR8(C));
+    op_table.load8( 0x4A, DstR8(C), SrcR8(D));
+    op_table.load8( 0x4B, DstR8(C), SrcR8(E));
+    op_table.load8( 0x4C, DstR8(C), SrcR8(H));
+    op_table.load8( 0x4D, DstR8(C), SrcR8(L));
+    op_table.load8( 0x4E, DstR8(C), Mem(HL));
+    op_table.load8( 0x4F, DstR8(C), SrcR8(A));
+
+    op_table.load8( 0x50, DstR8(D), SrcR8(B));
+    op_table.load8( 0x51, DstR8(D), SrcR8(C));
+    op_table.load8( 0x52, DstR8(D), SrcR8(D));
+    op_table.load8( 0x53, DstR8(D), SrcR8(E));
+    op_table.load8( 0x54, DstR8(D), SrcR8(H));
+    op_table.load8( 0x55, DstR8(D), SrcR8(L));
+    op_table.load8( 0x56, DstR8(D), Mem(HL));
+    op_table.load8( 0x57, DstR8(D), SrcR8(A));
+    op_table.load8( 0x58, DstR8(E), SrcR8(B));
+    op_table.load8( 0x59, DstR8(E), SrcR8(C));
+    op_table.load8( 0x5A, DstR8(E), SrcR8(D));
+    op_table.load8( 0x5B, DstR8(E), SrcR8(E));
+    op_table.load8( 0x5C, DstR8(E), SrcR8(H));
+    op_table.load8( 0x5D, DstR8(E), SrcR8(L));
+    op_table.load8( 0x5E, DstR8(E), Mem(HL));
+    op_table.load8( 0x5F, DstR8(E), SrcR8(A));
 
     op_table.load16(0x01, DstR16(BC), Im16()); // LD DE, nn
     op_table.load16(0x11, DstR16(DE), Im16()); // LD DE, nn
@@ -602,7 +636,6 @@ fn make_op_table() -> OpTable {
 
 
     op_table.load8( 0x7F, DstR8(A), SrcR8(A)); // LD A,A
-    op_table.load8( 0x47, DstR8(B), SrcR8(A)); // LD B,A
     op_table.load8( 0x4F, DstR8(C), SrcR8(A)); // LD C,A
     op_table.load8( 0x57, DstR8(D), SrcR8(A)); // LD D,A
     op_table.load8( 0x5F, DstR8(E), SrcR8(A)); // LD E,A
@@ -621,15 +654,15 @@ fn make_op_table() -> OpTable {
         code: 0xFE,
         len: 2,
         cycles: 8,
-        typ: OpType::Compare(DstR8(A),Src8::Im8()),
+        typ: OpType::Compare(DstR8(A), Im8()),
     });
 
 
     op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
     op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
     op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
-    op_table.load8(0x1A,DstR8(A), Src8::Mem(DE));
-    op_table.load8(0x3E,DstR8(A), Src8::Im8());
+    op_table.load8(0x1A,DstR8(A), Mem(DE));
+    op_table.load8(0x3E,DstR8(A), Im8());
     op_table.load8(0x2A,DstR8(A), Src8::MemWithInc(HL));
     op_table.load8(0x22,Dst8::MemWithInc(HL), SrcR8(A));
 
@@ -641,9 +674,10 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
 
     op_table.add(Op{ code: 0xC3, len: 3, cycles: 12, typ: Jump(Absolute(AddrSrc::Imu16()) )});
-    op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(Cond::NotZero(),Src8::Im8())) });
-    op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Cond::Carry(), Src8::Im8())) });
-    op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Src8::Im8())) });
+    op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(NotZero(), Im8())) });
+    op_table.add(Op{ code: 0x30, len: 2, cycles: 12, typ: Jump(RelativeCond(NotCarry(),Im8())) });
+    op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Carry(),   Im8())) });
+    op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
     op_table
 }
