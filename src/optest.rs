@@ -66,6 +66,7 @@ enum BitOps {
     SRL(R8),
     SWAP(R8),
     RLA(),
+    CPL(),
 }
 
 #[derive(Debug)]
@@ -97,6 +98,7 @@ enum OpType {
     Load16(Dst16, Src16),
     Load8(Dst8, Src8),
     DisableInterrupts(),
+    EnableInterrupts(),
     Compare(Dst8, Src8),
     // Xor(Dst8, Src8),
     // Or(Dst8, Src8),
@@ -122,6 +124,14 @@ struct GBState {
     ppu:PPU2,
     clock:u32,
     count:u32,
+}
+
+impl GBState {
+    pub(crate) fn dump_current_state(&self) {
+        println!("PC: {:04x}  OP: {:04x}",
+                 self.cpu.get_pc(),
+                 self.mmu.read8(self.cpu.get_pc()));
+    }
 }
 
 impl R8 {
@@ -250,7 +260,7 @@ impl BinOp {
             Xor => "XOR",
             And => "AND",
             SUB => "SUB",
-            BinOp::Add => "ADD",
+            Add => "ADD",
             BinOp::ADC => "ADC",
         }
     }
@@ -493,7 +503,11 @@ impl Op {
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             OpType::DisableInterrupts() => {
-                // println!("pretending to disable interrupts");
+                println!("pretending to disable interrupts");
+                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+            }
+            OpType::EnableInterrupts() => {
+                println!("pretending to enable interrupts");
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             OpType::Compare(dst, src) => {
@@ -549,7 +563,7 @@ impl Op {
                     Or  => (a | b, false, false, gb.cpu.r.carry_flag),
                     Xor => (a ^ b, false, false, gb.cpu.r.carry_flag),
                     And => (a & b, false, true,  gb.cpu.r.carry_flag),
-                    BinOp::Add => {
+                    Add => {
                         let c = 0;
                         let r = a.wrapping_add(b).wrapping_add(c);
                         let half =     (a & 0x0F) + (b &0x0F) > 0xF;
@@ -595,6 +609,15 @@ impl Op {
                         let val = r8.get_value(gb);
                         let val2 = set_bit(val,*n,true);
                         r8.set_value(gb,val2);
+                    }
+                    BitOps::CPL() => {
+                        let val = A.get_value(gb);
+                        let val2 = !val;
+                        A.set_value(gb,val2);
+                        // Z not affected
+                        gb.cpu.r.subtract_n_flag = true;
+                        gb.cpu.r.half_flag = true;
+                        //C not affected
                     }
                     BitOps::RLC(r8) => {
                         let a = r8.get_value(gb);
@@ -710,6 +733,7 @@ impl Op {
             Load16(dst,src) => format!("LD {} {}", dst.name(), src.name()),
             OpType::Load8(dst,src) => format!("LD {}, {}", dst.name(), src.name()),
             OpType::DisableInterrupts() => "DI".to_string(),
+            OpType::EnableInterrupts() => "EI".to_string(),
             OpType::Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
             Inc16(dst,) => format!("INC {}", dst.name()),
             Dec16(dst,) => format!("DEC {}", dst.name()),
@@ -728,6 +752,7 @@ impl Op {
             BitOp(SRL(src)) => format!("RLC {}", src.name()),
             BitOp(SWAP(src)) => format!("RLC {}", src.name()),
             BitOp(BitOps::RLA()) => format!("RLA"),
+            BitOp(BitOps::CPL()) => format!("CPL"),
             OpType::Call(ct) => {
                 match ct {
                     CallType::CallU16() => format!("CALL u16"),
@@ -751,6 +776,7 @@ impl Op {
             Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
             Load16(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
             OpType::DisableInterrupts() => format!("DI"),
+            OpType::EnableInterrupts() => format!("EI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
             Inc16(dst) => format!("INC {}", dst.get_value(gb)),
             Dec16(dst) => format!("DEC {}", dst.get_value(gb)),
@@ -769,6 +795,7 @@ impl Op {
             BitOp(SRL(src)) => format!("SRL  {}", src.get_value(gb)),
             BitOp(SWAP(src)) => format!("SWAP {}",src.get_value(gb)),
             BitOp(BitOps::RLA()) => format!("RLA {}", A.get_value(gb)),
+            BitOp(BitOps::CPL()) => format!("CPL {}", A.get_value(gb)),
             OpType::Call(ct) => {
                 match ct {
                     CallType::CallU16() => format!("CALL {}",gb.mmu.read16(gb.cpu.get_pc())),
@@ -803,7 +830,7 @@ impl OpTable {
             ops: Default::default()
         }
     }
-    fn insert(&mut self, code: u16, op: Op) {
+    fn inserto(&mut self, code: u16, op: Op) {
         if self.ops.contains_key(&code) {
             println!("ERROR: table already contains {:04x}",code);
             panic!("ERROR table already contains opcode");
@@ -811,7 +838,7 @@ impl OpTable {
         self.ops.insert(code,op);
     }
     fn add(&mut self, op:Op) {
-        self.insert(op.code,op);
+        self.inserto(op.code,op);
     }
     fn load8(&mut self, code: u16, dst: Dst8, src: Src8) {
         let (mut len, mut cycles) = match src {
@@ -832,13 +859,13 @@ impl OpTable {
             Dst8::MemWithInc(_) => {}
             Dst8::MemWithDec(_) => {}
         }
-        self.insert(code, Op { code, len, cycles,  typ:OpType::Load8(dst, src)});
+        self.add(Op { code, len, cycles,  typ:OpType::Load8(dst, src)});
     }
     fn load16(&mut self, code: u16, dst: Dst16, src: Src16) {
         let (len, cycles) = match src {
             Im16() => (3,12)
         };
-        self.insert(code, Op { code:code, len:len, cycles:cycles, typ: Load16(dst, src), });
+        self.add( Op { code, len, cycles, typ: Load16(dst, src), });
     }
     fn lookup(&self, code: &u16) -> Option<&Op> {
         self.ops.get(code)
@@ -934,9 +961,9 @@ fn make_op_table() -> OpTable {
     op_table.load8( 0x36, AddrDst(HL), Im8()); // LD (HL),u8
 
 
-    op_table.load8( 0x12, AddrDst(DE), SrcR8(A)); // LD L,A
-    op_table.load8( 0xEA, Dst8::MemIm16(), SrcR8(A)); // LD L,A
-    op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
+    op_table.load8(0x12,AddrDst(DE), SrcR8(A)); // LD L,A
+    op_table.load8(0xEA,Dst8::MemIm16(), SrcR8(A)); // LD L,A
+    op_table.load8(0xF0,DstR8(A), Src8::HiMemIm8());
     op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
     op_table.load8(0xE0,Dst8::HiMemIm8(), SrcR8(A));
     op_table.load8(0xE2,Dst8::HiMemR8(C), SrcR8(A));
@@ -948,8 +975,9 @@ fn make_op_table() -> OpTable {
 
 
     op_table.add(Op { code:0xF3, len: 1, cycles:4, typ:OpType::DisableInterrupts(), });
-    op_table.insert(0xFE, Op { code: 0xFE, len: 2,  cycles: 8, typ: OpType::Compare(DstR8(A),Im8()), });
-    op_table.add(Op { code: 0xBE, len: 1,  cycles: 8, typ: OpType::Compare(DstR8(A),Src8::Mem(HL))});
+    op_table.add(Op { code: 0xFE, len: 2,  cycles: 8, typ: OpType::Compare(DstR8(A),Im8()), });
+    op_table.add(Op { code: 0xBE, len: 1,  cycles: 8, typ: OpType::Compare(DstR8(A), Mem(HL))});
+    op_table.add(Op { code:0xFB, len: 1, cycles:4, typ:OpType::EnableInterrupts(), });
 
 
 
@@ -982,34 +1010,40 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0x3D, len: 1, cycles: 4, typ: Dec8(A)   });
 
 
-    op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(C)) });
-    op_table.add(Op { code:0xA7, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(C)) });
-    op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
+    op_table.add(Op { code: 0xA0, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(B)) });
+    op_table.add(Op { code: 0xA1, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(C)) });
+    op_table.add(Op { code: 0xA2, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(D)) });
+    op_table.add(Op { code: 0xA3, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(E)) });
+    op_table.add(Op { code: 0xA4, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(H)) });
+    op_table.add(Op { code: 0xA5, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(L)) });
 
-    op_table.add( Op {
-        code: 0x90,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(B)),
-    });
-    op_table.add(Op {
-        code: 0x86,
-        len: 1,
-        cycles: 8,
-        typ: Math(BinOp::Add,DstR8(A), Src8::Mem(HL)),
-    });
+    op_table.add(Op { code: 0xA7, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(A)) });
+    op_table.add(Op { code: 0xA9, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(C)) });
+    op_table.add(Op { code: 0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
 
-    //        0x86 => Some(MathInst(ADD_A_addr(HL))),
+    op_table.add(Op { code: 0xB0, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(B)) });
+    op_table.add(Op { code: 0xB1, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(C)) });
+    op_table.add(Op { code: 0xB2, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(D)) });
+    op_table.add(Op { code: 0xB3, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(E)) });
+    op_table.add(Op { code: 0xB4, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(H)) });
+    op_table.add(Op { code: 0xB5, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(L)) });
 
-    op_table.add(Op{ code: 0xC3, len: 3, cycles: 12, typ: Jump(Absolute(AddrSrc::Imu16()) )});
-    op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(NotZero(), Im8())) });
-    op_table.add(Op{ code: 0x30, len: 2, cycles: 12, typ: Jump(RelativeCond(NotCarry(),Im8())) });
-    op_table.add(Op{ code: 0x38, len: 2, cycles:  8, typ: Jump(RelativeCond(Carry(),   Im8())) });
-    op_table.add(Op{ code: 0x28, len: 2, cycles: 12, typ: Jump(RelativeCond(Zero(),Im8()))});
-    op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
+
+    op_table.add(Op { code: 0x90, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(B))});
+    op_table.add(Op { code: 0x86, len: 1, cycles: 8, typ: Math(Add, DstR8(A), Mem(HL))});
+    op_table.add(Op { code: 0xE6, len: 2, cycles: 8, typ: Math(And, DstR8(A), Im8())});
+
+
+    op_table.add(Op { code: 0xC3, len: 3, cycles: 12, typ: Jump(Absolute(AddrSrc::Imu16()) )});
+    op_table.add(Op { code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(NotZero(), Im8())) });
+    op_table.add(Op { code: 0x30, len: 2, cycles: 12, typ: Jump(RelativeCond(NotCarry(),Im8())) });
+    op_table.add(Op { code: 0x38, len: 2, cycles:  8, typ: Jump(RelativeCond(Carry(),   Im8())) });
+    op_table.add(Op { code: 0x28, len: 2, cycles: 12, typ: Jump(RelativeCond(Zero(),    Im8())) });
+    op_table.add(Op { code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
 
     op_table.add(Op{code:0x17, len:1, cycles:4, typ: BitOp(BitOps::RLA())});
+    op_table.add(Op{code:0x2F, len:1, cycles:4, typ: BitOp(BitOps::CPL())});
 
     // almost the entire lower CB chart
     let r8list = [B,C,D,E,H,L];
@@ -1051,6 +1085,7 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_F8 + col,SET(7, *r8));
     }
 
+    op_table.add(Op{ code: 0xCB_37,len:2, cycles:8,   typ:OpType::BitOp(BitOps::SWAP(A))});
 
     op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: OpType::Call(CallType::CallU16())});
     op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: OpType::Call(CallType::RET())});
@@ -1096,6 +1131,7 @@ fn test_cpuins() {
         // println!("opcode is {:04x}",opcode);
         if let None = op_table.lookup(&opcode) {
             println!("failed to lookup op for code {:04x}",opcode);
+            gb.dump_current_state();
             break;
         }
         let op = op_table.lookup(&opcode).unwrap();
@@ -1104,6 +1140,8 @@ fn test_cpuins() {
         let prev_pc = gb.cpu.get_pc();
         op.execute(&mut gb);
         if gb.cpu.get_pc() == prev_pc {
+            println!("stuck in an infinite loop. pc = {:04x}",gb.cpu.get_pc());
+            gb.dump_current_state();
             panic!("stuck in an infinite loop");
         }
         // gb.cpu.set_pc(gb.cpu.get_pc()+op.len);
@@ -1162,7 +1200,9 @@ fn test_hellogithub() {
         }
         // println!("BC {:04x}",gb.cpu.r.get_bc());
         if gb.cpu.get_pc() == prev_pc {
-            // panic!("stuck in an infinite loop");
+            println!("stuck in an infinite loop. pc = {:04x}",gb.cpu.get_pc());
+            gb.dump_current_state();
+            panic!("stuck in an infinite loop");
             break;
         }
         // gb.cpu.set_pc(gb.cpu.get_pc()+op.len);
@@ -1187,7 +1227,6 @@ fn test_hellogithub() {
     assert_eq!(gb.cpu.get_pc(),0x35)
     // assert_eq!(gb.count>=goal,true);
 }
-
 
 #[test]
 fn test_bootrom() {
@@ -1240,8 +1279,9 @@ fn test_bootrom() {
             );
         }
         if gb.cpu.get_pc() == prev_pc {
+            println!("stuck in an infinite loop. pc = {:04x}",gb.cpu.get_pc());
+            gb.dump_current_state();
             panic!("stuck in an infinite loop");
-            break;
         }
 
         let pc = gb.cpu.get_pc();
@@ -1326,6 +1366,7 @@ fn test_tetris() {
         if let None = op_table.lookup(&opcode) {
             println!("failed to lookup op for code {:04x}",opcode);
             println!("current PC is {:04x}",gb.cpu.get_pc());
+            gb.dump_current_state();
             panic!("failed to find opcode");
         }
         let op = op_table.lookup(&opcode).unwrap();
@@ -1349,8 +1390,9 @@ fn test_tetris() {
             );
         }
         if gb.cpu.get_pc() == prev_pc {
+            println!("stuck in an infinite loop. pc = {:04x}",gb.cpu.get_pc());
+            gb.dump_current_state();
             panic!("stuck in an infinite loop");
-            break;
         }
 
         let pc = gb.cpu.get_pc();
@@ -1442,6 +1484,7 @@ fn op_tests() {
         assert_eq!(gb.cpu.get_pc(),pc+2);
         println!("HL loaded to 0x8000 {:04x} {:02x}",addr,gb.mmu.read8(addr));
     } else {
+        gb.dump_current_state();
         panic!("op not found");
     }
 
