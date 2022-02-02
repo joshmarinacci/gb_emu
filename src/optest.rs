@@ -142,9 +142,26 @@ impl GBState {
 
 impl GBState {
     pub(crate) fn dump_current_state(&self) {
-        println!("PC: {:04x}  OP: {:04x}",
-                 self.cpu.get_pc(),
-                 self.mmu.read8(self.cpu.get_pc()));
+        println!("PC: {:04x}  OP: {:04x}    clock={}",
+             self.cpu.get_pc(),
+             self.mmu.read8(self.cpu.get_pc()),
+            self.clock,
+        );
+        println!("A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X}  ",
+                 self.cpu.r.a,
+                 self.cpu.r.b,
+                 self.cpu.r.c,
+                 self.cpu.r.d,
+                 self.cpu.r.e,
+                 self.cpu.r.h,
+                 self.cpu.r.l
+        );
+
+        println!("BC:{:04X} DE:{:04X} HL:{:04X}   ",
+                 self.cpu.r.get_bc(),
+                 self.cpu.r.get_de(),
+                 self.cpu.r.get_hl(),
+        );
     }
 }
 
@@ -338,6 +355,15 @@ impl Src8 {
         }
     }
     fn real(&self, gb: &GBState) -> String {
+        match self {
+            HiMemIm8() => {
+                let im = gb.mmu.read8(gb.cpu.get_pc()+1);
+                let addr = (0xFF00+im as u16);
+                let name = named_addr(addr,gb);
+                return format!("({}) is {:02x}", name,self.get_value(gb));
+            }
+            _ => {}
+        }
         format!("{:02x}",self.get_value(gb))
     }
 }
@@ -787,8 +813,8 @@ impl Op {
                     Relative(src) => format!("JR +/-{}", src.real(gb)),
                 }
             },
-            Load8(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
-            Load16(dst,src) => format!("LD {}, {}",dst.real(gb), src.real(gb)),
+            Load8(dst,src) => format!("LD {} <- {}",dst.real(gb), src.real(gb)),
+            Load16(dst,src) => format!("LD {} <- {}",dst.real(gb), src.real(gb)),
             OpType::DisableInterrupts() => format!("DI"),
             OpType::EnableInterrupts() => format!("EI"),
             OpType::Compare(dst, src) => format!("CP {}, {}",dst.real(gb), src.real(gb)),
@@ -1178,8 +1204,16 @@ fn test_hellogithub() {
 
     let mut debug = false;
     loop {
-        if gb.cpu.get_pc() >= 0x001a {
-            debug = false;
+        if gb.count > 20000 {
+            break;
+        }
+        if gb.cpu.get_pc() == 0x00_2d {
+            println!("finished clearing the memory");
+            debug = true;
+        }
+        if gb.cpu.get_pc() == 0x0035 {
+            println!("got to the end loop. horrray!");
+            break;
         }
         if debug {
             println!("==========");
@@ -1238,6 +1272,7 @@ fn test_hellogithub() {
         }
     }
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
+    gb.dump_current_state();
     assert_eq!(gb.cpu.get_pc(),0x35)
     // assert_eq!(gb.count>=goal,true);
 }

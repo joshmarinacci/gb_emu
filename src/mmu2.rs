@@ -64,7 +64,19 @@ pub enum IORegister {
 impl IORegister {
     pub fn match_address(addr: u16) -> Option<IORegister> {
         match addr {
+            0xFF40 => Some(IORegister::LCDC),
+            0xFF41 => Some(IORegister::STAT),
+            0xFF42 => Some(IORegister::SCY),
+            0xFF43 => Some(IORegister::SCX),
             0xFF44 => Some(IORegister::LY),
+            // IORegister::LYC  => 0xFF45,
+            // IORegister::DMA  => 0xFF46,
+            // IORegister::BGP  => 0xFF47,
+            // IORegister::OBP0 => 0xFF48,
+            // IORegister::OBP1 => 0xFF49,
+            // IORegister::WY   => 0xFF4A,
+            // IORegister::WX   => 0xFF4B,
+            0xFFFF => Some(IORegister::IE),
             _ => None
         }
     }
