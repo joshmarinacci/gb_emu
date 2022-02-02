@@ -814,7 +814,7 @@ impl OpTable {
         self.insert(op.code,op);
     }
     fn load8(&mut self, code: u16, dst: Dst8, src: Src8) {
-        let (mut len, cycles) = match src {
+        let (mut len, mut cycles) = match src {
             SrcR8(_) => (1, 4),
             Mem(_) => (1, 8),
             Im8() => (2, 8),
@@ -825,9 +825,9 @@ impl OpTable {
         };
         match dst {
             DstR8(_) => {}
-            AddrDst(_) => {}
+            AddrDst(_) => cycles += 4,
             Dst8::HiMemIm8() => len += 1,
-            Dst8::HiMemR8(_) => {}
+            Dst8::HiMemR8(_) => {},
             Dst8::MemIm16() => len += 2,
             Dst8::MemWithInc(_) => {}
             Dst8::MemWithDec(_) => {}
@@ -925,10 +925,13 @@ fn make_op_table() -> OpTable {
     op_table.load16(0x21, DstR16(HL), Im16()); // LD HL, nn
     op_table.load16(0x31, DstR16(SP), Im16()); // LD HL, nn
 
+
     op_table.load8( 0x16, DstR8(D), Im8()); // LD D,n
     op_table.load8( 0x1E, DstR8(E), Im8()); // LD E,n
     op_table.load8( 0x26, DstR8(H), Im8()); // LD H,n
     op_table.load8( 0x2E, DstR8(L), Im8()); // LD L,n
+    // 0x36 => Some(LoadInstr(Load_addr_R2_u8(HL))),
+    op_table.load8( 0x36, AddrDst(HL), Im8()); // LD (HL),u8
 
 
     op_table.load8( 0x12, AddrDst(DE), SrcR8(A)); // LD L,A
@@ -1261,7 +1264,7 @@ fn test_bootrom() {
             // 0x0089 => println!("scroll logo up if b=1 {:02x} {:02x}",gb.cpu.r.b, gb.mmu.read8(0xFF42)),
             0x008e => println!("got to 8e"),
             0x00E0 => println!("doing check"),
-            0x00E8 => println!("checking"),
+            // 0x00E8 => println!("checking"),
             0x00f1 => println!("made it past the check!"),
             0x0100 => {
                 println!("made it to the end!. turned off the rom");
@@ -1322,7 +1325,8 @@ fn test_tetris() {
         let opcode = fetch_opcode_from_memory(&gb);
         if let None = op_table.lookup(&opcode) {
             println!("failed to lookup op for code {:04x}",opcode);
-            break;
+            println!("current PC is {:04x}",gb.cpu.get_pc());
+            panic!("failed to find opcode");
         }
         let op = op_table.lookup(&opcode).unwrap();
         if debug {
@@ -1394,4 +1398,51 @@ fn read_n_right_test() {
     assert_eq!(mmu.read8(0x142),0x42);
     mmu.write8_IO(IORegister::LY,0x85);
     assert_eq!(mmu.read8_IO(IORegister::LY),0x85);
+}
+
+#[test]
+fn op_tests() {
+    let mut gb = GBState {
+        cpu: Z80::init(),
+        mmu: MMU2::init_empty(0xDE),
+        ppu: PPU2::init(),
+        clock: 0,
+        count: 0
+    };
+    let op_table = make_op_table();
+    if let Some(op)= op_table.lookup(&0x36) {
+        println!("op is {:?}", op);
+        assert_eq!(op.len,2);
+        assert_eq!(op.cycles,12);
+
+        let addr = 0x8000;
+        let payload = 0x99;
+        let pc = 0x200;
+
+        //set pc to x200
+        gb.cpu.set_pc(pc);
+
+        //put x99 as the i8
+        gb.mmu.write8(pc+0,0x36);
+        gb.mmu.write8(pc+1,payload);
+
+        //set HL to x8000
+        gb.cpu.r.set_hl(addr);
+
+        //confirm x8000 has xDE in it
+        assert_eq!(gb.mmu.read8(addr),0xDE);
+
+        //execute instruction
+        op.execute(&mut gb);
+
+        //confirm x8000 now has x99 in it
+        assert_eq!(gb.mmu.read8(addr),payload);
+
+        //confirm PC is now x202
+        assert_eq!(gb.cpu.get_pc(),pc+2);
+        println!("HL loaded to 0x8000 {:04x} {:02x}",addr,gb.mmu.read8(addr));
+    } else {
+        panic!("op not found");
+    }
+
 }
