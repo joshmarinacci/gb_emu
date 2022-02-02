@@ -240,7 +240,7 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     });
     if screen_settings.enabled {
         let mut screen_obj = Screen::init(screen_settings);
-        while true {
+        loop {
             if !screen_obj.process_input(&to_cpu) { break; }
             if let Ok(str) = receive_screen.try_recv() {
                 screen_obj.update_screen(&shared_screen_state);

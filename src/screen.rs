@@ -31,7 +31,7 @@ pub struct Screen {
 impl Screen {
     pub(crate) fn process_input(&self, to_cpu: &Sender<InputEvent>) -> bool {
         // println!("screen: processsing input");
-        while true {
+        loop {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
                 match event {
                     Event::Quit { .. }

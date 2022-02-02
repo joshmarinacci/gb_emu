@@ -15,6 +15,7 @@ IO registers
 
  */
 
+#[derive(Debug)]
 pub enum IORegister {
     JOYPAD_P1,
     SB,
@@ -242,8 +243,8 @@ impl Joypad {
 
 impl MMU2 {
     pub fn init(rom: &[u8]) -> MMU2 {
-        let mut data: Vec<u8> = vec![0x12; (0xFFFF + 1)];
-        data.fill(0x12);
+        let mut data: Vec<u8> = vec![0xD3; (0xFFFF + 1)];
+        data.fill(0xD3);
         //copy over the cart rom
         for i in 0..rom.len() {
             data[i] = rom[i];
@@ -305,6 +306,7 @@ impl MMU2 {
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if let Some(en) = IORegister::match_address(addr) {
+            println!("setting reg {:?} to {:02x}",en,val);
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
@@ -330,6 +332,12 @@ impl MMU2 {
                 //writing to div resets it
                 IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
+                IORegister::LCDC => {
+                    println!("set LCDC");
+                }
+                IORegister::IE => {
+                    println!("turnning interrupts back on?");
+                }
                 _ => {
                     //for registers we don't handle yet, just write as normal
                     self.mem[addr as usize] = val;
