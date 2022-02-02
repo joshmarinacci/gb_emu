@@ -13,6 +13,7 @@ use Src16::Im16;
 use crate::{load_romfile, MMU, Z80};
 use crate::common::{get_bit_as_bool, set_bit};
 use crate::mmu::{BGP, LCDC_LCDCONTROL, NR50_SOUND, NR52_SOUND};
+use crate::mmu2::{IORegister, MMU2};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::BinOp::Add;
@@ -36,8 +37,12 @@ pub enum Src16 {  Im16(),   }
 pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), HiMemR8(R8), MemIm16(), MemWithInc(R16), MemWithDec(R16)  }
 #[derive(Debug)]
 pub enum Dst16 {  DstR16(R16), }
-
 #[derive(Debug)]
+enum AddrSrc {
+    Imu16(),
+}
+#[derive(Debug)]
+
 enum BinOp {
     Or,
     Xor,
@@ -46,7 +51,6 @@ enum BinOp {
     Add,
     ADC,
 }
-
 #[derive(Debug)]
 enum BitOps {
     BIT(u8, R8),
@@ -61,6 +65,27 @@ enum BitOps {
     SRL(R8),
     SWAP(R8),
     RLA(),
+}
+
+#[derive(Debug)]
+pub enum Cond {
+    Carry(),
+    NotCarry(),
+    Zero(),
+    NotZero(),
+}
+#[derive(Debug)]
+enum JumpType {
+    Absolute(AddrSrc),
+    RelativeCond(Cond,Src8),
+    Relative(Src8),
+}
+#[derive(Debug)]
+enum CallType {
+    CallU16(),
+    RET(),
+    Push(R16),
+    Pop(R16),
 }
 
 #[derive(Debug)]
@@ -82,8 +107,7 @@ enum OpType {
     Dec8(R8),
     BitOp(BitOps),
 }
-
-
+#[derive(Debug)]
 struct Op {
     code:u16,
     len:u16,
@@ -91,6 +115,12 @@ struct Op {
     typ:OpType,
 }
 
+struct GBState {
+    cpu:Z80,
+    mmu:MMU2,
+    clock:u32,
+    count:u32,
+}
 
 impl R8 {
     fn get_value(&self, gb: &GBState) -> u8 {
@@ -154,11 +184,6 @@ impl R16 {
     }
 }
 
-#[derive(Debug)]
-enum AddrSrc {
-    Imu16(),
-}
-
 impl AddrSrc {
     fn name(&self) -> String {
         match self {
@@ -213,40 +238,8 @@ impl Dst16 {
         }
     }
 }
-#[derive(Debug)]
-pub enum Cond {
-    Carry(),
-    NotCarry(),
-    Zero(),
-    NotZero(),
-}
-
-impl Cond {
-    fn get_value(&self, gb: &GBState) -> bool {
-        match self {
-            Carry() => gb.cpu.r.carry_flag,
-            NotCarry() => !gb.cpu.r.carry_flag,
-            Zero() => gb.cpu.r.zero_flag,
-            NotZero() => !gb.cpu.r.zero_flag,
-        }
-    }
-}
 
 
-#[derive(Debug)]
-enum JumpType {
-    Absolute(AddrSrc),
-    RelativeCond(Cond,Src8),
-    Relative(Src8),
-}
-
-#[derive(Debug)]
-enum CallType {
-    CallU16(),
-    RET(),
-    Push(R16),
-    Pop(R16),
-}
 
 impl BinOp {
     fn name(&self) -> &str {
@@ -261,6 +254,14 @@ impl BinOp {
     }
 }
 impl Cond {
+    fn get_value(&self, gb: &GBState) -> bool {
+        match self {
+            Carry() => gb.cpu.r.carry_flag,
+            NotCarry() => !gb.cpu.r.carry_flag,
+            Zero() => gb.cpu.r.zero_flag,
+            NotZero() => !gb.cpu.r.zero_flag,
+        }
+    }
     fn name(&self) -> &str {
         match self {
             Carry() => "C",
@@ -389,12 +390,12 @@ impl Dst8 {
 }
 
 fn named_addr(addr: u16, gb: &GBState) -> String {
-    if addr == LCDC_LCDCONTROL { return "LCDC".to_string();  }
-    if addr == BGP { return "BGP ".to_string();  }
-    if addr == NR50_SOUND { return "NR50".to_string(); }
-    if addr == NR52_SOUND { return "NR52".to_string();  }
-    let val = gb.mmu.read8(addr);
-    format!("{:02x}",val)
+    if let Some(reg) = IORegister::match_address(addr) {
+        reg.name().to_string()
+    } else {
+        let val = gb.mmu.read8(addr);
+        format!("{:02x}", val)
+    }
 }
 
 impl Op {
@@ -778,7 +779,6 @@ impl Op {
     }
 }
 
-
 fn fetch_opcode_from_memory(gb:&GBState) -> u16 {
     let pc = gb.cpu.r.pc;
     let fb:u8 = gb.mmu.read8(pc);
@@ -790,17 +790,10 @@ fn fetch_opcode_from_memory(gb:&GBState) -> u16 {
     }
 }
 
-struct GBState {
-    cpu:Z80,
-    mmu:MMU,
-    clock:u32,
-    count:u32,
-}
 
 struct OpTable {
     ops:HashMap<u16,Op>
 }
-
 
 impl OpTable {
     fn new() -> OpTable {
@@ -852,7 +845,6 @@ impl OpTable {
         self.add(Op{code, len:2, cycles:8, typ:  BitOp(bop)});
     }
 }
-
 
 fn make_op_table() -> OpTable {
     let mut op_table = OpTable::new();//:HashMap<u16,Op> = HashMap::new();
@@ -1075,7 +1067,7 @@ fn setup_test_rom(fname: &str) -> Option<GBState> {
         Ok(cart) => {
             let mut gb = GBState {
                 cpu: Z80::init(),
-                mmu: MMU::init(&cart.data),
+                mmu: MMU2::init(&cart.data),
                 clock: 0,
                 count: 0,
             };
@@ -1174,10 +1166,11 @@ fn test_hellogithub() {
         gb.count += 1;
 
         if gb.count % 20 == 0 {
-            gb.mmu.hardware.LY+=1;
-            if gb.mmu.hardware.LY >= 154 {
-                gb.mmu.hardware.LY = 0;
+            let mut v = gb.mmu.read8_IO(IORegister::LY);
+            if v >= 154 {
+                v = 0;
             }
+            gb.mmu.write8_IO(IORegister::LY,v+1);
         }
 
         if gb.count > goal {
@@ -1193,23 +1186,16 @@ fn test_hellogithub() {
 #[test]
 fn test_bootrom() {
     let op_table = make_op_table();
-    // let pth = Path::new("./resources/testroms/dmg_boot.bin");
     let pth = Path::new("./resources/testroms/hello-world.gb");
     let data:Vec<u8> = fs::read(pth).unwrap();
 
     let mut gb = GBState {
         cpu: Z80::init(),
-        mmu: MMU::init(&data),
+        mmu: MMU2::init(&data),
         clock: 0,
         count: 0,
     };
-
-    // let start = gb.mmu.fetch_boot_rom();
-    // for (n, chunk) in start.chunks(32).enumerate() {
-    //     let line_str:String = chunk.iter().map(|b|format!("{:02x} ", b)).collect();
-    //     println!("{:04X} {}",(n*32),line_str);
-    // }
-
+    gb.mmu.enable_bootrom();
 
     let goal = 3_250_000;
     gb.cpu.set_pc(0);
@@ -1273,7 +1259,11 @@ fn test_bootrom() {
             0x00E0 => println!("doing check"),
             0x00E8 => println!("checking"),
             0x00f1 => println!("made it past the check!"),
-            0x00fe => println!("made it to the end!. turned off the rom"),
+            0x0100 => {
+                println!("made it to the end!. turned off the rom");
+                // gb.mmu.disable_bootrom();
+                break;
+            },
             _ => {
                 // println!("PC {:04x}",pc);
             }
@@ -1283,10 +1273,11 @@ fn test_bootrom() {
         gb.clock += (op.cycles as u32);
         gb.count += 1;
         if gb.count % 500 == 0 {
-            gb.mmu.hardware.LY+=1;
-            if gb.mmu.hardware.LY >= 154 {
-                gb.mmu.hardware.LY = 0;
+            let mut v = gb.mmu.read8_IO(IORegister::LY);
+            if v >= 154 {
+                v = 0;
             }
+            gb.mmu.write8_IO(IORegister::LY,v+1);
         }
 
         if gb.count > goal {
@@ -1295,6 +1286,6 @@ fn test_bootrom() {
     }
     println!("PC {:04x}",gb.cpu.get_pc());
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
-    assert_eq!(gb.cpu.get_pc(),0x0C);
+    assert_eq!(gb.mmu.read8(0x0100),0xF3);
     // assert_eq!(gb.count>=goal,true);
 }

@@ -10,6 +10,7 @@ mod common;
 mod screen;
 mod ppu;
 mod optest;
+mod mmu2;
 
 use std::fmt::Debug;
 use std::path::PathBuf;
