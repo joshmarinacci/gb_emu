@@ -127,6 +127,20 @@ struct GBState {
 }
 
 impl GBState {
+    fn make_test_context(rom: &Vec<u8>) -> GBState {
+        let mut gb = GBState {
+            cpu: Z80::init(),
+            mmu: MMU2::init(rom),
+            ppu: PPU2::init(),
+            clock: 0,
+            count: 0,
+        };
+        gb.cpu.set_pc(0);
+        return gb;
+    }
+}
+
+impl GBState {
     pub(crate) fn dump_current_state(&self) {
         println!("PC: {:04x}  OP: {:04x}",
                  self.cpu.get_pc(),
@@ -1165,7 +1179,7 @@ fn test_hellogithub() {
     let mut debug = false;
     loop {
         if gb.cpu.get_pc() >= 0x001a {
-            debug = true;
+            debug = false;
         }
         if debug {
             println!("==========");
@@ -1489,3 +1503,89 @@ fn op_tests() {
     }
 
 }
+
+#[test]
+fn test_write_register_A() {
+    let rom:[u8;2] = [0x3e,0x05]; // LD A, 0x05
+    let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
+    let op_table = make_op_table();
+    let code = fetch_opcode_from_memory(&gb);
+    let op = op_table.lookup(&code).unwrap();
+    op.execute(&mut gb);
+    println!("op is {:?}", op);
+    assert_eq!(gb.cpu.r.a,0x05);
+}
+
+#[test]
+fn test_write_register_D() {
+    let rom:[u8;2] = [0x16,0x05]; // LD D, 0x05
+    let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
+    let op_table = make_op_table();
+    let code = fetch_opcode_from_memory(&gb);
+    let op = op_table.lookup(&code).unwrap();
+    op.execute(&mut gb);
+    assert_eq!(gb.cpu.r.d,0x05);
+}
+
+#[test]
+fn test_write_register_DE() {
+    let rom:[u8;2] = [0x16,0x05]; // LD D, 0x05
+    let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
+    let op_table = make_op_table();
+    let code = fetch_opcode_from_memory(&gb);
+    let op = op_table.lookup(&code).unwrap();
+    op.execute(&mut gb);
+    assert_eq!(gb.cpu.r.d,0x05);
+}
+
+// #[test]
+// fn test_push_pop() {
+//     let rom:[u8;10] = [
+//         0x31, 0xfe, 0xff, // LD SP u16, set the stack pointer to fffe
+//         0x06, 0x04, // LD B, 04
+//         0xC5, // PUSH BC
+//         0xCB, 0x11, // RL C
+//         0x17,// RLA
+//         0xC1, // POP BC
+//     ];
+//     let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
+//     let op_table = make_op_table();
+//     let code = fetch_opcode_from_memory(&gb);
+//     let op = op_table.lookup(&code).unwrap();
+//
+//     println!("stack {:?} ",gb.mmu.get_stack_16());
+//     ctx.execute_test(); // set SP to fffe
+//     ctx.execute_test(); // LD B, 04
+//     println!("stack {:?} ",ctx.mmu.get_stack_16());
+//     assert_eq!(ctx.cpu.r.sp,0xfffe);
+//     println!("BC {:04x}",ctx.cpu.r.get_u16reg(&BC));
+//     println!("B {:02x}",ctx.cpu.r.get_u8reg(&B));
+//     println!("C {:02x}",ctx.cpu.r.get_u8reg(&C));
+//     assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
+//     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
+//     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
+//     // println!("stack {:?} ",ctx.mmu.get_stack_16());
+//     println!("B {:02x} C {:02x} BC {:04x}",ctx.cpu.r.get_u8reg(&B), ctx.cpu.r.get_u8reg(&C), ctx.cpu.r.get_u16reg(&BC));
+//
+//     println!("pushing BC");
+//     ctx.execute_test(); // PUSH BC
+//     assert_eq!(ctx.cpu.r.sp,0xfffe-2);
+//     assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
+//     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
+//     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
+//     println!("stack {:?} ",ctx.mmu.get_stack_16());
+//
+//     ctx.execute_test(); // RL C
+//     ctx.execute_test(); // RLA
+//
+//     println!("POPPING BC");
+//     ctx.execute_test(); // POP BC
+//     println!("stack {:?} ",ctx.mmu.get_stack_16());
+//     println!("B {:02x} C {:02x} BC {:04x}",ctx.cpu.r.get_u8reg(&B), ctx.cpu.r.get_u8reg(&C), ctx.cpu.r.get_u16reg(&BC));
+//     assert_eq!(ctx.cpu.r.sp,0xfffe);
+//     assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
+//     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
+//     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
+//
+// }
+
