@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::format;
 use std::fs;
 use std::path::{Path, PathBuf};
-use BinOp::{And, Or, Xor};
+use BinOp::{And, Or, SUB, Xor};
 use BitOps::{BIT, RES, SET};
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
@@ -12,9 +12,10 @@ use OpType::{BitOp, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
 use Src16::Im16;
 use crate::{load_romfile, MMU, Z80};
 use crate::common::{get_bit_as_bool, set_bit};
-use crate::mmu::{BGP, LCDC_LCDCONTROL, NR52_SOUND};
+use crate::mmu::{BGP, LCDC_LCDCONTROL, NR50_SOUND, NR52_SOUND};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
+use crate::optest::BinOp::Add;
 use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{Relative, RelativeCond};
@@ -41,6 +42,9 @@ enum BinOp {
     Or,
     Xor,
     And,
+    SUB,
+    Add,
+    ADC,
 }
 
 #[derive(Debug)]
@@ -56,12 +60,14 @@ enum BitOps {
     SRA(R8),
     SRL(R8),
     SWAP(R8),
+    RLA(),
 }
 
 #[derive(Debug)]
 enum OpType {
     Noop(),
     Jump(JumpType),
+    Call(CallType),
     Load16(Dst16, Src16),
     Load8(Dst8, Src8),
     DisableInterrupts(),
@@ -234,12 +240,23 @@ enum JumpType {
     Relative(Src8),
 }
 
+#[derive(Debug)]
+enum CallType {
+    CallU16(),
+    RET(),
+    Push(R16),
+    Pop(R16),
+}
+
 impl BinOp {
     fn name(&self) -> &str {
         match self {
             Or => "OR",
             Xor => "XOR",
             And => "AND",
+            SUB => "SUB",
+            BinOp::Add => "ADD",
+            BinOp::ADC => "ADC",
         }
     }
 }
@@ -374,6 +391,7 @@ impl Dst8 {
 fn named_addr(addr: u16, gb: &GBState) -> String {
     if addr == LCDC_LCDCONTROL { return "LCDC".to_string();  }
     if addr == BGP { return "BGP ".to_string();  }
+    if addr == NR50_SOUND { return "NR50".to_string(); }
     if addr == NR52_SOUND { return "NR52".to_string();  }
     let val = gb.mmu.read8(addr);
     format!("{:02x}",val)
@@ -394,12 +412,47 @@ impl Op {
                         let e = u8_as_i8(off);
                         gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
                         if cond.get_value(gb) {
-                            let addr = (((gb.cpu.get_pc()) as i32) + (e as i32)) as u16;
+                            let addr:u16 = (((gb.cpu.get_pc()) as i32) + (e as i32)) as u16;
                             gb.cpu.set_pc(addr);
                         }
                     }
-                    Relative(n) => {
-                        todo!("Jump Relative not impelmented")
+                    Relative(src) => {
+                        let e = u8_as_i8(src.get_value(gb));
+                        //update the pc before calculating the relative address
+                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                        let addr:u16 = ((gb.cpu.get_pc() as i32) + (e as i32)) as u16;
+                        gb.cpu.set_pc(addr);
+                    }
+                }
+            }
+            OpType::Call(typ) => {
+                match typ {
+                    CallType::CallU16() => {
+                        let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
+                        gb.cpu.dec_sp();
+                        gb.cpu.dec_sp();
+                        gb.mmu.write16(gb.cpu.get_sp(), gb.cpu.get_pc()+3);
+                        gb.cpu.set_pc(addr);
+                    }
+                    CallType::Push(src) => {
+                        let value = src.get_value(gb);
+                        gb.cpu.dec_sp();
+                        gb.cpu.dec_sp();
+                        gb.mmu.write16(gb.cpu.get_sp(), value);
+                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                    }
+                    CallType::Pop(src) => {
+                        let value = gb.mmu.read16(gb.cpu.get_sp());
+                        gb.cpu.inc_sp();
+                        gb.cpu.inc_sp();
+                        src.set_value(gb,value);
+                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                    }
+                    CallType::RET() => {
+                        let addr = gb.mmu.read16(gb.cpu.get_sp());
+                        gb.cpu.inc_sp();
+                        gb.cpu.inc_sp();
+                        gb.cpu.set_pc(addr);
                     }
                 }
             }
@@ -481,22 +534,44 @@ impl Op {
                 let result = v1.wrapping_sub(1);
                 dst.set_value(gb, result);
                 gb.cpu.r.zero_flag = result == 0;
-                gb.cpu.r.half_flag = (result & 0x0F) == 0;
                 gb.cpu.r.subtract_n_flag = true;
+                gb.cpu.r.half_flag = (result & 0x0F) == 0;
+                // carry not modified
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
             Math(binop, dst,src) => {
                 let b = src.get_value(gb);
                 let a = dst.get_value(gb);
-                let (res, half) = match binop {
-                    Or  => (a | b, false),
-                    Xor => (a ^ b, false),
-                    And => (a & b, true),
+                let (res,sub, half, carry) = match binop {
+                    Or  => (a | b, false, false, gb.cpu.r.carry_flag),
+                    Xor => (a ^ b, false, false, gb.cpu.r.carry_flag),
+                    And => (a & b, false, true,  gb.cpu.r.carry_flag),
+                    BinOp::Add => {
+                        let c = 0;
+                        let r = a.wrapping_add(b).wrapping_add(c);
+                        let half =     (a & 0x0F) + (b &0x0F) > 0xF;
+                        let carry = (a as u16) + (b as u16) > 0xFF;
+                        (r, false, half,carry)
+                    },
+                    BinOp::ADC => {
+                        let c = if gb.cpu.r.carry_flag { 1 } else { 0 };
+                        let r = a.wrapping_add(b).wrapping_add(c);
+                        let half = (a & 0x0F) + (b & 0x0F) + c > 0xF;
+                        let carry = (a as u16) + (b as u16) + (c as u16) > 0xFF;
+                        (r,false,half,carry)
+                    }
+                    BinOp::SUB => {
+                        let c =  0;
+                        let r = a.wrapping_sub(b).wrapping_sub(c);
+                        let half = ((a & 0x0F) < (b & 0x0F) + c);
+                        let carry = (a as u16) < (b as u16) + (c as u16);
+                        (r,true,half,carry)
+                    },
                 };
                 gb.cpu.r.zero_flag = res == 0;
-                gb.cpu.r.subtract_n_flag = false;
+                gb.cpu.r.subtract_n_flag = sub;
                 gb.cpu.r.half_flag = half;
-                gb.cpu.r.carry_flag = false;
+                gb.cpu.r.carry_flag = carry;
                 dst.set_value(gb,res);
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
@@ -604,6 +679,16 @@ impl Op {
                         gb.cpu.r.half_flag = false;
                         gb.cpu.r.carry_flag = false;
                     }
+                    BitOps::RLA() => {
+                        let a:u8 = A.get_value(gb);
+                        let c = a & 0x80 == 0x80;
+                        let r = (a << 1) | (if gb.cpu.r.carry_flag { 1 } else { 0 });
+                        A.set_value(gb,r);
+                        gb.cpu.r.zero_flag = r == 0;
+                        gb.cpu.r.subtract_n_flag = false;
+                        gb.cpu.r.half_flag = false;
+                        gb.cpu.r.carry_flag = c;
+                    }
                 }
                 gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
             }
@@ -639,6 +724,15 @@ impl Op {
             BitOp(SRA(src)) => format!("RLC {}", src.name()),
             BitOp(SRL(src)) => format!("RLC {}", src.name()),
             BitOp(SWAP(src)) => format!("RLC {}", src.name()),
+            BitOp(BitOps::RLA()) => format!("RLA"),
+            OpType::Call(ct) => {
+                match ct {
+                    CallType::CallU16() => format!("CALL u16"),
+                    CallType::Push(src) => format!("PUSH {}", src.name()),
+                    CallType::Pop(src) => format!("POP {}", src.name()),
+                    CallType::RET() => format!("RET"),
+                }
+            }
         }
     }
     pub(crate) fn real(&self, gb:&GBState) -> String {
@@ -671,6 +765,15 @@ impl Op {
             BitOp(SRA(src)) => format!("SRA  {}", src.get_value(gb)),
             BitOp(SRL(src)) => format!("SRL  {}", src.get_value(gb)),
             BitOp(SWAP(src)) => format!("SWAP {}",src.get_value(gb)),
+            BitOp(BitOps::RLA()) => format!("RLA {}", A.get_value(gb)),
+            OpType::Call(ct) => {
+                match ct {
+                    CallType::CallU16() => format!("CALL {}",gb.mmu.read16(gb.cpu.get_pc())),
+                    CallType::Push(src) => format!("PUSH {}", src.get_value(gb)),
+                    CallType::Pop(src) => format!("POP {}", src.get_value(gb)),
+                    CallType::RET() => format!("RET  back to {:04X}", gb.mmu.read16(gb.cpu.get_sp())),
+                }
+            }
         }
     }
 }
@@ -725,10 +828,15 @@ impl OpTable {
             Src8::MemWithInc(_) => (1,8),
             Src8::MemWithDec(_) => (1,8),
         };
-        if let Dst8::HiMemIm8() = dst {
-            println!("hi mem. add one more");
-            len += 1;
-        };
+        match dst {
+            DstR8(_) => {}
+            AddrDst(_) => {}
+            Dst8::HiMemIm8() => len += 1,
+            Dst8::HiMemR8(_) => {}
+            Dst8::MemIm16() => len += 2,
+            Dst8::MemWithInc(_) => {}
+            Dst8::MemWithDec(_) => {}
+        }
         self.insert(code, Op { code, len, cycles,  typ:OpType::Load8(dst, src)});
     }
     fn load16(&mut self, code: u16, dst: Dst16, src: Src16) {
@@ -808,7 +916,16 @@ fn make_op_table() -> OpTable {
     op_table.load8( 0x6E, DstR8(L), Mem(HL));
     op_table.load8( 0x6F, DstR8(L), SrcR8(A));
 
+    op_table.load8( 0x77, AddrDst(HL), SrcR8(A)); // LD L,A
     op_table.load8( 0x78, DstR8(A), SrcR8(B));
+    op_table.load8( 0x79, DstR8(A), SrcR8(C));
+    op_table.load8( 0x7A, DstR8(A), SrcR8(D));
+    op_table.load8( 0x7B, DstR8(A), SrcR8(E));
+    op_table.load8( 0x7C, DstR8(A), SrcR8(H));
+    op_table.load8( 0x7D, DstR8(A), SrcR8(L));
+    op_table.load8( 0x7E, DstR8(A), Mem(HL));
+    op_table.load8( 0x7F, DstR8(A), SrcR8(A));
+
 
     op_table.load16(0x11, DstR16(DE), Im16()); // LD DE, nn
     op_table.load16(0x21, DstR16(HL), Im16()); // LD HL, nn
@@ -820,10 +937,7 @@ fn make_op_table() -> OpTable {
     op_table.load8( 0x2E, DstR8(L), Im8()); // LD L,n
 
 
-    op_table.load8( 0x7F, DstR8(A), SrcR8(A)); // LD A,A
-
     op_table.load8( 0x12, AddrDst(DE), SrcR8(A)); // LD L,A
-    op_table.load8( 0x77, AddrDst(HL), SrcR8(A)); // LD L,A
     op_table.load8( 0xEA, Dst8::MemIm16(), SrcR8(A)); // LD L,A
     op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
     op_table.load8(0xFA,DstR8(A),Src8::MemIm16());
@@ -837,12 +951,8 @@ fn make_op_table() -> OpTable {
 
 
     op_table.add(Op { code:0xF3, len: 1, cycles:4, typ:OpType::DisableInterrupts(), });
-    op_table.insert(0xFE, Op {
-        code: 0xFE,
-        len: 2,
-        cycles: 8,
-        typ: OpType::Compare(DstR8(A), Im8()),
-    });
+    op_table.insert(0xFE, Op { code: 0xFE, len: 2,  cycles: 8, typ: OpType::Compare(DstR8(A),Im8()), });
+    op_table.add(Op { code: 0xBE, len: 1,  cycles: 8, typ: OpType::Compare(DstR8(A),Src8::Mem(HL))});
 
 
 
@@ -866,17 +976,45 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: Inc8(E)   });
     op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: Dec8(E)   });
 
+    op_table.add(Op { code:0x24, len: 1, cycles: 4, typ: Inc8(H)   });
+    op_table.add(Op { code:0x25, len: 1, cycles: 4, typ: Dec8(H)   });
+    op_table.add(Op { code:0x2C, len: 1, cycles: 4, typ: Inc8(L)   });
+    op_table.add(Op { code:0x2D, len: 1, cycles: 4, typ: Dec8(L)   });
+
+    op_table.add(Op { code:0x3C, len: 1, cycles: 4, typ: Dec8(A)   });
+    op_table.add(Op { code:0x3D, len: 1, cycles: 4, typ: Dec8(A)   });
+
 
     op_table.add(Op { code:0xB1, len: 1, cycles: 4, typ: Math(Or, DstR8(A),SrcR8(C)) });
     op_table.add(Op { code:0xA7, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(C)) });
     op_table.add(Op { code:0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
 
+    op_table.add( Op {
+        code: 0x90,
+        len: 1,
+        cycles: 4,
+        typ: Math(SUB, DstR8(A), SrcR8(B)),
+    });
+    op_table.add(Op {
+        code: 0x86,
+        len: 1,
+        cycles: 8,
+        typ: Math(BinOp::Add,DstR8(A), Src8::Mem(HL)),
+    });
+
+    //        0x86 => Some(MathInst(ADD_A_addr(HL))),
+
     op_table.add(Op{ code: 0xC3, len: 3, cycles: 12, typ: Jump(Absolute(AddrSrc::Imu16()) )});
     op_table.add(Op{ code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(NotZero(), Im8())) });
     op_table.add(Op{ code: 0x30, len: 2, cycles: 12, typ: Jump(RelativeCond(NotCarry(),Im8())) });
-    op_table.add(Op{ code: 0x38, len: 2, cycles: 8,  typ: Jump(RelativeCond(Carry(),   Im8())) });
+    op_table.add(Op{ code: 0x38, len: 2, cycles:  8, typ: Jump(RelativeCond(Carry(),   Im8())) });
+    op_table.add(Op{ code: 0x28, len: 2, cycles: 12, typ: Jump(RelativeCond(Zero(),Im8()))});
     op_table.add(Op{ code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
 
+
+    op_table.add(Op{code:0x17, len:1, cycles:4, typ: BitOp(BitOps::RLA())});
+
+    // almost the entire lower CB chart
     let r8list = [B,C,D,E,H,L];
     for (i, r8) in r8list.iter().enumerate() {
         let col = (i as u16);
@@ -915,6 +1053,20 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_F0 + col,SET(6, *r8));
         op_table.bitop(0xCB_F8 + col,SET(7, *r8));
     }
+
+
+    op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: OpType::Call(CallType::CallU16())});
+    op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: OpType::Call(CallType::RET())});
+
+    op_table.add(Op{ code: 0x00C1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(BC))});
+    op_table.add(Op{ code: 0x00C5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(BC))});
+    op_table.add(Op{ code: 0x00D1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(DE))});
+    op_table.add(Op{ code: 0x00D5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(DE))});
+    op_table.add(Op{ code: 0x00E1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(HL))});
+    op_table.add(Op{ code: 0x00E5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(HL))});
+    // op_table.add(Op{ code: 0x00F1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(AF))});
+    // op_table.add(Op{ code: 0x00F5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(AF))});
+
     op_table
 }
 
@@ -1041,7 +1193,8 @@ fn test_hellogithub() {
 #[test]
 fn test_bootrom() {
     let op_table = make_op_table();
-    let pth = Path::new("./resources/testroms/dmg_boot.bin");
+    // let pth = Path::new("./resources/testroms/dmg_boot.bin");
+    let pth = Path::new("./resources/testroms/hello-world.gb");
     let data:Vec<u8> = fs::read(pth).unwrap();
 
     let mut gb = GBState {
@@ -1051,24 +1204,22 @@ fn test_bootrom() {
         count: 0,
     };
 
-    let goal = 40_000;
+    // let start = gb.mmu.fetch_boot_rom();
+    // for (n, chunk) in start.chunks(32).enumerate() {
+    //     let line_str:String = chunk.iter().map(|b|format!("{:02x} ", b)).collect();
+    //     println!("{:04X} {}",(n*32),line_str);
+    // }
+
+
+    let goal = 3_250_000;
     gb.cpu.set_pc(0);
 
     let mut debug = false;
     loop {
-        // println!("HL is {:04x}",gb.cpu.r.get_hl());
-        if gb.cpu.get_pc() >= 0x00_0c {
-            println!("reached 0c");
-            // break;
-            debug = true;
-        }
-        if gb.count > 35_000 { debug = true;  }
-        // if gb.cpu.r.h < 0x9a {
-        //     debug = true;
-        // }
         if debug {
             println!("==========");
             println!("PC {:04x}    clock = {}   count = {}", gb.cpu.get_pc(), gb.clock, gb.count);
+            println!("LY = {:02x}",gb.mmu.read8(0xFF44))
         }
         let opcode = fetch_opcode_from_memory(&gb);
         if let None = op_table.lookup(&opcode) {
@@ -1099,9 +1250,39 @@ fn test_bootrom() {
             panic!("stuck in an infinite loop");
             break;
         }
+
+        let pc = gb.cpu.get_pc();
+        match pc {
+            0x0000 => println!("at the start"),
+            0x000c => println!("setting up audio"),
+            0x0021 => println!("Loading the logo"),
+            0x0034 => println!("adding extra bits"),
+            0x0040 => println!("setup background tilemap"),
+            0x0055 => println!("setting scroll count to {:02x}",gb.cpu.r.h),
+            0x0059 => println!("setting vertical register to {:02x} ", gb.mmu.read8(0xFF42)),
+            // 0x005f => println!("set b to {:02x}",gb.cpu.r.b),
+            // 0x006a => println!("dec c to {:02x}",gb.cpu.r.c),
+            // 0x006d => println!("reached 006d e is {:02x}",gb.cpu.r.e),
+            // 0x0070 => println!("reached 70!"),
+            // 0x0072 => println!("incremented scroll count {:02x}",gb.cpu.r.h),
+            // 0x0064 => println!("waiting for screenframe {:02x}",gb.mmu.read8(0xFF44)),
+            // 0x0080 => println!("playing sound one"),
+            // 0x0086 => println!("playing sound two"),
+            // 0x0089 => println!("scroll logo up if b=1 {:02x} {:02x}",gb.cpu.r.b, gb.mmu.read8(0xFF42)),
+            0x008e => println!("got to 8e"),
+            0x00E0 => println!("doing check"),
+            0x00E8 => println!("checking"),
+            0x00f1 => println!("made it past the check!"),
+            0x00fe => println!("made it to the end!. turned off the rom"),
+            _ => {
+                // println!("PC {:04x}",pc);
+            }
+        }
+
+
         gb.clock += (op.cycles as u32);
         gb.count += 1;
-        if gb.count % 20 == 0 {
+        if gb.count % 500 == 0 {
             gb.mmu.hardware.LY+=1;
             if gb.mmu.hardware.LY >= 154 {
                 gb.mmu.hardware.LY = 0;
@@ -1112,6 +1293,7 @@ fn test_bootrom() {
             break;
         }
     }
+    println!("PC {:04x}",gb.cpu.get_pc());
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
     assert_eq!(gb.cpu.get_pc(),0x0C);
     // assert_eq!(gb.count>=goal,true);

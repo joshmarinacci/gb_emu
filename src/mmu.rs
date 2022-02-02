@@ -1,7 +1,8 @@
 use std::cmp::{max, min};
+use std::fs;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use log::info;
-use crate::bootrom::BOOT_ROM;
 use crate::common::{get_bit, get_bit_as_bool, HWReg, LCDC, SCX, set_bit};
 use crate::ppu::ScreenState;
 use crate::{common, Z80};
@@ -106,6 +107,7 @@ pub struct MMU {
     inbios:bool,
     bios:Vec<u8>,
     pub data:Vec<u8>,
+    cart_rom:Vec<u8>,
     lowest_used_iram:u16,
     highest_used_iram:u16,
     pub hardware:Hardware,
@@ -114,6 +116,9 @@ pub struct MMU {
 }
 
 impl MMU {
+    pub(crate) fn fetch_boot_rom(&self) -> &[u8] {
+        &self.data[0x0000 .. 0x0100]
+    }
     pub(crate) fn fetch_rom_bank_1(&self) -> &[u8] {
         &self.data[0x0100 .. 0x0200]
     }
@@ -214,7 +219,8 @@ impl MMU {
         let mut data:Vec<u8> = vec![0x12; (0xFFFF+1)];
         info!("memory length is {} {:04x}",data.len(),data.len());
         data.fill(0x12);
-        let bios = Vec::from(BOOT_ROM);
+        let pth = Path::new("./resources/testroms/dmg_boot.bin");
+        let bios:Vec<u8> = fs::read(pth).unwrap();
         //copy over the cart rom
         let len = rom.len();
         for i in 0..len {
@@ -224,6 +230,7 @@ impl MMU {
             inbios: true,
             bios,
             data,
+            cart_rom:rom.to_vec(),
             lowest_used_iram: INTERNAL_RAM_END,
             highest_used_iram: INTERNAL_RAM_START,
             hardware: Hardware::init(),
@@ -239,6 +246,11 @@ impl MMU {
                 readmode: JoypadReadMode::Action()
             },
             last_write_addr: 0
+        }
+    }
+    fn disable_bootloader(&mut self) {
+        for i in 0..256 {
+            self.data[i] = self.cart_rom[i];
         }
     }
     pub(crate) fn overlay_boot(&mut self) {
@@ -339,6 +351,10 @@ impl MMU {
         //     r.value = val;
         // }
         self.last_write_addr = addr;
+        if addr == 0xFF50 {
+            self.disable_bootloader();
+            return;
+        }
         if addr < 0x8000 {
             if addr >= 0x0000 && addr <= 0x1FFF {
                 info!("writing to enable external RAM");
@@ -570,7 +586,7 @@ const NR34_SOUND:u16 = 0xFF1E;
 
 const NR42_SOUND:u16 = 0xFF21;
 const NR44_SOUND:u16 = 0xFF23;
-const NR50_SOUND:u16 = 0xFF24;
+pub const NR50_SOUND:u16 = 0xFF24;
 const NR51_SOUND:u16 = 0xFF25;
 pub const NR52_SOUND:u16 = 0xFF26;
 //more sound stuff

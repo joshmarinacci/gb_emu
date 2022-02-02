@@ -3,7 +3,6 @@
 #![allow(unused)]
 
 mod cpu;
-mod bootrom;
 mod mmu;
 mod opcodes;
 mod debugger;
