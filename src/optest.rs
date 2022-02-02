@@ -1289,3 +1289,86 @@ fn test_bootrom() {
     assert_eq!(gb.mmu.read8(0x0100),0xF3);
     // assert_eq!(gb.count>=goal,true);
 }
+
+#[test]
+fn test_tetris() {
+    let op_table = make_op_table();
+    let pth = Path::new("./resources/testroms/tetris.gb");
+    let data:Vec<u8> = fs::read(pth).unwrap();
+
+    let mut gb = GBState {
+        cpu: Z80::init(),
+        mmu: MMU2::init(&data),
+        clock: 0,
+        count: 0,
+    };
+    // gb.mmu.enable_bootrom();
+
+    let goal = 100_000_000;
+    gb.cpu.set_pc(0x100);
+
+    let mut debug = false;
+    loop {
+        if debug {
+            println!("==========");
+            println!("PC {:04x}    clock = {}   count = {}", gb.cpu.get_pc(), gb.clock, gb.count);
+            println!("LY = {:02x}",gb.mmu.read8(0xFF44))
+        }
+        let opcode = fetch_opcode_from_memory(&gb);
+        if let None = op_table.lookup(&opcode) {
+            println!("failed to lookup op for code {:04x}",opcode);
+            break;
+        }
+        let op = op_table.lookup(&opcode).unwrap();
+        if debug {
+            println!("PC {:04x} {:04x}  =  {}      ({},{})", gb.cpu.get_pc(), op.code, op.to_asm(), op.len, op.cycles);
+            println!("                 {}", op.real(&gb));
+        }
+        let prev_pc = gb.cpu.get_pc();
+        op.execute(&mut gb);
+        if debug {
+            println!("after A:{:02x} B:{:02x} C:{:02x}  H:{:02x}    BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
+                     gb.cpu.r.a,
+                     gb.cpu.r.b,
+                     gb.cpu.r.c,
+                     gb.cpu.r.h,
+                     gb.cpu.r.get_bc(),
+                     gb.cpu.r.get_de(),
+                     gb.cpu.r.get_hl(),
+                     gb.cpu.r.zero_flag,
+                     gb.cpu.r.carry_flag,
+            );
+        }
+        if gb.cpu.get_pc() == prev_pc {
+            panic!("stuck in an infinite loop");
+            break;
+        }
+
+        let pc = gb.cpu.get_pc();
+        match pc {
+            0x0000 => println!("at the start"),
+            _ => {
+                // println!("PC {:04x}",pc);
+            }
+        }
+
+
+        gb.clock += (op.cycles as u32);
+        gb.count += 1;
+        if gb.count % 500 == 0 {
+            let mut v = gb.mmu.read8_IO(IORegister::LY);
+            if v >= 154 {
+                v = 0;
+            }
+            gb.mmu.write8_IO(IORegister::LY,v+1);
+        }
+
+        if gb.count > goal {
+            break;
+        }
+    }
+    println!("PC {:04x}",gb.cpu.get_pc());
+    println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
+    assert_eq!(gb.mmu.read8(0x0100),0xF3);
+    // assert_eq!(gb.count>=goal,true);
+}
