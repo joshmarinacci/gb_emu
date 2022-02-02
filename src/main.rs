@@ -11,6 +11,7 @@ mod screen;
 mod ppu;
 mod optest;
 mod mmu2;
+mod ppu2;
 
 use std::fmt::Debug;
 use std::path::PathBuf;

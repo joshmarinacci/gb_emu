@@ -24,6 +24,7 @@ use crate::optest::OpType::Load8;
 use crate::optest::R8::{A, B, C, D, E, H, L};
 use crate::optest::R16::{BC, DE, HL, SP};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
+use crate::ppu2::PPU2;
 
 #[derive(Debug, Copy, Clone)]
 pub enum R8  { A, B, C, D, E, H, L,}
@@ -118,6 +119,7 @@ struct Op {
 struct GBState {
     cpu:Z80,
     mmu:MMU2,
+    ppu:PPU2,
     clock:u32,
     count:u32,
 }
@@ -1068,6 +1070,7 @@ fn setup_test_rom(fname: &str) -> Option<GBState> {
             let mut gb = GBState {
                 cpu: Z80::init(),
                 mmu: MMU2::init(&cart.data),
+                ppu: PPU2::init(),
                 clock: 0,
                 count: 0,
             };
@@ -1192,6 +1195,7 @@ fn test_bootrom() {
     let mut gb = GBState {
         cpu: Z80::init(),
         mmu: MMU2::init(&data),
+        ppu: PPU2::init(),
         clock: 0,
         count: 0,
     };
@@ -1299,6 +1303,7 @@ fn test_tetris() {
     let mut gb = GBState {
         cpu: Z80::init(),
         mmu: MMU2::init(&data),
+        ppu: PPU2::init(),
         clock: 0,
         count: 0,
     };
@@ -1357,10 +1362,18 @@ fn test_tetris() {
         gb.count += 1;
         if gb.count % 500 == 0 {
             let mut v = gb.mmu.read8_IO(IORegister::LY);
+            // println!("v is {}",v);
+            let mut v2 = v;
             if v >= 154 {
-                v = 0;
+                v2 = 0;
+            } else {
+                v2 = v + 1
             }
-            gb.mmu.write8_IO(IORegister::LY,v+1);
+            if v2 == 40 {
+                println!("vblank flip");
+                // gb.ppu.draw_full_screen(&gb.mmu)
+            }
+            gb.mmu.write8_IO(IORegister::LY,v2);
         }
 
         if gb.count > goal {
@@ -1371,4 +1384,14 @@ fn test_tetris() {
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
     assert_eq!(gb.mmu.read8(0x0100),0xF3);
     // assert_eq!(gb.count>=goal,true);
+}
+
+#[test]
+fn read_n_right_test() {
+    let mut mmu:MMU2 = MMU2::init_empty(0x66);
+    assert_eq!(mmu.read8(0x142),0x66);
+    mmu.write8(0x142,0x42);
+    assert_eq!(mmu.read8(0x142),0x42);
+    mmu.write8_IO(IORegister::LY,0x85);
+    assert_eq!(mmu.read8_IO(IORegister::LY),0x85);
 }

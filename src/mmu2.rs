@@ -173,6 +173,27 @@ pub struct MMU2 {
     boot_rom_enabled:bool,
     joypad:Joypad,
 }
+
+impl MMU2 {
+    pub(crate) fn init_empty(val: u8) -> MMU2 {
+        let mut data: Vec<u8> = vec![0x00;(0xFFFF + 1)];
+        data.fill(val);
+        MMU2 {
+            cart_rom: vec![],
+            boot_rom: vec![],
+            mem: data,
+            boot_rom_enabled: false,
+            joypad: Joypad::init(),
+        }
+    }
+}
+
+impl MMU2 {
+    pub(crate) fn borrow_slice(&self, start: usize, end: usize) -> &[u8] {
+        &self.mem[start..end]
+    }
+}
+
 pub enum JoypadReadMode {
     Action(),
     Direction(),
@@ -190,6 +211,21 @@ pub struct Joypad {
     pub readmode:JoypadReadMode,
 }
 
+impl Joypad {
+    fn init() -> Joypad {
+        Joypad {
+            a: false,
+            b: false,
+            select: false,
+            start: false,
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            readmode: JoypadReadMode::Action()
+        }
+    }
+}
 
 
 impl MMU2 {
@@ -205,17 +241,7 @@ impl MMU2 {
             boot_rom: fs::read("./resources/testroms/dmg_boot.bin").unwrap(),
             mem: data,
             cart_rom: rom.to_vec(),
-            joypad: Joypad {
-                a: false,
-                b: false,
-                select: false,
-                start: false,
-                up: false,
-                down: false,
-                left: false,
-                right: false,
-                readmode: JoypadReadMode::Action()
-            }
+            joypad: Joypad::init(),
         }
     }
     pub fn disable_bootrom(&mut self) {
@@ -256,7 +282,7 @@ impl MMU2 {
                         }
                     }
                 },
-                _ => 0xFF,
+                _ => self.mem[addr as usize]
             }
         } else {
             self.mem[addr as usize]
