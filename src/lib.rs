@@ -8,3 +8,4 @@ pub mod ppu2;
 pub mod mmu;
 pub mod mmu2;
 pub mod debugger;
+mod cpu2;
