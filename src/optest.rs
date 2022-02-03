@@ -1296,6 +1296,24 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0x3C, len: 1, cycles: 4, typ: Inc8(A)   });
     op_table.add(Op { code:0x3D, len: 1, cycles: 4, typ: Dec8(DstR8(A))   });
 
+    op_table.add(Op { code: 0x80, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(B))});
+    op_table.add(Op { code: 0x81, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(C))});
+    op_table.add(Op { code: 0x82, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(D))});
+    op_table.add(Op { code: 0x83, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(E))});
+    op_table.add(Op { code: 0x84, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(H))});
+    op_table.add(Op { code: 0x85, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(L))});
+    op_table.add(Op { code: 0x86, len: 1, cycles: 8, typ: Math(Add, DstR8(A), Mem(HL))});
+    op_table.add(Op { code: 0x87, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(A))});
+
+
+    op_table.add(Op { code: 0x90, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(B))});
+    op_table.add(Op { code: 0x91, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(C))});
+    op_table.add(Op { code: 0x92, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(D))});
+    op_table.add(Op { code: 0x93, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(E))});
+    op_table.add(Op { code: 0x94, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(H))});
+    op_table.add(Op { code: 0x95, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(L))});
+    op_table.add(Op { code: 0x96, len: 1, cycles: 8, typ: Math(SUB, DstR8(A), Mem(HL))});
+    op_table.add(Op { code: 0x97, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(A))});
 
     op_table.add(Op { code: 0xA0, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(B)) });
     op_table.add(Op { code: 0xA1, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(C)) });
@@ -1306,8 +1324,10 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code: 0xA6, len: 1, cycles: 8, typ: Math(And, DstR8(A),Src8::Mem(HL)) });
     op_table.add(Op { code: 0xA7, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(A)) });
     op_table.add(Op { code: 0xA9, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(C)) });
-
-
+    op_table.add(Op { code: 0xAA, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(D)) });
+    op_table.add(Op { code: 0xAB, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(E)) });
+    op_table.add(Op { code: 0xAC, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(H)) });
+    op_table.add(Op { code: 0xAD, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(L)) });
     op_table.add(Op { code: 0xAE, len: 1, cycles: 8, typ: Math(Xor,DstR8(A),Src8::Mem(HL)) });
     op_table.add(Op { code: 0xAF, len: 1, cycles: 4, typ: Math(Xor,DstR8(A),SrcR8(A)) });
 
@@ -1326,13 +1346,11 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code: 0x29, len: 1, cycles: 8, typ:Math16(Add,DstR16(HL), SrcR16(HL))});
     op_table.add(Op { code: 0x39, len: 1, cycles: 8, typ:Math16(Add,DstR16(HL), SrcR16(SP))});
 
-    op_table.add(Op { code: 0x86, len: 1, cycles: 8, typ: Math(Add, DstR8(A), Mem(HL))});
-    op_table.add(Op { code: 0x87, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(A))});
 
     op_table.add(Op { code: 0xC6, len: 2, cycles: 8, typ: Math(Add, DstR8(A), Src8::Im8())});
     op_table.add(Op { code: 0xD6, len: 2, cycles: 8, typ: Math(SUB, DstR8(A), Src8::Im8())});
 
-    op_table.add(Op { code: 0x90, len: 1, cycles: 4, typ: Math(SUB, DstR8(A), SrcR8(B))});
+
     op_table.add(Op { code: 0xE6, len: 2, cycles: 8, typ: Math(And, DstR8(A), Im8())});
     op_table.add(Op { code: 0xEE, len: 1, cycles: 8, typ: Math(Xor, DstR8(A),Src8::Im8()) });
 
