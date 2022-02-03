@@ -544,20 +544,21 @@ impl GBState {
         let code = self.fetch_next_opcode();
         if let Some(opx) = self.ops.ops.get(&code) {
             let op: Op = (*opx).clone();
-            if self.cpu.get_pc() == 0x28 {
-                self.debug = true;
-            }
-            if self.cpu.get_pc() == 0x29a6 {
-                self.debug = true;
-            }
+            // if self.cpu.get_pc() == 0x28 {
+            //     self.debug = true;
+            // }
+            // if self.cpu.get_pc() == 0x29a6 {
+            //     self.debug = true;
+            // }
             if self.debug {
                 let pc = self.cpu.get_pc();
-                println!("BEFORE: PC {:04x}  op:{:04x} {:?}  reg:{}",
+                println!("BEFORE: PC {:04x}  op:{:04x} {:?}  reg:{}   next mem = {:02x}  {:02x}  {:02x}",
                          pc,
                          code,
                          op.to_asm(),
-                         self.cpu.reg_to_str());
-                println!("next mem = {:02x}  {:02x}  {:02x}", self.mmu.read8(pc+0), self.mmu.read8(pc+1),self.mmu.read8(pc+2));
+                         self.cpu.reg_to_str(),
+                         self.mmu.read8(pc+0), self.mmu.read8(pc+1),self.mmu.read8(pc+2)
+                );
             }
             self.stuff(&op);
             // if self.debug {
@@ -627,9 +628,9 @@ impl GBState {
                         self.set_pc(addr);
                     }
                     Restart(n) => {
-                        let addr = self.mmu.read16(self.cpu.get_pc()+1);
                         self.cpu.dec_sp();
                         self.cpu.dec_sp();
+                        self.mmu.write16(self.cpu.get_sp(),self.cpu.get_pc()+1);
                         self.set_pc(*n as u16);
                     }
                 }
@@ -644,9 +645,9 @@ impl GBState {
                         self.set_pc(addr);
                     }
                     Push(src) => {
+                        self.cpu.dec_sp();
+                        self.cpu.dec_sp();
                         let value = src.get_value(self);
-                        self.cpu.dec_sp();
-                        self.cpu.dec_sp();
                         self.mmu.write16(self.cpu.get_sp(), value);
                         self.set_pc(self.cpu.get_pc()+op.len);
                     }
@@ -951,7 +952,7 @@ impl Op {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => {
                 match typ {
-                    Absolute(src) => src.name(),
+                    Absolute(src) => format!("JP {}",src.name()),
                     RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
                     Relative(src) => format!("JR i{}",src.name()),
                     Restart(n) => format!("RST n{:02x}",n),
