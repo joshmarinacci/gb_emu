@@ -118,7 +118,7 @@ enum OpType {
     // And(Dst8, Src8),
     Inc16(R16),
     Dec16(R16),
-    Inc8(R8),
+    Inc8(Dst8),
     Dec8(Dst8),
     BitOp(BitOps),
 }
@@ -137,7 +137,7 @@ pub struct GBState {
     pub clock:u32,
     pub count:u32,
     ops:OpTable,
-    debug:bool,
+    pub debug:bool,
 }
 
 impl GBState {
@@ -560,8 +560,9 @@ impl GBState {
             // }
             if self.debug {
                 let pc = self.cpu.get_pc();
-                println!("BEFORE: PC {:04x}  op:{:04x} {:?}  reg:{}   next mem = {:02x}  {:02x}  {:02x}",
+                println!("BEFORE: PC:{:04x} SP:{:04x}  op:{:04x} {:?}  reg:{}   next mem = {:02x}  {:02x}  {:02x}",
                          pc,
+                         self.cpu.get_sp(),
                          code,
                          op.to_asm(),
                          self.cpu.reg_to_str(),
@@ -1278,22 +1279,23 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0x2B, len: 1, cycles: 8, typ: Dec16(HL)  });
     op_table.add(Op { code:0x3B, len: 1, cycles: 8, typ: Dec16(SP)  });
 
-    op_table.add(Op { code:0x04, len: 1, cycles: 4, typ: Inc8(B)   });
+    op_table.add(Op { code:0x04, len: 1, cycles: 4, typ: Inc8(DstR8(B))   });
     op_table.add(Op { code:0x05, len: 1, cycles: 4, typ: Dec8(DstR8(B))   });
-    op_table.add(Op { code:0x0C, len: 1, cycles: 4, typ: Inc8(C)   });
+    op_table.add(Op { code:0x0C, len: 1, cycles: 4, typ: Inc8(DstR8(C))   });
     op_table.add(Op { code:0x0D, len: 1, cycles: 4, typ: Dec8(DstR8(C))   });
-    op_table.add(Op { code:0x14, len: 1, cycles: 4, typ: Inc8(D)   });
+    op_table.add(Op { code:0x14, len: 1, cycles: 4, typ: Inc8(DstR8(D))   });
     op_table.add(Op { code:0x15, len: 1, cycles: 4, typ: Dec8(DstR8(D))   });
-    op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: Inc8(E)   });
+    op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: Inc8(DstR8(E))   });
     op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: Dec8(DstR8(E))   });
 
-    op_table.add(Op { code:0x24, len: 1, cycles: 4, typ: Inc8(H)   });
+    op_table.add(Op { code:0x24, len: 1, cycles: 4, typ: Inc8(DstR8(H))   });
     op_table.add(Op { code:0x25, len: 1, cycles: 4, typ: Dec8(DstR8(H))   });
+    op_table.add(Op { code:0x34, len: 1, cycles: 12,typ: Inc8(AddrDst(HL))   });
     op_table.add(Op { code:0x35, len: 1, cycles: 12,typ: Dec8(AddrDst(HL))   });
-    op_table.add(Op { code:0x2C, len: 1, cycles: 4, typ: Inc8(L)   });
+    op_table.add(Op { code:0x2C, len: 1, cycles: 4, typ: Inc8(DstR8(L))   });
     op_table.add(Op { code:0x2D, len: 1, cycles: 4, typ: Dec8(DstR8(L))   });
 
-    op_table.add(Op { code:0x3C, len: 1, cycles: 4, typ: Inc8(A)   });
+    op_table.add(Op { code:0x3C, len: 1, cycles: 4, typ: Inc8(DstR8(A))   });
     op_table.add(Op { code:0x3D, len: 1, cycles: 4, typ: Dec8(DstR8(A))   });
 
     op_table.add(Op { code: 0x80, len: 1, cycles: 4, typ: Math(Add, DstR8(A), SrcR8(B))});
@@ -1412,11 +1414,13 @@ fn make_op_table() -> OpTable {
     op_table.add(Op{ code: 0xCB_37,len:2, cycles:8,   typ: BitOp(SWAP(A))});
     op_table.add(Op{ code: 0xCB_87,len:2, cycles:8,   typ: BitOp(RES(0,A))});
 
-    op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: Call(CallU16())});
-    op_table.add(Op{ code: 0x00CC, len:3, cycles: 24, typ: Call(CallCondU16(Zero()))});
+    op_table.add(Op{ code: 0x00C0, len:1, cycles: 20, typ: Call(RetCond(NotZero()))});
     op_table.add(Op{ code: 0x00C4, len:3, cycles: 24, typ: Call(CallCondU16(NotZero()))});
     op_table.add(Op{ code: 0x00C8, len:1, cycles: 20, typ: Call(RetCond(Zero()))});
     op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: Call(Ret())});
+    op_table.add(Op{ code: 0x00CC, len:3, cycles: 24, typ: Call(CallCondU16(Zero()))});
+    op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: Call(CallU16())});
+
     op_table.add(Op{ code: 0x00CF, len:1, cycles: 16, typ: Jump(Restart(0x08))});
     op_table.add(Op{ code: 0x00DF, len:1, cycles: 16, typ: Jump(Restart(0x18))});
     op_table.add(Op{ code: 0x00EF, len:1, cycles: 16, typ: Jump(Restart(0x28))});
@@ -1552,6 +1556,7 @@ fn test_bootrom() {
         clock: 0,
         count: 0,
         ops:make_op_table(),
+        debug: false
     };
     gb.mmu.enable_bootrom();
 
@@ -1660,6 +1665,7 @@ fn test_tetris() {
         clock: 0,
         count: 0,
         ops:make_op_table(),
+        debug: false
     };
     // gb.mmu.enable_bootrom();
 
@@ -1811,7 +1817,8 @@ fn op_tests() {
         ppu: PPU2::init(),
         ops:make_op_table(),
         clock: 0,
-        count: 0
+        count: 0,
+        debug: false
     };
     let op_table = make_op_table();
     if let Some(op)= op_table.lookup(&0x36) {

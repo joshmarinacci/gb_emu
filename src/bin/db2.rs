@@ -50,7 +50,7 @@ fn main() -> Result<()>{
     println!("loading the romfile {:?}", pth.as_path());
     let str = pth.to_str().unwrap().to_string();
     let mut gb = setup_test_rom(&str).unwrap();
-    gb.set_pc(0);
+    gb.set_pc(0x100);
     let mut term = Term::stdout();
     loop {
 
