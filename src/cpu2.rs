@@ -103,6 +103,7 @@ impl CPU {
     }
 }
 
+const MAX_PC_SCROLLBACK:usize = 50;
 impl CPU {
     pub(crate) fn init() -> CPU {
         CPU {
@@ -129,7 +130,7 @@ impl CPU {
     }
     pub fn real_set_pc(&mut self, pc: u16) {
         self.recent_pcs.push_front(pc);
-        if self.recent_pcs.len() > 30 {
+        if self.recent_pcs.len() > MAX_PC_SCROLLBACK {
             self.recent_pcs.pop_back();
         }
         self.pc = pc;

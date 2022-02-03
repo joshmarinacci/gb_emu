@@ -65,6 +65,9 @@ pub enum IORegister {
 impl IORegister {
     pub fn match_address(addr: u16) -> Option<IORegister> {
         match addr {
+            0xFF00 => Some(IORegister::JOYPAD_P1),
+            0xFF20 => Some(IORegister::NR41),
+            0xFF21 => Some(IORegister::NR42),
             0xFF40 => Some(IORegister::LCDC),
             0xFF41 => Some(IORegister::STAT),
             0xFF42 => Some(IORegister::SCY),
@@ -156,8 +159,8 @@ impl IORegister {
             IORegister::NR32 => "NR1",
             IORegister::NR33 => "NR1",
             IORegister::NR34 => "NR1",
-            IORegister::NR41 => "NR1",
-            IORegister::NR42 => "NR1",
+            IORegister::NR41 => "NR41",
+            IORegister::NR42 => "NR42",
             IORegister::NR43 => "NR1",
             IORegister::NR44 => "NR1",
             IORegister::NR50 => "NR1",
@@ -283,6 +286,7 @@ impl MMU2 {
                             val = set_bit(val,1, !self.joypad.b);
                             val = set_bit(val,2, !self.joypad.select);
                             val = set_bit(val,3, !self.joypad.start);
+                            println!("reading joypad: {:02x}",val);
                             val
                         },
                         JoypadReadMode::Direction() => {
@@ -291,6 +295,7 @@ impl MMU2 {
                             val = set_bit(val,1, !self.joypad.left);
                             val = set_bit(val,2, !self.joypad.up);
                             val = set_bit(val,3, !self.joypad.down);
+                            println!("reading joypad: {:02x}",val);
                             val
                         }
                     }

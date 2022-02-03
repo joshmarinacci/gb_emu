@@ -140,7 +140,10 @@ impl GBState {
         self.ppu.draw_full_screen(&self.mmu);
     }
     pub fn set_pc(&mut self, pc:u16) {
-        if pc == 0xF0c9 {
+        if pc == 0x29b3 {
+            self.debug = true;
+        }
+        if pc == 0xbec3 {
             println!("error error erro. bad new pc. current pc is {:04x}",self.cpu.pc);
             println!("curren regs are: {}", self.cpu.reg_to_str());
             self.dump_current_state();
@@ -168,7 +171,7 @@ impl GBState {
     fn fetch_opcode_at(&self, pc: u16) -> u16 {
         let fb:u8 = self.mmu.read8(pc);
         if fb == 0xcb {
-            let sb:u8 = self.mmu.read8(self.cpu.get_pc()+1);
+            let sb:u8 = self.mmu.read8(pc+1);
             0xcb00 | sb as u16
         } else {
             fb as u16
@@ -225,7 +228,11 @@ impl GBState {
         }
         let pc = start *32;
         println!("went from {:04x} to {:04x}",self.cpu.get_pc(),pc);
-        let ram = self.mmu.borrow_slice(pc as usize, (pc + (16 * 8) + 1) as usize);
+        self.print_ram_at(pc, 16*8);
+
+    }
+    fn print_ram_at(&self, pc: u16, len: u16) {
+        let ram = self.mmu.borrow_slice(pc as usize, (pc + len + 1) as usize);
         for (n, row) in ram.chunks_exact(16).enumerate() {
             let line_str:String = row.iter()
                 .map(|b|format!("{:02x} ",b))
@@ -313,7 +320,7 @@ impl AddrSrc {
     }
     pub(crate) fn get_addr(&self, gb:&GBState) -> u16 {
         match self {
-            Imu16() => gb.mmu.read16(gb.cpu.get_pc()+1),
+            AddrSrc::Imu16() => gb.mmu.read16(gb.cpu.get_pc()+1),
             AddrSrc::Src16(r) => r.get_value(gb),
         }
     }
@@ -540,21 +547,26 @@ impl GBState {
             if self.cpu.get_pc() == 0x28 {
                 self.debug = true;
             }
+            if self.cpu.get_pc() == 0x29a6 {
+                self.debug = true;
+            }
             if self.debug {
+                let pc = self.cpu.get_pc();
                 println!("BEFORE: PC {:04x}  op:{:04x} {:?}  reg:{}",
-                         self.cpu.get_pc(),
+                         pc,
                          code,
                          op.to_asm(),
                          self.cpu.reg_to_str());
+                println!("next mem = {:02x}  {:02x}  {:02x}", self.mmu.read8(pc+0), self.mmu.read8(pc+1),self.mmu.read8(pc+2));
             }
             self.stuff(&op);
-            if self.debug {
-                println!("AFTER:  PC {:04x}  op:{:04x} {:?}  reg:{}",
-                         self.cpu.get_pc(),
-                         code,
-                         op.to_asm(),
-                         self.cpu.reg_to_str());
-            }
+            // if self.debug {
+            //     println!("AFTER:  PC {:04x}  op:{:04x} {:?}  reg:{}",
+            //              self.cpu.get_pc(),
+            //              code,
+            //              op.to_asm(),
+            //              self.cpu.reg_to_str());
+            // }
             self.clock += (op.cycles as u32);
             self.count += 1;
 
@@ -939,7 +951,7 @@ impl Op {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => {
                 match typ {
-                    Absolute(src) => "XXXXX".to_string(),
+                    Absolute(src) => src.name(),
                     RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
                     Relative(src) => format!("JR i{}",src.name()),
                     Restart(n) => format!("RST n{:02x}",n),
