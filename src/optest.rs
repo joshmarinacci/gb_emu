@@ -1171,7 +1171,8 @@ fn make_op_table() -> OpTable {
     op_table.load8( 0x02, AddrDst(BC), SrcR8(A)); // LD L,A
     op_table.load8( 0x06, DstR8(B), Im8()); // LD B,n
     op_table.load8( 0x0E, DstR8(C), Im8()); // LD C,n
-    op_table.load8( 0x1A,DstR8(A), Mem(DE));
+    op_table.load8( 0x0A, DstR8(A), Mem(BC));
+    op_table.load8( 0x1A, DstR8(A), Mem(DE));
 
     op_table.load8( 0x40, DstR8(B), SrcR8(B));
     op_table.load8( 0x41, DstR8(B), SrcR8(C));
@@ -1357,6 +1358,7 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code: 0xEE, len: 1, cycles: 8, typ: Math(Xor, DstR8(A),Src8::Im8()) });
 
 
+    op_table.add(Op { code: 0xC2, len: 3, cycles: 12, typ: Jump(AbsoluteCond(NotZero(),AddrSrc::Imu16()) )});
     op_table.add(Op { code: 0xC3, len: 3, cycles: 12, typ: Jump(Absolute(AddrSrc::Imu16()) )});
     op_table.add(Op { code: 0x20, len: 2, cycles: 12, typ: Jump(RelativeCond(NotZero(), Im8())) });
     op_table.add(Op { code: 0x30, len: 2, cycles: 12, typ: Jump(RelativeCond(NotCarry(),Im8())) });
