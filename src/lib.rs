@@ -1,11 +1,11 @@
 pub mod common;
 pub mod cpu;
-pub mod opcodes;
-pub mod optest;
-pub mod screen;
-pub mod ppu;
-pub mod ppu2;
+mod cpu2;
+pub mod debugger;
 pub mod mmu;
 pub mod mmu2;
-pub mod debugger;
-mod cpu2;
+pub mod opcodes;
+pub mod optest;
+pub mod ppu;
+pub mod ppu2;
+pub mod screen;

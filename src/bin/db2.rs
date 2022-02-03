@@ -1,16 +1,16 @@
-use structopt::StructOpt;
-use console::{Color, Style, Term};
 use console::Color::White;
-use gb_emu::optest::{GBState, setup_test_rom};
+use console::{Color, Style, Term};
+use dialoguer::theme::ColorfulTheme;
+use gb_emu::optest::{setup_test_rom, GBState};
+use log::{info, LevelFilter};
+use log4rs::append::file::FileAppender;
+use log4rs::config::{Appender, Root};
+use log4rs::Config;
 use std::io::Result;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
-use dialoguer::theme::ColorfulTheme;
-use log4rs::append::file::FileAppender;
-use log4rs::Config;
-use log4rs::config::{Appender, Root};
-use log::{info, LevelFilter};
+use structopt::StructOpt;
 
 /*
 
@@ -40,7 +40,7 @@ always show the status of the current registers:
     IO regs: LCDC, STAT, BGP, LY, SCX, SCY, IE, IME,
 
  */
-fn main() -> Result<()>{
+fn main() -> Result<()> {
     let args = init_setup();
     if let None = args.romfile {
         println!("you must specify a rom file");
@@ -53,35 +53,47 @@ fn main() -> Result<()>{
     gb.set_pc(0x100);
     let mut term = Term::stdout();
     loop {
-
         let commands = Style::new().reverse();
-        term.write_line(&commands.apply_to("========================================").to_string())?;
+        term.write_line(
+            &commands
+                .apply_to("========================================")
+                .to_string(),
+        )?;
 
-
-        term.write_line(&format!("PC: {:04x}  SP:{:04x}    clock={}  cycles={}", gb.cpu.get_pc(), gb.cpu.get_sp(), gb.clock, gb.count))?;
+        term.write_line(&format!(
+            "PC: {:04x}  SP:{:04x}    clock={}  cycles={}",
+            gb.cpu.get_pc(),
+            gb.cpu.get_sp(),
+            gb.clock,
+            gb.count
+        ))?;
         let reg_style = Style::new().bg(Color::White).red().underlined();
         let regs = gb.cpu.reg_to_str();
         term.write_line(&reg_style.apply_to(regs).to_string())?;
         let flag_style = Style::new().blue();
-        term.write_line(&format!("flags Z:{}   N:{}  H:{}  C:{}",
-                                 flag_style.apply_to(gb.cpu.r.zero),
-                                 flag_style.apply_to(gb.cpu.r.subn),
-                                 flag_style.apply_to(gb.cpu.r.half),
-                                 flag_style.apply_to(gb.cpu.r.carry)))?;
-
+        term.write_line(&format!(
+            "flags Z:{}   N:{}  H:{}  C:{}",
+            flag_style.apply_to(gb.cpu.r.zero),
+            flag_style.apply_to(gb.cpu.r.subn),
+            flag_style.apply_to(gb.cpu.r.half),
+            flag_style.apply_to(gb.cpu.r.carry)
+        ))?;
 
         let commands = Style::new().reverse();
-        term.write_line(&commands.apply_to(&format!("j=step J=16 u=256 U=4096 ")).to_string())?;
+        term.write_line(
+            &commands
+                .apply_to(&format!("j=step J=16 u=256 U=4096 "))
+                .to_string(),
+        )?;
         term.write_line(&commands.apply_to(&format!("m=memory  q=quit")).to_string())?;
-
 
         let ch = term.read_char().unwrap();
         match ch {
             'j' => gb.execute_n(1),
             'J' => gb.execute_n(16),
             'u' => gb.execute_n(256),
-            'U' => gb.execute_n(256*16),
-            'm' => dump_memory(&gb,&term)?,
+            'U' => gb.execute_n(256 * 16),
+            'm' => dump_memory(&gb, &term)?,
             'v' => dump_vram_png(&mut gb, &term)?,
             'g' => gb.execute_n(100_000_000),
             'q' => break,
@@ -100,23 +112,53 @@ fn dump_vram_png(gb: &mut GBState, term: &Term) -> Result<()> {
 
 #[derive(Debug)]
 struct RamChunk {
-    start:usize,
-    len:usize,
+    start: usize,
+    len: usize,
     name: &'static str,
 }
 
 fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
     let ranges = [
-        RamChunk{start:0x8000, len:0x800, name:"Tile Data Block 0"},
-        RamChunk{start:0x8800, len:0x800, name:"Tile Data Block 1"},
-        RamChunk{start:0x9000, len:0x800, name:"Tile Data Block 2"},
-        RamChunk{start:0x9800, len:0x400, name:"Tile Map Block 0"},
-        RamChunk{start:0x9C00, len:0x400, name:"Tile Map Block 1"},
-        RamChunk{start:0xFE00, len:0xA0,  name:"OAM: sprite attribute table"},
-        RamChunk{start:0xFF80, len:0x80,  name:"High RAM"},
+        RamChunk {
+            start: 0x8000,
+            len: 0x800,
+            name: "Tile Data Block 0",
+        },
+        RamChunk {
+            start: 0x8800,
+            len: 0x800,
+            name: "Tile Data Block 1",
+        },
+        RamChunk {
+            start: 0x9000,
+            len: 0x800,
+            name: "Tile Data Block 2",
+        },
+        RamChunk {
+            start: 0x9800,
+            len: 0x400,
+            name: "Tile Map Block 0",
+        },
+        RamChunk {
+            start: 0x9C00,
+            len: 0x400,
+            name: "Tile Map Block 1",
+        },
+        RamChunk {
+            start: 0xFE00,
+            len: 0xA0,
+            name: "OAM: sprite attribute table",
+        },
+        RamChunk {
+            start: 0xFF80,
+            len: 0x80,
+            name: "High RAM",
+        },
     ];
-    let mut selections:Vec<String> = vec![];
-    for reg in &ranges { selections.push(reg.name.to_string()); }
+    let mut selections: Vec<String> = vec![];
+    for reg in &ranges {
+        selections.push(reg.name.to_string());
+    }
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
         .with_prompt("view memory section:")
         .default(0)
@@ -124,22 +166,24 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
         .interact()
         .unwrap();
     let range = &ranges[selection];
-    println!("chose range {} {:04x} len{:04x}",range.name, range.start, range.len);
+    println!(
+        "chose range {} {:04x} len{:04x}",
+        range.name, range.start, range.len
+    );
     // println!("total memory len {}",gb.mmu.data.len());
-    let data= gb.mmu.borrow_slice(range.start,(range.start+range.len));
-    for (n, chunk) in data.chunks(32*2).enumerate() {
-        let line_str:String = chunk.iter().map(|b|format!("{:02x}", b)).collect();
-        println!("{:04X} {}",(n*32*2)+range.start,line_str);
+    let data = gb.mmu.borrow_slice(range.start, (range.start + range.len));
+    for (n, chunk) in data.chunks(32 * 2).enumerate() {
+        let line_str: String = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("{:04X} {}", (n * 32 * 2) + range.start, line_str);
     }
     Ok(())
 }
-
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "gbemu", about = "gb emulator")]
 struct Cli {
     #[structopt(long)]
-    debug:bool,
+    debug: bool,
     #[structopt(parse(from_os_str))]
     romfile: Option<PathBuf>,
     // #[structopt(long)]
@@ -164,20 +208,28 @@ struct Cli {
 
 fn init_setup() -> Cli {
     let args: Cli = Cli::from_args();
-    let loglevel = if args.debug { LevelFilter::Debug } else { LevelFilter::Error };
+    let loglevel = if args.debug {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Error
+    };
 
     // create file appender with target file path
     let logfile = FileAppender::builder()
-        .build("../../log/output.log").expect("error setting up file appender");
+        .build("../../log/output.log")
+        .expect("error setting up file appender");
 
     // make a config
     let config = Config::builder()
         //add the file appender
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
         //now make it
-        .build(Root::builder()
-            .appender("logfile") // why do we need to mention logfile again?
-            .build(loglevel)).expect("error setting up log file");
+        .build(
+            Root::builder()
+                .appender("logfile") // why do we need to mention logfile again?
+                .build(loglevel),
+        )
+        .expect("error setting up log file");
 
     log4rs::init_config(config).expect("error initing config");
 
@@ -188,6 +240,6 @@ fn init_setup() -> Cli {
     }
     info!("==============");
     info!("starting new run");
-    info!("running with args {:?}",args);
+    info!("running with args {:?}", args);
     args
 }

@@ -1,24 +1,25 @@
-use crate::common::{Bitmap, get_bit, get_bit_as_bool};
+use crate::common::{get_bit, get_bit_as_bool, Bitmap};
 use crate::mmu2::{IORegister, MMU2};
 
 pub struct PPU2 {
-    pub backbuffer: Bitmap,//::init(256,256),
-    vramdump: Bitmap,//::init(128,256),
+    pub backbuffer: Bitmap,
+    //::init(256,256),
+    vramdump: Bitmap, //::init(128,256),
 }
 
 impl PPU2 {
     pub fn init() -> PPU2 {
         PPU2 {
-            backbuffer: Bitmap::init(256,256),
-            vramdump: Bitmap::init(128,256),
+            backbuffer: Bitmap::init(256, 256),
+            vramdump: Bitmap::init(128, 256),
         }
     }
-    pub fn draw_full_screen(&mut self, mmu: &MMU2)  {
+    pub fn draw_full_screen(&mut self, mmu: &MMU2) {
         // let window_enabled = get_bit_as_bool(lcdc, 5);
         let sprites_enabled = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 1);
         // let sprites_enabled = true;
         let bg_enabled = true; //bg is always enabled
-        // let sprite_big = get_bit_as_bool(screenstate.LCDC, 2);
+                               // let sprite_big = get_bit_as_bool(screenstate.LCDC, 2);
         let mut bg_tilemap_start = 0x9800;
         let mut bg_tilemap_end = 0x9BFF;
         if get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 3) {
@@ -26,7 +27,7 @@ impl PPU2 {
             bg_tilemap_end = 0x9FFF;
         }
         println!("tilemap base address {:04x}", bg_tilemap_start);
-        let bg_tilemap = mmu.borrow_slice(bg_tilemap_start,bg_tilemap_end+1);
+        let bg_tilemap = mmu.borrow_slice(bg_tilemap_start, bg_tilemap_end + 1);
         // let bg_tilemap = &mmu.data[bg_tilemap_start..(bg_tilemap_end + 1)];
         // let oam_table = &mmu.data[0xFE00..0xFEA0];
 
@@ -37,21 +38,19 @@ impl PPU2 {
             td1_start = 0x8000;
             td1_end = 0x8FFF;
         }
-        println!("LCDC is {:02x}",mmu.read8_IO(IORegister::LCDC));
+        println!("LCDC is {:02x}", mmu.read8_IO(IORegister::LCDC));
         println!("tile data base address {:04x}", td1_start);
-        let td1 = mmu.borrow_slice(td1_start,td1_end + 1);
+        let td1 = mmu.borrow_slice(td1_start, td1_end + 1);
         for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
-            let line_str:String = row.iter()
-                .map(|b|format!("{:02x}",b))
-                .collect();
-            println!("{:04x} {}",bg_tilemap_start+n*32, line_str);
+            let line_str: String = row.iter().map(|b| format!("{:02x}", b)).collect();
+            println!("{:04x} {}", bg_tilemap_start + n * 32, line_str);
         }
 
         println!("signed mode = {}", !unsigned_mode);
         if bg_enabled {
             let img = &mut self.backbuffer;
-            let sx = 0;//mmu.hardware.SCX.value as usize;
-            let sy = 0;//mmu.hardware.SCY.value as usize;
+            let sx = 0; //mmu.hardware.SCX.value as usize;
+            let sy = 0; //mmu.hardware.SCY.value as usize;
             let spacing = 8;
             for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
                 if y > 0x10 {
@@ -64,7 +63,14 @@ impl PPU2 {
                     let id = *tile_id;
                     if !unsigned_mode {
                         let id2 = i16::from(id as i8) + 128;
-                        draw_tile_at(img, x * spacing + sx, y * spacing + sy, id2 as u8, td1, false);
+                        draw_tile_at(
+                            img,
+                            x * spacing + sx,
+                            y * spacing + sy,
+                            id2 as u8,
+                            td1,
+                            false,
+                        );
                         // if (id == 0x56) {
                         //     println!("56  tile data = {:04x} - {:04x}", td1_start, td1_end);
                         //     draw_tile_at(img, x * spacing + sx, y * spacing + sy, id2 as u8, td1, true);
@@ -96,34 +102,41 @@ impl PPU2 {
     }
 }
 
-    fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8], print:bool) {
-        let start:usize = ((tile_id as u16)*16) as usize;
-        let stop:usize = start + 16;
-        if print {
-            println!("id {:02x} maps to addr {:04x} - {:04x}  final {:04x}", tile_id, start, stop, ((start as u16) + 0x8800));
-        }
-        let tile = &tiledata[start..stop];
-        for (line,row) in tile.chunks_exact(2).enumerate() {
-            for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
-                let (r,g,b) = match color {
-                    0 => (50,50,50),
-                    1 => (100,100,100),
-                    2 => (0,0,0),
-                    3 => (200,200,200),
-                    _ => (255,0,255),
-                };
-                img.set_pixel_rgb((x+7 - n) as i32, (y + line) as i32, r, g, b);
-            }
+fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8], print: bool) {
+    let start: usize = ((tile_id as u16) * 16) as usize;
+    let stop: usize = start + 16;
+    if print {
+        println!(
+            "id {:02x} maps to addr {:04x} - {:04x}  final {:04x}",
+            tile_id,
+            start,
+            stop,
+            ((start as u16) + 0x8800)
+        );
+    }
+    let tile = &tiledata[start..stop];
+    for (line, row) in tile.chunks_exact(2).enumerate() {
+        for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
+            let (r, g, b) = match color {
+                0 => (50, 50, 50),
+                1 => (100, 100, 100),
+                2 => (0, 0, 0),
+                3 => (200, 200, 200),
+                _ => (255, 0, 255),
+            };
+            img.set_pixel_rgb((x + 7 - n) as i32, (y + line) as i32, r, g, b);
         }
     }
-    fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
-        let b1 = row[0];
-        let b2 = row[1];
-        let mut colors:Vec<u8> = vec![];
-        for n in 0..8 {
-            let v1 = get_bit(b1, n);
-            let v2 = get_bit(b2, n);
-            colors.push((v1 << 1) | v2);
-        }
-        colors
+}
+
+fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
+    let b1 = row[0];
+    let b2 = row[1];
+    let mut colors: Vec<u8> = vec![];
+    for n in 0..8 {
+        let v1 = get_bit(b1, n);
+        let v2 = get_bit(b2, n);
+        colors.push((v1 << 1) | v2);
     }
+    colors
+}

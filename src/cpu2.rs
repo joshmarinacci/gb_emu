@@ -1,24 +1,24 @@
-use std::collections::VecDeque;
 use crate::common::{get_bit_as_bool, set_bit};
 use crate::optest::R16;
+use std::collections::VecDeque;
 
 pub struct Flags {
-    pub zero:bool,
-    pub carry:bool,
-    pub half:bool,
-    pub subn:bool,
+    pub zero: bool,
+    pub carry: bool,
+    pub half: bool,
+    pub subn: bool,
 }
 pub struct CPU {
-    pub(crate) pc:u16,
-    sp:u16,
-    a:u8,
-    b:u8,
-    c:u8,
-    d:u8,
-    e:u8,
-    h:u8,
-    l:u8,
-    pub r:Flags,
+    pub(crate) pc: u16,
+    sp: u16,
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    h: u8,
+    l: u8,
+    pub r: Flags,
     pub recent_pcs: VecDeque<u16>,
 }
 
@@ -39,12 +39,23 @@ impl CPU {
     }
 }
 
-
 pub enum CPUR8 {
-    R8A,R8B,R8C,R8D,R8E,R8H,R8L, R8F,
+    R8A,
+    R8B,
+    R8C,
+    R8D,
+    R8E,
+    R8H,
+    R8L,
+    R8F,
 }
 pub enum CPUR16 {
-    BC, PC, SP, DE, HL, AF
+    BC,
+    PC,
+    SP,
+    DE,
+    HL,
+    AF,
 }
 pub enum CPURegister {
     CpuR8(CPUR8),
@@ -63,10 +74,10 @@ impl CPU {
             CPUR8::R8L => self.l,
             CPUR8::R8F => {
                 let mut v = 0x00;
-                v = set_bit(v,7,self.r.zero);
-                v = set_bit(v,6,self.r.subn);
-                v = set_bit(v,5,self.r.half);
-                v = set_bit(v,4,self.r.carry);
+                v = set_bit(v, 7, self.r.zero);
+                v = set_bit(v, 6, self.r.subn);
+                v = set_bit(v, 5, self.r.half);
+                v = set_bit(v, 4, self.r.carry);
                 v
             }
         }
@@ -81,11 +92,11 @@ impl CPU {
             CPUR8::R8H => self.h = val,
             CPUR8::R8L => self.l = val,
             CPUR8::R8F => {
-                self.r.zero = get_bit_as_bool(val,7);
-                self.r.subn = get_bit_as_bool(val,6);
-                self.r.half = get_bit_as_bool(val,5);
-                self.r.carry = get_bit_as_bool(val,4);
-            },
+                self.r.zero = get_bit_as_bool(val, 7);
+                self.r.subn = get_bit_as_bool(val, 6);
+                self.r.half = get_bit_as_bool(val, 5);
+                self.r.carry = get_bit_as_bool(val, 4);
+            }
         }
     }
 
@@ -103,7 +114,7 @@ impl CPU {
             }
         }
     }
-    pub(crate) fn set_r16(&mut self, reg:CPUR16, val:u16) {
+    pub(crate) fn set_r16(&mut self, reg: CPUR16, val: u16) {
         match reg {
             CPUR16::PC => self.pc = val,
             CPUR16::SP => self.sp = val,
@@ -127,7 +138,7 @@ impl CPU {
     }
 }
 
-const MAX_PC_SCROLLBACK:usize = 50;
+const MAX_PC_SCROLLBACK: usize = 50;
 impl CPU {
     pub(crate) fn init() -> CPU {
         CPU {
@@ -144,9 +155,9 @@ impl CPU {
                 zero: false,
                 carry: false,
                 half: false,
-                subn: false
+                subn: false,
             },
-            recent_pcs:VecDeque::new(),
+            recent_pcs: VecDeque::new(),
         }
     }
     pub fn get_pc(&self) -> u16 {

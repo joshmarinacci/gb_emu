@@ -1,55 +1,72 @@
-use std::{io, thread};
-use console::{Color, Style, Term};
-use io::Result;
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use console::Color::{Black, Red, White};
-use dialoguer::theme::ColorfulTheme;
-use log::{debug, info};
-use crate::common::{InputEvent, JoyPadKey, LCDC, LY, RomFile, SCX, SCY, STAT};
+use crate::common::{InputEvent, JoyPadKey, RomFile, LCDC, LY, SCX, SCY, STAT};
 use crate::cpu::Z80;
 use crate::mmu::{MMU, P1_JOYPAD_INFO, TEST_ADDR};
 use crate::opcodes;
-use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
 use crate::opcodes::Instr::{LoadInstr, SpecialInstr};
 use crate::opcodes::RegisterName::A;
-use crate::ppu::{PPU, ScreenState};
+use crate::opcodes::{
+    lookup_opcode, u8_as_i8, Compare, DoubleRegister, Instr, Jump, Load, Math, RegisterName,
+    Special,
+};
+use crate::ppu::{ScreenState, PPU};
 use crate::screen::{Screen, ScreenSettings};
+use console::Color::{Black, Red, White};
+use console::{Color, Style, Term};
+use dialoguer::theme::ColorfulTheme;
+use io::Result;
+use log::{debug, info};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::{io, thread};
 
 struct Ctx {
-    cpu:Z80,
-    mmu:MMU,
-    clock:u32,
-    last_cpu_clock:u32,
-    running:bool,
-    interactive:bool,
+    cpu: Z80,
+    mmu: MMU,
+    clock: u32,
+    last_cpu_clock: u32,
+    running: bool,
+    interactive: bool,
     cart: Option<RomFile>,
     full_registers_visible: bool,
     test_memory_visible: bool,
-    show_interrupts:bool,
-    last_status:String,
+    show_interrupts: bool,
+    last_status: String,
     ppu: PPU,
-    screen_enabled:bool,
+    screen_enabled: bool,
     to_screen: Sender<String>,
     receive_cpu: Receiver<InputEvent>,
 }
 
 impl Ctx {
-    pub fn execute_n_cycles(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, count:u32) -> Result<()>{
-        for n in 0 .. count {
+    pub fn execute_n_cycles(
+        &mut self,
+        term: &mut Term,
+        screenstate: &mut Arc<Mutex<ScreenState>>,
+        count: u32,
+    ) -> Result<()> {
+        for n in 0..count {
             self.execute(term, screenstate)?;
         }
         Ok(())
     }
-    pub fn jump_to_next_vblank(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, ) -> Result<()>{
+    pub fn jump_to_next_vblank(
+        &mut self,
+        term: &mut Term,
+        screenstate: &mut Arc<Mutex<ScreenState>>,
+    ) -> Result<()> {
         println!("running to next frame done");
         while self.mmu.hardware.LY > 1 {
             // println!("LY is {}",ctx.mmu.hardware.LY);
-            self.execute(term,  screenstate )?;
+            self.execute(term, screenstate)?;
         }
         Ok(())
     }
-    pub fn run_until_write(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
+    pub fn run_until_write(
+        &mut self,
+        term: &mut Term,
+        screenstate: &mut Arc<Mutex<ScreenState>>,
+        addr: u16,
+    ) {
         loop {
             self.execute(term, screenstate).unwrap();
             if self.mmu.last_write_addr == addr {
@@ -57,7 +74,12 @@ impl Ctx {
             }
         }
     }
-    pub fn run_until_pc(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
+    pub fn run_until_pc(
+        &mut self,
+        term: &mut Term,
+        screenstate: &mut Arc<Mutex<ScreenState>>,
+        addr: u16,
+    ) {
         loop {
             self.execute(term, screenstate).unwrap();
             if self.cpu.get_pc() == addr {
@@ -69,11 +91,11 @@ impl Ctx {
 
 impl Ctx {
     fn make_test_context(rom: &[u8]) -> Ctx {
-        let (to_screen,receive_screen) = channel::<String>();
+        let (to_screen, receive_screen) = channel::<String>();
         let (to_cpu, receive_cpu) = channel::<InputEvent>();
         Ctx {
-            cpu:Z80::init(),
-            ppu:PPU::init(),
+            cpu: Z80::init(),
+            ppu: PPU::init(),
             mmu: MMU::init(rom),
             clock: 0,
             last_cpu_clock: 0,
@@ -86,14 +108,14 @@ impl Ctx {
             last_status: String::from("--nothing--"),
             screen_enabled: false,
             to_screen: to_screen,
-            receive_cpu:receive_cpu,
+            receive_cpu: receive_cpu,
         }
     }
 }
 
 // const TEST_NEW_OPS:bool = false;
 impl Ctx {
-    pub fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>) -> Result<()>{
+    pub fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>) -> Result<()> {
         self.mmu.last_write_addr = 0;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         // if TEST_NEW_OPS {
@@ -110,71 +132,92 @@ impl Ctx {
         if let Some(instr) = lookup_opcode(opcode) {
             self.execute_instruction(&instr);
         } else {
-            term.write_line(&format!("current cycle {}  PPU wait {}", self.clock, self.ppu.wait_until))?;
-            println!("unknown op code {:04x}",opcode);
-            println!("current memory is PC {:04x} ",self.cpu.get_pc());
+            term.write_line(&format!(
+                "current cycle {}  PPU wait {}",
+                self.clock, self.ppu.wait_until
+            ))?;
+            println!("unknown op code {:04x}", opcode);
+            println!("current memory is PC {:04x} ", self.cpu.get_pc());
             panic!("unknown op code");
         }
         self.mmu.update(&mut self.cpu, ss, &mut self.clock);
-        self.ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
-        self.clock+=1;
+        self.ppu.update(
+            &mut self.mmu,
+            ss,
+            &mut self.clock,
+            &self.to_screen,
+            &self.receive_cpu,
+            self.screen_enabled,
+        );
+        self.clock += 1;
         // }
         Ok(())
     }
 
     fn execute_instruction(&mut self, inst: &Instr) {
         match inst {
-            Instr::SpecialInstr(special)  => opcodes::execute_special_instructions(&mut self.cpu, &mut self.mmu, special),
-            Instr::LoadInstr(load)         => opcodes::execute_load_instructions(&mut self.cpu, &mut self.mmu, load),
-            Instr::CompareInst(comp)   => opcodes::execute_compare_instructions(&mut self.cpu, &mut self.mmu, comp),
-            Instr::MathInst(math)         => opcodes::execute_math_instructions(&mut self.cpu, &mut self.mmu, math),
-            Instr::JumpInstr(jump)         => opcodes::execute_jump_instructions(&mut self.cpu, &mut self.mmu, jump),
+            Instr::SpecialInstr(special) => {
+                opcodes::execute_special_instructions(&mut self.cpu, &mut self.mmu, special)
+            }
+            Instr::LoadInstr(load) => {
+                opcodes::execute_load_instructions(&mut self.cpu, &mut self.mmu, load)
+            }
+            Instr::CompareInst(comp) => {
+                opcodes::execute_compare_instructions(&mut self.cpu, &mut self.mmu, comp)
+            }
+            Instr::MathInst(math) => {
+                opcodes::execute_math_instructions(&mut self.cpu, &mut self.mmu, math)
+            }
+            Instr::JumpInstr(jump) => {
+                opcodes::execute_jump_instructions(&mut self.cpu, &mut self.mmu, jump)
+            }
         }
     }
 }
 
-
-pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
-                      fast_forward: u32,
-                      screen_settings:&ScreenSettings,
-                      breakpoint:u16,
-                      interactive:bool) -> Result<()> {
+pub fn start_debugger(
+    cpu: Z80,
+    mmu: MMU,
+    cart: Option<RomFile>,
+    fast_forward: u32,
+    screen_settings: &ScreenSettings,
+    breakpoint: u16,
+    interactive: bool,
+) -> Result<()> {
     let screen_state = ScreenState::init();
     let mut shared_screen_state = Arc::new(Mutex::new(ScreenState::init()));
-    let (to_screen,receive_screen) = channel::<String>();
+    let (to_screen, receive_screen) = channel::<String>();
     let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
     let mut ctx = Ctx {
-        cpu, mmu,
-        ppu:PPU::init(),
-        clock:0,
+        cpu,
+        mmu,
+        ppu: PPU::init(),
+        clock: 0,
         last_cpu_clock: 0,
-        running:true,
+        running: true,
         interactive,
         cart,
-        full_registers_visible:false,
+        full_registers_visible: false,
         test_memory_visible: false,
         show_interrupts: false,
         last_status: "".to_string(),
         screen_enabled: screen_settings.enabled,
-        to_screen:to_screen,
-        receive_cpu:receive_cpu,
+        to_screen: to_screen,
+        receive_cpu: receive_cpu,
     };
     let mut term = Term::stdout();
 
-    println!("fast forwarding: {}",fast_forward);
+    println!("fast forwarding: {}", fast_forward);
 
-
-    ctx.execute_n_cycles(&mut term, &mut shared_screen_state,fast_forward )?;
+    ctx.execute_n_cycles(&mut term, &mut shared_screen_state, fast_forward)?;
     let mut ss1 = shared_screen_state.clone();
     let ss2 = shared_screen_state.clone();
     let screen_enabled = screen_settings.enabled;
-    let hand = thread::spawn(move | |
-        {
-            //021b
-            // ctx.run_until_pc(&mut term, &mut ss1, 0x021b);
-            while ctx.running {
-
+    let hand = thread::spawn(move || {
+        //021b
+        // ctx.run_until_pc(&mut term, &mut ss1, 0x021b);
+        while ctx.running {
             //handle breakpoints
             if breakpoint > 0 && (ctx.cpu.r.pc == breakpoint) {
                 println!("done hit the breakpoint");
@@ -183,36 +226,68 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
 
             //step forward or execute next CPU clock cycle
             if ctx.interactive {
-                step_forward(&mut ctx, &mut term, &mut ss1,).unwrap();
+                step_forward(&mut ctx, &mut term, &mut ss1).unwrap();
             } else {
-                ctx.execute(&mut term, &mut ss1 ).unwrap();
+                ctx.execute(&mut term, &mut ss1).unwrap();
             }
             if let Ok(evt) = ctx.receive_cpu.try_recv() {
                 match evt {
-                    InputEvent::Press(JoyPadKey::A) => {        ctx.mmu.joypad.a = true;       }
-                    InputEvent::Release(JoyPadKey::A) => {      ctx.mmu.joypad.a = false;      }
-                    InputEvent::Press(JoyPadKey::B) => {        ctx.mmu.joypad.b = true;       }
-                    InputEvent::Release(JoyPadKey::B) => {      ctx.mmu.joypad.b = false;      }
-                    InputEvent::Press(JoyPadKey::Start) => {    ctx.mmu.joypad.start = true;   }
-                    InputEvent::Release(JoyPadKey::Start) => {  ctx.mmu.joypad.start = false;  }
-                    InputEvent::Press(JoyPadKey::Select) => {   ctx.mmu.joypad.select = true;  }
-                    InputEvent::Release(JoyPadKey::Select) => { ctx.mmu.joypad.select = false; }
-                    InputEvent::Press(JoyPadKey::Left) => {     ctx.mmu.joypad.left = true;    }
-                    InputEvent::Release(JoyPadKey::Left) => {   ctx.mmu.joypad.left = false;   }
-                    InputEvent::Press(JoyPadKey::Right) => {    ctx.mmu.joypad.right = true;   }
-                    InputEvent::Release(JoyPadKey::Right) => {  ctx.mmu.joypad.right = false;  }
-                    InputEvent::Press(JoyPadKey::Up) => {       ctx.mmu.joypad.up = true;      }
-                    InputEvent::Release(JoyPadKey::Up)=> {      ctx.mmu.joypad.up = false;     }
-                    InputEvent::Press(JoyPadKey::Down) => {     ctx.mmu.joypad.down = true;    }
-                    InputEvent::Release(JoyPadKey::Down)=> {    ctx.mmu.joypad.down = false;   }
+                    InputEvent::Press(JoyPadKey::A) => {
+                        ctx.mmu.joypad.a = true;
+                    }
+                    InputEvent::Release(JoyPadKey::A) => {
+                        ctx.mmu.joypad.a = false;
+                    }
+                    InputEvent::Press(JoyPadKey::B) => {
+                        ctx.mmu.joypad.b = true;
+                    }
+                    InputEvent::Release(JoyPadKey::B) => {
+                        ctx.mmu.joypad.b = false;
+                    }
+                    InputEvent::Press(JoyPadKey::Start) => {
+                        ctx.mmu.joypad.start = true;
+                    }
+                    InputEvent::Release(JoyPadKey::Start) => {
+                        ctx.mmu.joypad.start = false;
+                    }
+                    InputEvent::Press(JoyPadKey::Select) => {
+                        ctx.mmu.joypad.select = true;
+                    }
+                    InputEvent::Release(JoyPadKey::Select) => {
+                        ctx.mmu.joypad.select = false;
+                    }
+                    InputEvent::Press(JoyPadKey::Left) => {
+                        ctx.mmu.joypad.left = true;
+                    }
+                    InputEvent::Release(JoyPadKey::Left) => {
+                        ctx.mmu.joypad.left = false;
+                    }
+                    InputEvent::Press(JoyPadKey::Right) => {
+                        ctx.mmu.joypad.right = true;
+                    }
+                    InputEvent::Release(JoyPadKey::Right) => {
+                        ctx.mmu.joypad.right = false;
+                    }
+                    InputEvent::Press(JoyPadKey::Up) => {
+                        ctx.mmu.joypad.up = true;
+                    }
+                    InputEvent::Release(JoyPadKey::Up) => {
+                        ctx.mmu.joypad.up = false;
+                    }
+                    InputEvent::Press(JoyPadKey::Down) => {
+                        ctx.mmu.joypad.down = true;
+                    }
+                    InputEvent::Release(JoyPadKey::Down) => {
+                        ctx.mmu.joypad.down = false;
+                    }
                     InputEvent::JumpNextVBlank() => {
                         if ctx.interactive {
                             println!("got a jump next vblank");
-                            ctx.jump_to_next_vblank(&mut term, &mut ss1, ).unwrap();
+                            ctx.jump_to_next_vblank(&mut term, &mut ss1).unwrap();
                         }
                     }
                     _ => {
-                        println!("unhandled event {:?}",evt);
+                        println!("unhandled event {:?}", evt);
                     }
                 }
             }
@@ -221,7 +296,9 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     if screen_settings.enabled {
         let mut screen_obj = Screen::init(screen_settings);
         loop {
-            if !screen_obj.process_input(&to_cpu) { break; }
+            if !screen_obj.process_input(&to_cpu) {
+                break;
+            }
             if let Ok(str) = receive_screen.try_recv() {
                 screen_obj.update_screen(&shared_screen_state);
                 to_cpu.send(InputEvent::Stop());
@@ -233,77 +310,100 @@ pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
     Ok(())
 }
 
-fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, ) -> Result<()>{
+fn step_forward(
+    ctx: &mut Ctx,
+    term: &mut Term,
+    screenstate: &mut Arc<Mutex<ScreenState>>,
+) -> Result<()> {
     let border = Style::new().bg(Color::Magenta).black();
     // term.clear_screen()?;
     if let Some(cart) = &ctx.cart {
         term.write_line(&format!("executing rom {}", cart.path))?;
     }
-    term.write_line(&format!("cycle {}  PPU wait {}", ctx.clock, ctx.ppu.wait_until))?;
-    term.write_line(&border.apply_to("========================================").to_string())?;
-
+    term.write_line(&format!(
+        "cycle {}  PPU wait {}",
+        ctx.clock, ctx.ppu.wait_until
+    ))?;
+    term.write_line(
+        &border
+            .apply_to("========================================")
+            .to_string(),
+    )?;
 
     {
-
         let s = ctx.cpu.r.pc as f32;
         let pc = ctx.cpu.r.pc as usize;
         let s2 = (s / 16.0).floor() as u32;
         let s3 = (s2 * 16) as usize;
-        let mut e = s3 + 16*5 as usize;
+        let mut e = s3 + 16 * 5 as usize;
         if e >= 0xFFFF {
             e = 0xFFFE;
         }
-        let data = &ctx.mmu.data[s3 .. e];
+        let data = &ctx.mmu.data[s3..e];
         let nums = 0..16;
         let plain_style = Style::new().bg(White).red();
         let highl_style = Style::new().bg(Black).white().underlined();
-        let line_str:String = nums.into_iter().map(|n|(format!("{:02x} ",n))).collect();
-        term.write_line(&format!("       {}",line_str));
+        let line_str: String = nums.into_iter().map(|n| (format!("{:02x} ", n))).collect();
+        term.write_line(&format!("       {}", line_str));
         for (i, row) in data.chunks(16).enumerate() {
-            let abs_off = i*16;
-            let line_str:String = row.into_iter().enumerate().map(|(n,v)|{
-                let abs = abs_off + n + s3;
-                let style = (if abs  == pc { &highl_style  } else { &plain_style });
-                style.apply_to(format!("{:02x} ",v)).to_string()
-            }).collect();
+            let abs_off = i * 16;
+            let line_str: String = row
+                .into_iter()
+                .enumerate()
+                .map(|(n, v)| {
+                    let abs = abs_off + n + s3;
+                    let style = (if abs == pc {
+                        &highl_style
+                    } else {
+                        &plain_style
+                    });
+                    style.apply_to(format!("{:02x} ", v)).to_string()
+                })
+                .collect();
             // let line_str:String = row.iter()
             //     .map(|b|format!("{:02x} ",b))
             //     .collect();
-            term.write_line(&format!("{:04x}   {} ", s3+ i, line_str));
+            term.write_line(&format!("{:04x}   {} ", s3 + i, line_str));
         }
     }
 
     {
         // print the registers
         let reg_style = Style::new().bg(White).red().underlined();
-        term.write_line(&format!("PC: {:04x}  SP:{:04x}", ctx.cpu.r.pc, ctx.cpu.r.sp))?;
-        let regs_u8 = format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
-                              ctx.cpu.r.a,
-                              ctx.cpu.r.b,
-                              ctx.cpu.r.c,
-                              ctx.cpu.r.d,
-                              ctx.cpu.r.e,
-                              ctx.cpu.r.h,
-                              ctx.cpu.r.l,
+        term.write_line(&format!(
+            "PC: {:04x}  SP:{:04x}",
+            ctx.cpu.r.pc, ctx.cpu.r.sp
+        ))?;
+        let regs_u8 = format!(
+            "A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x} ",
+            ctx.cpu.r.a,
+            ctx.cpu.r.b,
+            ctx.cpu.r.c,
+            ctx.cpu.r.d,
+            ctx.cpu.r.e,
+            ctx.cpu.r.h,
+            ctx.cpu.r.l,
         );
         term.write_line(&reg_style.apply_to(regs_u8).to_string())?;
-        let regs_u16 = format!("BC:{:04x}  DE:{:04x}  HL:{:04x}",
-                               ctx.cpu.r.get_bc(),
-                               ctx.cpu.r.get_de(),
-                               ctx.cpu.r.get_hl(),
+        let regs_u16 = format!(
+            "BC:{:04x}  DE:{:04x}  HL:{:04x}",
+            ctx.cpu.r.get_bc(),
+            ctx.cpu.r.get_de(),
+            ctx.cpu.r.get_hl(),
         );
         term.write_line(&regs_u16)?;
         let flag_style = Style::new().blue();
-        term.write_line(&format!("flags Z:{}   N:{}  H:{}  C:{}",
-                                 flag_style.apply_to(ctx.cpu.r.zero_flag),
-                                 flag_style.apply_to(ctx.cpu.r.subtract_n_flag),
-                                 flag_style.apply_to(ctx.cpu.r.half_flag),
-                                 flag_style.apply_to(ctx.cpu.r.carry_flag),
+        term.write_line(&format!(
+            "flags Z:{}   N:{}  H:{}  C:{}",
+            flag_style.apply_to(ctx.cpu.r.zero_flag),
+            flag_style.apply_to(ctx.cpu.r.subtract_n_flag),
+            flag_style.apply_to(ctx.cpu.r.half_flag),
+            flag_style.apply_to(ctx.cpu.r.carry_flag),
         ))?;
         // term.write_line(&format!(" Screen: LY {:02x}",ctx.mmu.hardware.LY))?;
     }
     if ctx.full_registers_visible {
-        show_full_hardware_registers(term,ctx)?;
+        show_full_hardware_registers(term, ctx)?;
     }
     if ctx.test_memory_visible {
         show_test_memory(term, ctx)?;
@@ -313,39 +413,44 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
     }
 
     // print info about the next opcode
-    print_next_opcode(term,ctx);
+    print_next_opcode(term, ctx);
 
-    println!("{}",ctx.last_status);
-
+    println!("{}", ctx.last_status);
 
     let commands = Style::new().reverse();
-    term.write_line(&commands.apply_to(&format!("j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump c=cart_dump o=objram dump")).to_string())?;
+    term.write_line(
+        &commands
+            .apply_to(&format!(
+                "j=step, J=step 16, r=hdw reg, v=vram dump s=screen dump c=cart_dump o=objram dump"
+            ))
+            .to_string(),
+    )?;
     let ch = term.read_char().unwrap();
-    match ch{
+    match ch {
         'r' => ctx.full_registers_visible = !ctx.full_registers_visible,
-        'j' => ctx.execute(term,  screenstate)?,
-        'J' => ctx.execute_n_cycles(term, screenstate,  16)?,
-        'u' => ctx.execute_n_cycles(term, screenstate,  256)?,
-        'U' => ctx.execute_n_cycles(term, screenstate,  256*16)?,
+        'j' => ctx.execute(term, screenstate)?,
+        'J' => ctx.execute_n_cycles(term, screenstate, 16)?,
+        'u' => ctx.execute_n_cycles(term, screenstate, 256)?,
+        'U' => ctx.execute_n_cycles(term, screenstate, 256 * 16)?,
         'c' => dump_cart_rom(term, ctx)?,
         // 'v' => dump_vram(term, ctx)?,
-        'v' => ctx.jump_to_next_vblank(term, screenstate,  )?,
+        'v' => ctx.jump_to_next_vblank(term, screenstate)?,
         'o' => dump_oram(term, ctx)?,
         's' => {
             // screenstate.clear_with(0, 0, 0);
             // draw_vram(&mut ctx.mmu, screenstate);
             // screenstate.write_to_file("./screen.png");
             ctx.last_status = String::from("wrote to screen.png")
-        },
+        }
         'i' => ctx.show_interrupts = !ctx.show_interrupts,
         't' => ctx.test_memory_visible = !ctx.test_memory_visible,
-        'm' => dump_all_memory(term,ctx)?,
+        'm' => dump_all_memory(term, ctx)?,
         'b' => {
             ctx.interactive = false;
-            ctx.execute(term, screenstate, )?;
-        },
+            ctx.execute(term, screenstate)?;
+        }
         'w' => {
-            choose_watch_target(ctx,term, screenstate, );
+            choose_watch_target(ctx, term, screenstate);
         }
         _ => {}
     };
@@ -354,8 +459,10 @@ fn step_forward(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<Scre
 
 fn choose_watch_target(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>) {
     let regs = [LCDC, STAT, LY, SCX, SCY];
-    let mut selections:Vec<String> = vec![];
-    for reg in &regs { selections.push(reg.name.to_string()); }
+    let mut selections: Vec<String> = vec![];
+    for reg in &regs {
+        selections.push(reg.name.to_string());
+    }
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
         .with_prompt("watch for write to:")
         .default(0)
@@ -363,10 +470,9 @@ fn choose_watch_target(ctx: &mut Ctx, term: &mut Term, screenstate: &mut Arc<Mut
         .interact()
         .unwrap();
     let reg = &regs[selection];
-    println!("looping until write to {} {:04x}",reg.name, reg.addr);
+    println!("looping until write to {} {:04x}", reg.name, reg.addr);
     ctx.run_until_write(term, screenstate, reg.addr);
 }
-
 
 fn print_next_opcode(term: &mut Term, ctx: &mut Ctx) {
     let primary = Style::new().green().bold();
@@ -375,11 +481,17 @@ fn print_next_opcode(term: &mut Term, ctx: &mut Ctx) {
     let (opcode, _instr_len) = fetch_opcode(&ctx.cpu, &ctx.mmu);
     let op = lookup_opcode(opcode);
     if let Some(ld) = &op {
-        term.write_line(&primary.apply_to(&format!("${:04x} : {}: {}",
-                                                   ctx.cpu.r.pc,
-                                                   bold.apply_to(format!("{:02X}", opcode)),
-                                                   italic.apply_to(opcodes::lookup_opcode_info(ld)),
-        )).to_string()).unwrap();
+        term.write_line(
+            &primary
+                .apply_to(&format!(
+                    "${:04x} : {}: {}",
+                    ctx.cpu.r.pc,
+                    bold.apply_to(format!("{:02X}", opcode)),
+                    italic.apply_to(opcodes::lookup_opcode_info(ld)),
+                ))
+                .to_string(),
+        )
+        .unwrap();
     } else {
         println!("current cycle {}", ctx.clock);
         panic!("unknown op code")
@@ -393,34 +505,50 @@ fn print_next_opcode(term: &mut Term, ctx: &mut Ctx) {
                     println!("no op");
                 }
                 Instr::JumpInstr(Jump::Absolute_u16()) => {
-                    let val = ctx.mmu.read16(ctx.cpu.get_pc()+1);
-                    println!("Jump to {:04x}",val);
+                    let val = ctx.mmu.read16(ctx.cpu.get_pc() + 1);
+                    println!("Jump to {:04x}", val);
                 }
                 Instr::JumpInstr(Jump::Relative_cond_notzero_i8()) => {
-                    let val = ctx.mmu.read8(ctx.cpu.get_pc()+1);
-                    println!("if !z jump relative {}",u8_as_i8(val));
+                    let val = ctx.mmu.read8(ctx.cpu.get_pc() + 1);
+                    println!("if !z jump relative {}", u8_as_i8(val));
                 }
                 Instr::MathInst(Math::XOR_A_r(r)) => {
-                    println!("A <= ( {} xor {} )", ctx.cpu.r.get_u8reg(&A), ctx.cpu.r.get_u8reg(r));
+                    println!(
+                        "A <= ( {} xor {} )",
+                        ctx.cpu.r.get_u8reg(&A),
+                        ctx.cpu.r.get_u8reg(r)
+                    );
                 }
 
                 LoadInstr(Load::Load_addr_R2_A_dec(rr)) => {
-                    println!("load {:02X} to ({}) ", ctx.cpu.r.get_u8reg(&A), addr_name(ctx.cpu.r.get_u16reg(rr)));
+                    println!(
+                        "load {:02X} to ({}) ",
+                        ctx.cpu.r.get_u8reg(&A),
+                        addr_name(ctx.cpu.r.get_u16reg(rr))
+                    );
                 }
-                LoadInstr(Load::Load_R_u8(r)) => println!("{:02x} -> {}",ctx.mmu.read8(ctx.cpu.get_pc()+1),r),
+                LoadInstr(Load::Load_R_u8(r)) => {
+                    println!("{:02x} -> {}", ctx.mmu.read8(ctx.cpu.get_pc() + 1), r)
+                }
                 LoadInstr(Load::Load_HI_R_U8(r)) => {
-                    let val = ctx.mmu.read8(ctx.cpu.get_pc()+1);
-                    let addr = 0xFF00+(val as u16);
-                    println!(" {} -> {}       ({:02x})",  addr_name(addr), r, ctx.cpu.r.get_u8reg(r));
+                    let val = ctx.mmu.read8(ctx.cpu.get_pc() + 1);
+                    let addr = 0xFF00 + (val as u16);
+                    println!(
+                        " {} -> {}       ({:02x})",
+                        addr_name(addr),
+                        r,
+                        ctx.cpu.r.get_u8reg(r)
+                    );
                 }
-                LoadInstr(Load::Load_HI_U8_R(r)) => println!("{:02x} -> ({})",
-                                                             ctx.cpu.r.get_u8reg(r),
-                                                             addr_name(0xFF00 +(ctx.mmu.read8(ctx.cpu.get_pc()+1) as u16))),
+                LoadInstr(Load::Load_HI_U8_R(r)) => println!(
+                    "{:02x} -> ({})",
+                    ctx.cpu.r.get_u8reg(r),
+                    addr_name(0xFF00 + (ctx.mmu.read8(ctx.cpu.get_pc() + 1) as u16))
+                ),
                 // 0xE0 => Some(LoadInstr(Load_HI_U8_R(A))),
-
                 Instr::CompareInst(Compare::CP_A_n()) => {
-                    let val = ctx.mmu.read8(ctx.cpu.get_pc()+1);
-                    println!(" compare {} with {:02X} ", A,val);
+                    let val = ctx.mmu.read8(ctx.cpu.get_pc() + 1);
+                    println!(" compare {} with {:02X} ", A, val);
                 }
                 // 0xF0 => Some(LoadInstr(Load_HI_R_U8(A))),
                 _ => {
@@ -429,7 +557,6 @@ fn print_next_opcode(term: &mut Term, ctx: &mut Ctx) {
             }
         }
     }
-
 }
 
 fn addr_name(addr: u16) -> String {
@@ -450,22 +577,52 @@ fn addr_name(addr: u16) -> String {
 
 #[derive(Debug)]
 struct RamChunk {
-    start:usize,
-    len:usize,
+    start: usize,
+    len: usize,
     name: &'static str,
 }
 fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
     let ranges = [
-        RamChunk{start:0x8000, len:0x800, name:"Tile Data Block 0"},
-        RamChunk{start:0x8800, len:0x800, name:"Tile Data Block 1"},
-        RamChunk{start:0x9000, len:0x800, name:"Tile Data Block 2"},
-        RamChunk{start:0x9800, len:0x400, name:"Tile Map Block 0"},
-        RamChunk{start:0x9C00, len:0x400, name:"Tile Map Block 1"},
-        RamChunk{start:0xFE00, len:0xA0,  name:"OAM: sprite attribute table"},
-        RamChunk{start:0xFF80, len:0x80,  name:"High RAM"},
+        RamChunk {
+            start: 0x8000,
+            len: 0x800,
+            name: "Tile Data Block 0",
+        },
+        RamChunk {
+            start: 0x8800,
+            len: 0x800,
+            name: "Tile Data Block 1",
+        },
+        RamChunk {
+            start: 0x9000,
+            len: 0x800,
+            name: "Tile Data Block 2",
+        },
+        RamChunk {
+            start: 0x9800,
+            len: 0x400,
+            name: "Tile Map Block 0",
+        },
+        RamChunk {
+            start: 0x9C00,
+            len: 0x400,
+            name: "Tile Map Block 1",
+        },
+        RamChunk {
+            start: 0xFE00,
+            len: 0xA0,
+            name: "OAM: sprite attribute table",
+        },
+        RamChunk {
+            start: 0xFF80,
+            len: 0x80,
+            name: "High RAM",
+        },
     ];
-    let mut selections:Vec<String> = vec![];
-    for reg in &ranges { selections.push(reg.name.to_string()); }
+    let mut selections: Vec<String> = vec![];
+    for reg in &ranges {
+        selections.push(reg.name.to_string());
+    }
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
         .with_prompt("view memory section:")
         .default(0)
@@ -473,12 +630,12 @@ fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
         .interact()
         .unwrap();
     let range = &ranges[selection];
-    println!("chose range {:?}",range);
-    println!("total memory len {}",ctx.mmu.data.len());
-    let (data,_) = (ctx.mmu.data.split_at(range.start).1).split_at(range.len);
-    for (n, chunk) in data.chunks(32*2).enumerate() {
-        let line_str:String = chunk.iter().map(|b|format!("{:02x}", b)).collect();
-        println!("{:04X} {}",(n*32*2)+range.start,line_str);
+    println!("chose range {:?}", range);
+    println!("total memory len {}", ctx.mmu.data.len());
+    let (data, _) = (ctx.mmu.data.split_at(range.start).1).split_at(range.len);
+    for (n, chunk) in data.chunks(32 * 2).enumerate() {
+        let line_str: String = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("{:04X} {}", (n * 32 * 2) + range.start, line_str);
     }
     /*
     // let chunk = ctx.mmu.data[range.start .. (range.start+range.len)];
@@ -512,39 +669,53 @@ fn dump_all_memory(term: &Term, ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-fn dump_interrupts(term: &Term, ctx: &Ctx) -> Result<()>{
+fn dump_interrupts(term: &Term, ctx: &Ctx) -> Result<()> {
     let reg = Style::new().bg(Color::Cyan).red().bold();
     term.write_line(&reg.apply_to("INTERRUPTS").to_string())?;
-    term.write_line(&format!("active interrupt = {:?}",ctx.mmu.hardware.active_interrupt))?;
-    term.write_line(&format!("vblank = {}",ctx.mmu.hardware.vblank_interrupt_enabled))?;
-    term.write_line(&format!("timer = {}",ctx.mmu.hardware.timer_interrupt_enabled))?;
-    term.write_line(&format!("lcdc = {}",ctx.mmu.hardware.lcdc_interrupt_enabled))?;
-    term.write_line(&format!("serial = {}",ctx.mmu.hardware.serial_interrupt_enabled))?;
-    term.write_line(&format!("transition = {}",ctx.mmu.hardware.transition_interrupt_enabled))?;
+    term.write_line(&format!(
+        "active interrupt = {:?}",
+        ctx.mmu.hardware.active_interrupt
+    ))?;
+    term.write_line(&format!(
+        "vblank = {}",
+        ctx.mmu.hardware.vblank_interrupt_enabled
+    ))?;
+    term.write_line(&format!(
+        "timer = {}",
+        ctx.mmu.hardware.timer_interrupt_enabled
+    ))?;
+    term.write_line(&format!(
+        "lcdc = {}",
+        ctx.mmu.hardware.lcdc_interrupt_enabled
+    ))?;
+    term.write_line(&format!(
+        "serial = {}",
+        ctx.mmu.hardware.serial_interrupt_enabled
+    ))?;
+    term.write_line(&format!(
+        "transition = {}",
+        ctx.mmu.hardware.transition_interrupt_enabled
+    ))?;
     Ok(())
 }
 
-fn dump_oram(term: &Term, ctx: &Ctx) -> Result<()>{
+fn dump_oram(term: &Term, ctx: &Ctx) -> Result<()> {
     term.write_line("object memory")?;
     let data = ctx.mmu.fetch_oram();
     for line in data.chunks(32) {
-        let line_str:String = line.iter()
-            .map(|b|format!("{:02x}",b))
-            .collect();
+        let line_str: String = line.iter().map(|b| format!("{:02x}", b)).collect();
         term.write_line(&line_str)?;
     }
     Ok(())
 }
 
-fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()>{
+fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()> {
     term.write_line("vram memory")?;
     {
         term.write_line("tiledata block 0")?;
         let data = ctx.mmu.fetch_tiledata_block0();
         for line in data.chunks(64) {
-            let line_str: String = line.iter()
-                .map(|b| format!("{:02x}", b))
-                .collect();
+            let line_str: String = line.iter().map(|b| format!("{:02x}", b)).collect();
             term.write_line(&line_str)?;
         }
     }
@@ -552,9 +723,7 @@ fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()>{
         term.write_line("tiledata block 1")?;
         let data = ctx.mmu.fetch_tiledata_block1();
         for line in data.chunks(64) {
-            let line_str: String = line.iter()
-                .map(|b| format!("{:02x}", b))
-                .collect();
+            let line_str: String = line.iter().map(|b| format!("{:02x}", b)).collect();
             term.write_line(&line_str)?;
         }
     }
@@ -562,53 +731,50 @@ fn dump_vram(term: &Term, ctx: &Ctx) -> Result<()>{
         term.write_line("tiledata block 2")?;
         let data = ctx.mmu.fetch_tiledata_block2();
         for line in data.chunks(64) {
-            let line_str: String = line.iter()
-                .map(|b| format!("{:02x}", b))
-                .collect();
+            let line_str: String = line.iter().map(|b| format!("{:02x}", b)).collect();
             term.write_line(&line_str)?;
         }
     }
     Ok(())
 }
-fn show_test_memory(term: &Term, ctx: &Ctx) -> Result<()>{
-    term.write_line(&format!("memory at {:04X}",TEST_ADDR))?;
+fn show_test_memory(term: &Term, ctx: &Ctx) -> Result<()> {
+    term.write_line(&format!("memory at {:04X}", TEST_ADDR))?;
     let data = ctx.mmu.fetch_test_memory();
     for line in data.chunks(32) {
-        let line_str:String = line.iter()
-            .map(|b|format!("{:02x}",b))
-            .collect();
+        let line_str: String = line.iter().map(|b| format!("{:02x}", b)).collect();
         term.write_line(&line_str)?;
     }
 
     Ok(())
 }
 
-fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()>  {
+fn dump_cart_rom(term: &Term, ctx: &Ctx) -> Result<()> {
     term.write_line("cart rom starting at 0x0100")?;
     let rom = ctx.mmu.fetch_rom_bank_1();
-    print_memory_to_console(rom,term,ctx)?;
+    print_memory_to_console(rom, term, ctx)?;
     Ok(())
 }
 
-fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) ->Result<()>{
+fn print_memory_to_console(mem: &[u8], term: &Term, ctx: &Ctx) -> Result<()> {
     for line in mem.chunks(64) {
-        let line_str:String = line.iter()
-            .map(|b|format!("{:02x}",b))
-            .collect();
+        let line_str: String = line.iter().map(|b| format!("{:02x}", b)).collect();
         term.write_line(&line_str)?;
     }
     Ok(())
 }
 
-fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
+fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()> {
     let reg = Style::new().bg(Color::Cyan).red().bold();
     let regs = &ctx.mmu.hardware;
-    term.write_line(&format!("registers are {} ",reg.apply_to("cool")))?;
-    term.write_line(&format!("LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",regs.LY, regs.LYC,  regs.SCX,  regs.SCY))?;
-    term.write_line(&format!("LCDC {:08b}  STAT {:08b}",regs.LCDC, regs.STAT))?;
-    term.write_line(&format!("IME  {:08b}    IE {:08b}",regs.IME, regs.IE,))?;
-    term.write_line(&format!("BGP  {:08b}",ctx.mmu.hardware.BGP))?;
-    term.write_line(&format!("Joy  {:08b}",ctx.mmu.read8(P1_JOYPAD_INFO)))?;
+    term.write_line(&format!("registers are {} ", reg.apply_to("cool")))?;
+    term.write_line(&format!(
+        "LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",
+        regs.LY, regs.LYC, regs.SCX, regs.SCY
+    ))?;
+    term.write_line(&format!("LCDC {:08b}  STAT {:08b}", regs.LCDC, regs.STAT))?;
+    term.write_line(&format!("IME  {:08b}    IE {:08b}", regs.IME, regs.IE,))?;
+    term.write_line(&format!("BGP  {:08b}", ctx.mmu.hardware.BGP))?;
+    term.write_line(&format!("Joy  {:08b}", ctx.mmu.read8(P1_JOYPAD_INFO)))?;
     // term.write_line(&format!("OBP0 {:8b}",ctx.mmu.hardware.OBP0))?;
     // term.write_line(&format!("OBP1 {:8b}",ctx.mmu.hardware.OBP1))?;
     // term.write_line(&format!("WY   {:8b}",ctx.mmu.hardware.WY))?;
@@ -616,14 +782,14 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     Ok(())
 }
 
-fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16,u16) {
+fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16, u16) {
     let pc = cpu.r.pc;
     // println!("pc is {}",pc);
-    let fb:u8 = mmu.read8(pc);
+    let fb: u8 = mmu.read8(pc);
     // println!("fb is {:x}",fb);
     if fb == 0xcb {
-        let sb:u8 = mmu.read8(pc+1);
-        (0xcb00 | sb as u16,2)
+        let sb: u8 = mmu.read8(pc + 1);
+        (0xcb00 | sb as u16, 2)
     } else {
         (fb as u16, 1)
     }
@@ -633,28 +799,29 @@ impl Ctx {
     pub fn execute_test(&mut self) {
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if let Some(instr) = lookup_opcode(opcode) {
-            println!("executing {}  PC {:04x}  SP {:04x}  {:02x}  {:?}",  self.clock,
-                     self.cpu.r.pc, self.cpu.r.sp, opcode, instr);
+            println!(
+                "executing {}  PC {:04x}  SP {:04x}  {:02x}  {:?}",
+                self.clock, self.cpu.r.pc, self.cpu.r.sp, opcode, instr
+            );
             self.execute_instruction(&instr);
             print_registers(&self.cpu, &self.mmu);
         } else {
             println!("current cycle {}", self.clock);
-            println!("unknown op code {:04x}",opcode);
+            println!("unknown op code {:04x}", opcode);
             panic!("unknown op code");
         }
         // self.mmu.update(&mut self.cpu, );
-        self.clock+=1;
+        self.clock += 1;
     }
 }
 
-fn print_registers(cpu: &Z80, mmu:&MMU) {
+fn print_registers(cpu: &Z80, mmu: &MMU) {
     println!("A {:02x}", cpu.r.get_u8reg(&RegisterName::A));
     println!("B {:02x}", cpu.r.get_u8reg(&RegisterName::B));
     println!("LY {:02x} ", mmu.hardware.LY);
     println!("PC {:02x} ", cpu.get_pc());
     println!("SP {:02x} ", cpu.get_sp());
 }
-
 
 // #[test]
 // fn test_vblank_interrupt() {
@@ -799,10 +966,10 @@ fn print_registers(cpu: &Z80, mmu:&MMU) {
 // }
 
 fn op(ins: Instr) -> u8 {
-    println!("lookup opcode for instruction {:?}",ins);
+    println!("lookup opcode for instruction {:?}", ins);
     match ins {
         Instr::LoadInstr(Load::Load_R_u8(RegisterName::B)) => 0x06,
-        Instr::LoadInstr(Load::Load_R_R(RegisterName::A,RegisterName::B)) => 0x78,
+        Instr::LoadInstr(Load::Load_R_R(RegisterName::A, RegisterName::B)) => 0x78,
         Instr::CompareInst(Compare::CP_A_n()) => 0xFE,
         Instr::JumpInstr(Jump::Relative_cond_notzero_i8()) => 0x20,
         Instr::SpecialInstr(Special::EnableInterrupts()) => 0xFB,
@@ -815,13 +982,12 @@ fn op(ins: Instr) -> u8 {
     }
 }
 
-
-fn fetch_opcode_from_memory(cpu:&Z80, mmu:&MMU) -> (u16, u16) {
+fn fetch_opcode_from_memory(cpu: &Z80, mmu: &MMU) -> (u16, u16) {
     let pc = cpu.r.pc;
-    let fb:u8 = mmu.read8(pc);
+    let fb: u8 = mmu.read8(pc);
     if fb == 0xcb {
-        let sb:u8 = mmu.read8(pc+1);
-        (0xcb00 | sb as u16,2)
+        let sb: u8 = mmu.read8(pc + 1);
+        (0xcb00 | sb as u16, 2)
     } else {
         (fb as u16, 1)
     }

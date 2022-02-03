@@ -1,9 +1,8 @@
+use crate::common::{get_bit_as_bool, set_bit};
+use log::info;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use log::info;
-use crate::common::{get_bit_as_bool, set_bit};
-
 
 /*
 IO registers
@@ -81,7 +80,7 @@ impl IORegister {
             // IORegister::WY   => 0xFF4A,
             // IORegister::WX   => 0xFF4B,
             0xFFFF => Some(IORegister::IE),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -91,13 +90,13 @@ impl IORegister {
         match self {
             IORegister::DISABLE_BOOTROM => 0xFF50,
             IORegister::JOYPAD_P1 => 0xFF00,
-            IORegister::SB   => 0xFF01,
-            IORegister::SC   => 0xFF02,
-            IORegister::DIV  => 0xFF04,
+            IORegister::SB => 0xFF01,
+            IORegister::SC => 0xFF02,
+            IORegister::DIV => 0xFF04,
             IORegister::TIMA => 0xFF05,
-            IORegister::TMA  => 0xFF06,
-            IORegister::TAC  => 0xFF07,
-            IORegister::IF   => 0xFF0F,
+            IORegister::TMA => 0xFF06,
+            IORegister::TAC => 0xFF07,
+            IORegister::IF => 0xFF0F,
             IORegister::NR10 => 0xFF10,
             IORegister::NR11 => 0xFF11,
             IORegister::NR12 => 0xFF12,
@@ -121,17 +120,17 @@ impl IORegister {
             IORegister::NR52 => 0xFF26,
             IORegister::LCDC => 0xFF40,
             IORegister::STAT => 0xFF41,
-            IORegister::SCY  => 0xFF42,
-            IORegister::SCX  => 0xFF43,
-            IORegister::LY   => 0xFF44,
-            IORegister::LYC  => 0xFF45,
-            IORegister::DMA  => 0xFF46,
-            IORegister::BGP  => 0xFF47,
+            IORegister::SCY => 0xFF42,
+            IORegister::SCX => 0xFF43,
+            IORegister::LY => 0xFF44,
+            IORegister::LYC => 0xFF45,
+            IORegister::DMA => 0xFF46,
+            IORegister::BGP => 0xFF47,
             IORegister::OBP0 => 0xFF48,
             IORegister::OBP1 => 0xFF49,
-            IORegister::WY   => 0xFF4A,
-            IORegister::WX   => 0xFF4B,
-            IORegister::IE   => 0xFFFF,
+            IORegister::WY => 0xFF4A,
+            IORegister::WX => 0xFF4B,
+            IORegister::IE => 0xFFFF,
         }
     }
     pub fn name(&self) -> &str {
@@ -144,7 +143,7 @@ impl IORegister {
             IORegister::TIMA => "TIMA",
             IORegister::TMA => "TMA",
             IORegister::TAC => "TAC",
-            IORegister::IF =>   "IF",
+            IORegister::IF => "IF",
             IORegister::NR10 => "NR10",
             IORegister::NR11 => "NR1",
             IORegister::NR12 => "NR1",
@@ -168,31 +167,31 @@ impl IORegister {
             IORegister::NR52 => "NR1",
             IORegister::LCDC => "LCDC",
             IORegister::STAT => "STAT",
-            IORegister::LY   => "LY",
-            IORegister::LYC  => "LYC",
-            IORegister::SCY  => "SCY",
-            IORegister::SCX  => "SCX",
-            IORegister::DMA  => "DMA",
-            IORegister::BGP  => "BGP",
+            IORegister::LY => "LY",
+            IORegister::LYC => "LYC",
+            IORegister::SCY => "SCY",
+            IORegister::SCX => "SCX",
+            IORegister::DMA => "DMA",
+            IORegister::BGP => "BGP",
             IORegister::OBP0 => "OBP0",
             IORegister::OBP1 => "OBP1",
-            IORegister::WY   => "WY",
-            IORegister::WX   => "WX",
-            IORegister::IE   => "IE",
+            IORegister::WY => "WY",
+            IORegister::WX => "WX",
+            IORegister::IE => "IE",
         }
     }
 }
 pub struct MMU2 {
-    cart_rom:Vec<u8>,
-    boot_rom:Vec<u8>,
-    mem:Vec<u8>,
-    boot_rom_enabled:bool,
-    joypad:Joypad,
+    cart_rom: Vec<u8>,
+    boot_rom: Vec<u8>,
+    mem: Vec<u8>,
+    boot_rom_enabled: bool,
+    joypad: Joypad,
 }
 
 impl MMU2 {
     pub(crate) fn init_empty(val: u8) -> MMU2 {
-        let mut data: Vec<u8> = vec![0x00;(0xFFFF + 1)];
+        let mut data: Vec<u8> = vec![0x00; (0xFFFF + 1)];
         data.fill(val);
         MMU2 {
             cart_rom: vec![],
@@ -216,15 +215,15 @@ pub enum JoypadReadMode {
 }
 
 pub struct Joypad {
-    pub a:bool,
-    pub b:bool,
-    pub select:bool,
-    pub start:bool,
-    pub up:bool,
-    pub down:bool,
-    pub left:bool,
-    pub right:bool,
-    pub readmode:JoypadReadMode,
+    pub a: bool,
+    pub b: bool,
+    pub select: bool,
+    pub start: bool,
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
+    pub readmode: JoypadReadMode,
 }
 
 impl Joypad {
@@ -238,11 +237,10 @@ impl Joypad {
             down: false,
             left: false,
             right: false,
-            readmode: JoypadReadMode::Action()
+            readmode: JoypadReadMode::Action(),
         }
     }
 }
-
 
 impl MMU2 {
     pub fn init(rom: &[u8]) -> MMU2 {
@@ -282,45 +280,45 @@ impl MMU2 {
                     match self.joypad.readmode {
                         JoypadReadMode::Action() => {
                             let mut val = 0xFF;
-                            val = set_bit(val,0, !self.joypad.a);
-                            val = set_bit(val,1, !self.joypad.b);
-                            val = set_bit(val,2, !self.joypad.select);
-                            val = set_bit(val,3, !self.joypad.start);
-                            println!("reading joypad: {:02x}",val);
+                            val = set_bit(val, 0, !self.joypad.a);
+                            val = set_bit(val, 1, !self.joypad.b);
+                            val = set_bit(val, 2, !self.joypad.select);
+                            val = set_bit(val, 3, !self.joypad.start);
+                            println!("reading joypad: {:02x}", val);
                             val
-                        },
+                        }
                         JoypadReadMode::Direction() => {
                             let mut val = 0xFF;
-                            val = set_bit(val,0, !self.joypad.right);
-                            val = set_bit(val,1, !self.joypad.left);
-                            val = set_bit(val,2, !self.joypad.up);
-                            val = set_bit(val,3, !self.joypad.down);
-                            println!("reading joypad: {:02x}",val);
+                            val = set_bit(val, 0, !self.joypad.right);
+                            val = set_bit(val, 1, !self.joypad.left);
+                            val = set_bit(val, 2, !self.joypad.up);
+                            val = set_bit(val, 3, !self.joypad.down);
+                            println!("reading joypad: {:02x}", val);
                             val
                         }
                     }
-                },
-                _ => self.mem[addr as usize]
+                }
+                _ => self.mem[addr as usize],
             }
         } else {
             self.mem[addr as usize]
         }
     }
-    pub(crate) fn read8_IO(&self, reg:IORegister) -> u8 {
+    pub(crate) fn read8_IO(&self, reg: IORegister) -> u8 {
         self.read8(reg.get_addr())
     }
-    pub fn write8(&mut self, addr:u16, val:u8) {
+    pub fn write8(&mut self, addr: u16, val: u8) {
         if let Some(en) = IORegister::match_address(addr) {
-            println!("reg {:?} <- {:02x}",en,val);
+            println!("reg {:?} <- {:02x}", en, val);
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
                     // info!("writing to JOYPAD register {:08b}",val);
-                    if get_bit_as_bool(val,5) {
+                    if get_bit_as_bool(val, 5) {
                         // info!("Select Action Buttons");
                         self.joypad.readmode = JoypadReadMode::Action();
                     }
-                    if get_bit_as_bool(val,4) {
+                    if get_bit_as_bool(val, 4) {
                         // info!("Select Direction Buttons");
                         self.joypad.readmode = JoypadReadMode::Direction();
                     }
@@ -331,9 +329,13 @@ impl MMU2 {
                 IORegister::SC => {
                     if val == 0x81 {
                         let sbv = self.read8_IO(IORegister::SB);
-                        info!("print serial byte {:02x} {}", sbv, char::from_u32(sbv as u32).unwrap());
+                        info!(
+                            "print serial byte {:02x} {}",
+                            sbv,
+                            char::from_u32(sbv as u32).unwrap()
+                        );
                     }
-                },
+                }
                 //writing to div resets it
                 IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
@@ -352,12 +354,12 @@ impl MMU2 {
     pub(crate) fn write8_IO(&mut self, reg: IORegister, value: u8) {
         self.mem[reg.get_addr() as usize] = value;
     }
-    pub fn read16(&self, addr:u16) -> u16 {
+    pub fn read16(&self, addr: u16) -> u16 {
         let lo = self.mem[(addr + 0) as usize] as u16;
         let hi = self.mem[(addr + 1) as usize] as u16;
         (hi << 8) + lo
     }
-    pub fn write16(&mut self, addr:u16, data:u16) {
+    pub fn write16(&mut self, addr: u16, data: u16) {
         let hi = ((data & 0xFF00) >> 8) as u8;
         let lo = ((data & 0x00FF) >> 0) as u8;
         self.mem[(addr + 0) as usize] = lo;
@@ -367,7 +369,7 @@ impl MMU2 {
         info!("DMA requested!");
         let src_addr = ((val as u16) << 8);
         let src_addr_end = src_addr + 0xA0;
-        println!("transferring from src address {:04x}",src_addr);
+        println!("transferring from src address {:04x}", src_addr);
         let dst_addr = 0xFE00;
         for n in 0..0xA0 {
             let byte = self.read8(src_addr + (n as u16));
@@ -375,4 +377,3 @@ impl MMU2 {
         }
     }
 }
-

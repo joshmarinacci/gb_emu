@@ -1,20 +1,41 @@
-use std::fmt::{Display, Formatter};
-use log::{debug, info};
-use Compare::{CP_A_n, CP_A_r};
-use Instr::{CompareInst, JumpInstr, LoadInstr, MathInst, SpecialInstr};
-use Jump::{Absolute_cond_notzero_u16, Absolute_u16, Relative_cond_carry_i8, Relative_cond_notcarry_i8, Relative_cond_notzero_i8, Relative_cond_zero_i8, Relative_i8};
-use Load::{Load_A_addr_R2_inc, Load_addr_R2_A_dec, Load_addr_R2_A_inc, Load_addr_R2_r, Load_addr_u16_A, Load_addr_u16_R2, Load_HI_R_R, Load_HI_R_U8, Load_HI_U8_R, Load_R2_U16, Load_R_addr_R2, Load_R_R};
-use Math::{ADD_R_R, ADD_R_u8, AND_A_r, BIT, BIT_addr, Dec_r, Dec_rr, Inc_r, Inc_rr, OR_A_r, RL, RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SLA, SUB_R_R, XOR_A_r};
-use crate::opcodes::Compare::CP_A_addr;
-use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
-use crate::opcodes::Load::{Load_A_addr_R2_dec, Load_A_addr_u16, Load_addr_R2_u8, Load_R2_R2, Load_R2_R2_add_i8, Load_R_HI_R, Load_R_u8};
-use crate::opcodes::Math::{ADC_A_addr, ADC_A_R, ADC_A_u8, ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CCF, CPL, DAA, Dec_rr_addr, Inc_rr_addr, OR_A_addr, OR_A_u8, RES, RES_addr, RL_addr, RLC_addr, RR_addr, RRC_addr, SBC_R_addr, SBC_R_R, SCF, SET, SET_addr, SLA_addr, SRA, SRA_addr, SRL, SRL_addr, SUB_A_addr, SUB_A_u8, SWAP, SWAP_addr, XOR_A_addr, XOR_A_u8};
-use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
-use crate::opcodes::Special::{CALL_C_U16, CALL_NZ_U16, CALL_u16, CALL_Z_U16, DisableInterrupts, EnableInterrupts, HALT, Invalid, NOOP, POP, PUSH, RET, RETC, RETI, RETNC, RETNZ, RETZ, RST, STOP};
 use crate::common::{get_bit_as_bool, set_bit};
 use crate::cpu::Z80;
 use crate::mmu::MMU;
-use crate::opcodes::Jump::{Absolute_cond_carry_u16, Absolute_cond_zero_u16, Absolute_R2};
+use crate::opcodes::Compare::CP_A_addr;
+use crate::opcodes::DoubleRegister::{AF, BC, DE, HL, SP};
+use crate::opcodes::Jump::{Absolute_R2, Absolute_cond_carry_u16, Absolute_cond_zero_u16};
+use crate::opcodes::Load::{
+    Load_A_addr_R2_dec, Load_A_addr_u16, Load_R2_R2, Load_R2_R2_add_i8, Load_R_HI_R, Load_R_u8,
+    Load_addr_R2_u8,
+};
+use crate::opcodes::Math::{
+    ADC_A_addr, ADC_A_u8, ADD_A_addr, ADD_RR_u8, AND_A_addr, AND_A_u8, Dec_rr_addr, Inc_rr_addr,
+    OR_A_addr, OR_A_u8, RES_addr, RLC_addr, RL_addr, RRC_addr, RR_addr, SBC_R_addr, SET_addr,
+    SLA_addr, SRA_addr, SRL_addr, SUB_A_addr, SUB_A_u8, SWAP_addr, XOR_A_addr, XOR_A_u8, ADC_A_R,
+    ADD_RR_RR, CCF, CPL, DAA, RES, SBC_R_R, SCF, SET, SRA, SRL, SWAP,
+};
+use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
+use crate::opcodes::Special::{
+    CALL_u16, DisableInterrupts, EnableInterrupts, Invalid, CALL_C_U16, CALL_NZ_U16, CALL_Z_U16,
+    HALT, NOOP, POP, PUSH, RET, RETC, RETI, RETNC, RETNZ, RETZ, RST, STOP,
+};
+use log::{debug, info};
+use std::fmt::{Display, Formatter};
+use Compare::{CP_A_n, CP_A_r};
+use Instr::{CompareInst, JumpInstr, LoadInstr, MathInst, SpecialInstr};
+use Jump::{
+    Absolute_cond_notzero_u16, Absolute_u16, Relative_cond_carry_i8, Relative_cond_notcarry_i8,
+    Relative_cond_notzero_i8, Relative_cond_zero_i8, Relative_i8,
+};
+use Load::{
+    Load_A_addr_R2_inc, Load_HI_R_R, Load_HI_R_U8, Load_HI_U8_R, Load_R2_U16, Load_R_R,
+    Load_R_addr_R2, Load_addr_R2_A_dec, Load_addr_R2_A_inc, Load_addr_R2_r, Load_addr_u16_A,
+    Load_addr_u16_R2,
+};
+use Math::{
+    ADD_R_u8, AND_A_r, BIT_addr, Dec_r, Dec_rr, Inc_r, Inc_rr, OR_A_r, XOR_A_r, ADD_R_R, BIT, RL,
+    RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SLA, SUB_R_R,
+};
 
 pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
@@ -22,11 +43,22 @@ pub fn u8_as_i8(v: u8) -> i8 {
 
 #[derive(Debug)]
 pub enum RegisterName {
-    A,B,C,D,E,H,L,F,
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    F,
 }
 #[derive(Debug)]
 pub enum DoubleRegister {
-    BC,DE,HL,SP,AF,
+    BC,
+    DE,
+    HL,
+    SP,
+    AF,
 }
 #[derive(Debug)]
 pub enum Special {
@@ -61,11 +93,11 @@ pub enum Load {
     Load_R_HI_R(RegisterName, RegisterName),
     Load_R2_U16(DoubleRegister),
     Load_R_addr_R2(RegisterName, DoubleRegister),
-    Load_addr_R2_A_inc(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then INC HL
-    Load_addr_R2_A_dec(DoubleRegister),  // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
-    Load_A_addr_R2_inc(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
-    Load_A_addr_R2_dec(DoubleRegister),  // Load A, (HL+), copy contents of memory at HL to A, then INC HL
-    Load_addr_R2_r(DoubleRegister, RegisterName),      // Load (rr), R
+    Load_addr_R2_A_inc(DoubleRegister), // Load (HL+), A, copy contents of A into memory at HL, then INC HL
+    Load_addr_R2_A_dec(DoubleRegister), // Load (HL+), A, copy contents of A into memory at HL, then DEC HL
+    Load_A_addr_R2_inc(DoubleRegister), // Load A, (HL+), copy contents of memory at HL to A, then INC HL
+    Load_A_addr_R2_dec(DoubleRegister), // Load A, (HL+), copy contents of memory at HL to A, then INC HL
+    Load_addr_R2_r(DoubleRegister, RegisterName), // Load (rr), R
     Load_addr_R2_u8(DoubleRegister),
     Load_addr_u16_A(), // Load (nn), A
     Load_A_addr_u16(), // Load (nn), A
@@ -89,24 +121,24 @@ pub enum Jump {
 pub enum Compare {
     CP_A_r(RegisterName),
     CP_A_addr(DoubleRegister),
-    CP_A_n()
+    CP_A_n(),
 }
 #[derive(Debug)]
 pub enum Math {
     ADD_R_u8(RegisterName),
-    ADD_R_R(RegisterName,RegisterName),
-    ADD_RR_RR(DoubleRegister,DoubleRegister),
+    ADD_R_R(RegisterName, RegisterName),
+    ADD_RR_RR(DoubleRegister, DoubleRegister),
     ADD_RR_u8(DoubleRegister),
     ADD_A_addr(DoubleRegister),
     ADC_A_R(RegisterName),
     ADC_A_u8(),
     ADC_A_addr(DoubleRegister),
 
-    SUB_R_R(RegisterName,RegisterName),
+    SUB_R_R(RegisterName, RegisterName),
     SUB_A_addr(DoubleRegister),
     SUB_A_u8(),
-    SBC_R_R(RegisterName,RegisterName),
-    SBC_R_addr(RegisterName,DoubleRegister),
+    SBC_R_R(RegisterName, RegisterName),
+    SBC_R_addr(RegisterName, DoubleRegister),
 
     XOR_A_r(RegisterName),
     XOR_A_u8(),
@@ -123,12 +155,12 @@ pub enum Math {
     Dec_r(RegisterName),
     Dec_rr(DoubleRegister),
     Dec_rr_addr(DoubleRegister),
-    BIT(u8,RegisterName),
+    BIT(u8, RegisterName),
     BIT_addr(u8, DoubleRegister),
-    RES(u8,RegisterName),
+    RES(u8, RegisterName),
     RES_addr(u8, DoubleRegister),
-    SET(u8,RegisterName),
-    SET_addr(u8,DoubleRegister),
+    SET(u8, RegisterName),
+    SET_addr(u8, DoubleRegister),
     RL(RegisterName),
     RL_addr(DoubleRegister),
     RLA(),
@@ -190,10 +222,8 @@ impl Display for DoubleRegister {
     }
 }
 
-
-pub fn lookup_opcode(code:u16) -> Option<Instr> {
+pub fn lookup_opcode(code: u16) -> Option<Instr> {
     return match code {
-
         // loads
         0x40 => Some(LoadInstr(Load_R_R(B, B))),
         0x41 => Some(LoadInstr(Load_R_R(B, C))),
@@ -246,7 +276,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x6E => Some(LoadInstr(Load_R_addr_R2(L, HL))),
         0x6F => Some(LoadInstr(Load_R_R(L, A))),
 
-
         0x70 => Some(LoadInstr(Load_addr_R2_r(HL, B))),
         0x71 => Some(LoadInstr(Load_addr_R2_r(HL, C))),
         0x72 => Some(LoadInstr(Load_addr_R2_r(HL, D))),
@@ -264,7 +293,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x7E => Some(LoadInstr(Load_R_addr_R2(A, HL))),
         0x7F => Some(LoadInstr(Load_R_R(A, A))),
 
-
         // 8bit immediate value to register copy: LD r,n
         0x06 => Some(LoadInstr(Load_R_u8(B))),
         0x0E => Some(LoadInstr(Load_R_u8(C))),
@@ -276,8 +304,8 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x3E => Some(LoadInstr(Load_R_u8(A))),
 
         0xE0 => Some(LoadInstr(Load_HI_U8_R(A))),
-        0xF8 => Some(LoadInstr(Load_R2_R2_add_i8(HL,SP))),
-        0xF9 => Some(LoadInstr(Load_R2_R2(SP,HL))),
+        0xF8 => Some(LoadInstr(Load_R2_R2_add_i8(HL, SP))),
+        0xF9 => Some(LoadInstr(Load_R2_R2(SP, HL))),
 
         0x01 => Some(LoadInstr(Load_R2_U16(BC))),
         0x11 => Some(LoadInstr(Load_R2_U16(DE))),
@@ -288,7 +316,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x0a => Some(LoadInstr(Load_R_addr_R2(A, BC))),
         0x1a => Some(LoadInstr(Load_R_addr_R2(A, DE))),
         // put value pointed to by DE into A
-
         0x22 => Some(LoadInstr(Load_addr_R2_A_inc(HL))),
         0x32 => Some(LoadInstr(Load_addr_R2_A_dec(HL))),
         0x2A => Some(LoadInstr(Load_A_addr_R2_inc(HL))),
@@ -300,8 +327,7 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xE2 => Some(LoadInstr(Load_HI_R_R(C, A))),
         0xEA => Some(LoadInstr(Load_addr_u16_A())),
         0xFA => Some(LoadInstr(Load_A_addr_u16())),
-        0xF2 => Some(LoadInstr(Load_R_HI_R(A,C))),
-
+        0xF2 => Some(LoadInstr(Load_R_HI_R(A, C))),
 
         0x00 => Some(SpecialInstr(NOOP())),
         0xF3 => Some(SpecialInstr(DisableInterrupts())),
@@ -345,14 +371,13 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x20 => Some(JumpInstr(Relative_cond_notzero_i8())),
         0x28 => Some(JumpInstr(Relative_cond_zero_i8())), //2 bytes, if zero, relative signed
         0x30 => Some(JumpInstr(Relative_cond_notcarry_i8())), //2 bytes, if not carry, realtive signed
-        0x38 => Some(JumpInstr(Relative_cond_carry_i8())), //2 bytes, if carry, relative signed
+        0x38 => Some(JumpInstr(Relative_cond_carry_i8())),    //2 bytes, if carry, relative signed
         0xC2 => Some(JumpInstr(Absolute_cond_notzero_u16())),
         0xC3 => Some(JumpInstr(Absolute_u16())),
         0xCA => Some(JumpInstr(Absolute_cond_zero_u16())),
         0xDA => Some(JumpInstr(Absolute_cond_carry_u16())),
         0xE9 => Some(JumpInstr(Absolute_R2(HL))),
         0xFE => Some(CompareInst(CP_A_n())),
-
 
         0x09 => Some(MathInst(ADD_RR_RR(HL, BC))),
         0x19 => Some(MathInst(ADD_RR_RR(HL, DE))),
@@ -385,15 +410,14 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x95 => Some(MathInst(SUB_R_R(A, L))),
         0x96 => Some(MathInst(SUB_A_addr(HL))),
         0x97 => Some(MathInst(SUB_R_R(A, A))),
-        0x98 => Some(MathInst(SBC_R_R(A,B))),
-        0x99 => Some(MathInst(SBC_R_R(A,C))),
-        0x9A => Some(MathInst(SBC_R_R(A,D))),
-        0x9B => Some(MathInst(SBC_R_R(A,E))),
-        0x9C => Some(MathInst(SBC_R_R(A,H))),
-        0x9D => Some(MathInst(SBC_R_R(A,L))),
-        0x9E => Some(MathInst(SBC_R_addr(A,HL))),
-        0x9F => Some(MathInst(SBC_R_R(A,A))),
-
+        0x98 => Some(MathInst(SBC_R_R(A, B))),
+        0x99 => Some(MathInst(SBC_R_R(A, C))),
+        0x9A => Some(MathInst(SBC_R_R(A, D))),
+        0x9B => Some(MathInst(SBC_R_R(A, E))),
+        0x9C => Some(MathInst(SBC_R_R(A, H))),
+        0x9D => Some(MathInst(SBC_R_R(A, L))),
+        0x9E => Some(MathInst(SBC_R_addr(A, HL))),
+        0x9F => Some(MathInst(SBC_R_R(A, A))),
 
         0xA0 => Some(MathInst(AND_A_r(B))),
         0xA1 => Some(MathInst(AND_A_r(C))),
@@ -403,7 +427,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xA5 => Some(MathInst(AND_A_r(L))),
         0xA6 => Some(MathInst(AND_A_addr(HL))),
         0xA7 => Some(MathInst(AND_A_r(A))),
-
 
         0xA8 => Some(MathInst(XOR_A_r(B))),
         0xA9 => Some(MathInst(XOR_A_r(C))),
@@ -440,8 +463,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xEE => Some(MathInst(XOR_A_u8())),
         0xF6 => Some(MathInst(OR_A_u8())),
 
-
-
         //increments and decrements
         0x04 => Some(MathInst(Inc_r(B))),
         0x14 => Some(MathInst(Inc_r(D))),
@@ -472,7 +493,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0x2B => Some(MathInst(Dec_rr(HL))),
         0x3B => Some(MathInst(Dec_rr(SP))),
 
-
         0x07 => Some(MathInst(RLCA())),
         0x17 => Some(MathInst(RLA())),
         0x0F => Some(MathInst(RRCA())),
@@ -485,9 +505,6 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         // 0xED => Some(SpecialInstr(Special::Invalid(0xED))),
 
         // bit manipulation
-
-
-
         0xCB00 => Some(MathInst(RLC(B))),
         0xCB01 => Some(MathInst(RLC(C))),
         0xCB02 => Some(MathInst(RLC(D))),
@@ -556,224 +573,223 @@ pub fn lookup_opcode(code:u16) -> Option<Instr> {
         0xCB3E => Some(MathInst(SRL_addr(HL))),
         0xCB3F => Some(MathInst(SRL(A))),
 
+        0xCB40 => Some(MathInst(BIT(0, B))),
+        0xCB41 => Some(MathInst(BIT(0, C))),
+        0xCB42 => Some(MathInst(BIT(0, D))),
+        0xCB43 => Some(MathInst(BIT(0, E))),
+        0xCB44 => Some(MathInst(BIT(0, H))),
+        0xCB45 => Some(MathInst(BIT(0, L))),
+        0xCB46 => Some(MathInst(BIT_addr(0, HL))),
+        0xCB47 => Some(MathInst(BIT(0, A))),
+        0xCB48 => Some(MathInst(BIT(1, B))),
+        0xCB49 => Some(MathInst(BIT(1, C))),
+        0xCB4A => Some(MathInst(BIT(1, D))),
+        0xCB4B => Some(MathInst(BIT(1, E))),
+        0xCB4C => Some(MathInst(BIT(1, H))),
+        0xCB4D => Some(MathInst(BIT(1, L))),
+        0xCB4E => Some(MathInst(BIT_addr(1, HL))),
+        0xCB4F => Some(MathInst(BIT(1, A))),
 
-        0xCB40 => Some(MathInst(BIT(0,B))),
-        0xCB41 => Some(MathInst(BIT(0,C))),
-        0xCB42 => Some(MathInst(BIT(0,D))),
-        0xCB43 => Some(MathInst(BIT(0,E))),
-        0xCB44 => Some(MathInst(BIT(0,H))),
-        0xCB45 => Some(MathInst(BIT(0,L))),
-        0xCB46 => Some(MathInst(BIT_addr(0,HL))),
-        0xCB47 => Some(MathInst(BIT(0,A))),
-        0xCB48 => Some(MathInst(BIT(1,B))),
-        0xCB49 => Some(MathInst(BIT(1,C))),
-        0xCB4A => Some(MathInst(BIT(1,D))),
-        0xCB4B => Some(MathInst(BIT(1,E))),
-        0xCB4C => Some(MathInst(BIT(1,H))),
-        0xCB4D => Some(MathInst(BIT(1,L))),
-        0xCB4E => Some(MathInst(BIT_addr(1,HL))),
-        0xCB4F => Some(MathInst(BIT(1,A))),
+        0xCB50 => Some(MathInst(BIT(2, B))),
+        0xCB51 => Some(MathInst(BIT(2, C))),
+        0xCB52 => Some(MathInst(BIT(2, D))),
+        0xCB53 => Some(MathInst(BIT(2, E))),
+        0xCB54 => Some(MathInst(BIT(2, H))),
+        0xCB55 => Some(MathInst(BIT(2, L))),
+        0xCB56 => Some(MathInst(BIT_addr(2, HL))),
+        0xCB57 => Some(MathInst(BIT(2, A))),
+        0xCB58 => Some(MathInst(BIT(3, B))),
+        0xCB59 => Some(MathInst(BIT(3, C))),
+        0xCB5A => Some(MathInst(BIT(3, D))),
+        0xCB5B => Some(MathInst(BIT(3, E))),
+        0xCB5C => Some(MathInst(BIT(3, H))),
+        0xCB5D => Some(MathInst(BIT(3, L))),
+        0xCB5E => Some(MathInst(BIT_addr(3, HL))),
+        0xCB5F => Some(MathInst(BIT(3, A))),
 
-        0xCB50 => Some(MathInst(BIT(2,B))),
-        0xCB51 => Some(MathInst(BIT(2,C))),
-        0xCB52 => Some(MathInst(BIT(2,D))),
-        0xCB53 => Some(MathInst(BIT(2,E))),
-        0xCB54 => Some(MathInst(BIT(2,H))),
-        0xCB55 => Some(MathInst(BIT(2,L))),
-        0xCB56 => Some(MathInst(BIT_addr(2,HL))),
-        0xCB57 => Some(MathInst(BIT(2,A))),
-        0xCB58 => Some(MathInst(BIT(3,B))),
-        0xCB59 => Some(MathInst(BIT(3,C))),
-        0xCB5A => Some(MathInst(BIT(3,D))),
-        0xCB5B => Some(MathInst(BIT(3,E))),
-        0xCB5C => Some(MathInst(BIT(3,H))),
-        0xCB5D => Some(MathInst(BIT(3,L))),
-        0xCB5E => Some(MathInst(BIT_addr(3,HL))),
-        0xCB5F => Some(MathInst(BIT(3,A))),
+        0xCB60 => Some(MathInst(BIT(4, B))),
+        0xCB61 => Some(MathInst(BIT(4, C))),
+        0xCB62 => Some(MathInst(BIT(4, D))),
+        0xCB63 => Some(MathInst(BIT(4, E))),
+        0xCB64 => Some(MathInst(BIT(4, H))),
+        0xCB65 => Some(MathInst(BIT(4, L))),
+        0xCB66 => Some(MathInst(BIT_addr(4, HL))),
+        0xCB67 => Some(MathInst(BIT(4, A))),
+        0xCB68 => Some(MathInst(BIT(5, B))),
+        0xCB69 => Some(MathInst(BIT(5, C))),
+        0xCB6A => Some(MathInst(BIT(5, D))),
+        0xCB6B => Some(MathInst(BIT(5, E))),
+        0xCB6C => Some(MathInst(BIT(5, H))),
+        0xCB6D => Some(MathInst(BIT(5, L))),
+        0xCB6E => Some(MathInst(BIT_addr(5, HL))),
+        0xCB6F => Some(MathInst(BIT(5, A))),
 
-        0xCB60 => Some(MathInst(BIT(4,B))),
-        0xCB61 => Some(MathInst(BIT(4,C))),
-        0xCB62 => Some(MathInst(BIT(4,D))),
-        0xCB63 => Some(MathInst(BIT(4,E))),
-        0xCB64 => Some(MathInst(BIT(4,H))),
-        0xCB65 => Some(MathInst(BIT(4,L))),
-        0xCB66 => Some(MathInst(BIT_addr(4,HL))),
-        0xCB67 => Some(MathInst(BIT(4,A))),
-        0xCB68 => Some(MathInst(BIT(5,B))),
-        0xCB69 => Some(MathInst(BIT(5,C))),
-        0xCB6A => Some(MathInst(BIT(5,D))),
-        0xCB6B => Some(MathInst(BIT(5,E))),
-        0xCB6C => Some(MathInst(BIT(5,H))),
-        0xCB6D => Some(MathInst(BIT(5,L))),
-        0xCB6E => Some(MathInst(BIT_addr(5,HL))),
-        0xCB6F => Some(MathInst(BIT(5,A))),
+        0xCB70 => Some(MathInst(BIT(6, B))),
+        0xCB71 => Some(MathInst(BIT(6, C))),
+        0xCB72 => Some(MathInst(BIT(6, D))),
+        0xCB73 => Some(MathInst(BIT(6, E))),
+        0xCB74 => Some(MathInst(BIT(6, H))),
+        0xCB75 => Some(MathInst(BIT(6, L))),
+        0xCB76 => Some(MathInst(BIT_addr(6, HL))),
+        0xCB77 => Some(MathInst(BIT(6, A))),
+        0xCB78 => Some(MathInst(BIT(7, B))),
+        0xCB79 => Some(MathInst(BIT(7, C))),
+        0xCB7A => Some(MathInst(BIT(7, D))),
+        0xCB7B => Some(MathInst(BIT(7, E))),
+        0xCB7C => Some(MathInst(BIT(7, H))),
+        0xCB7D => Some(MathInst(BIT(7, L))),
+        0xCB7E => Some(MathInst(BIT_addr(7, HL))),
+        0xCB7F => Some(MathInst(BIT(7, A))),
 
-        0xCB70 => Some(MathInst(BIT(6,B))),
-        0xCB71 => Some(MathInst(BIT(6,C))),
-        0xCB72 => Some(MathInst(BIT(6,D))),
-        0xCB73 => Some(MathInst(BIT(6,E))),
-        0xCB74 => Some(MathInst(BIT(6,H))),
-        0xCB75 => Some(MathInst(BIT(6,L))),
-        0xCB76 => Some(MathInst(BIT_addr(6,HL))),
-        0xCB77 => Some(MathInst(BIT(6,A))),
-        0xCB78 => Some(MathInst(BIT(7,B))),
-        0xCB79 => Some(MathInst(BIT(7,C))),
-        0xCB7A => Some(MathInst(BIT(7,D))),
-        0xCB7B => Some(MathInst(BIT(7,E))),
-        0xCB7C => Some(MathInst(BIT(7,H))),
-        0xCB7D => Some(MathInst(BIT(7,L))),
-        0xCB7E => Some(MathInst(BIT_addr(7,HL))),
-        0xCB7F => Some(MathInst(BIT(7,A))),
+        0xCB80 => Some(MathInst(RES(0, B))),
+        0xCB81 => Some(MathInst(RES(0, C))),
+        0xCB82 => Some(MathInst(RES(0, D))),
+        0xCB83 => Some(MathInst(RES(0, E))),
+        0xCB84 => Some(MathInst(RES(0, H))),
+        0xCB85 => Some(MathInst(RES(0, L))),
+        0xCB86 => Some(MathInst(RES_addr(0, HL))),
+        0xCB87 => Some(MathInst(RES(0, A))),
 
-        0xCB80 => Some(MathInst(RES(0,B))),
-        0xCB81 => Some(MathInst(RES(0,C))),
-        0xCB82 => Some(MathInst(RES(0,D))),
-        0xCB83 => Some(MathInst(RES(0,E))),
-        0xCB84 => Some(MathInst(RES(0,H))),
-        0xCB85 => Some(MathInst(RES(0,L))),
-        0xCB86 => Some(MathInst(RES_addr(0,HL))),
-        0xCB87 => Some(MathInst(RES(0,A))),
+        0xCB88 => Some(MathInst(RES(1, B))),
+        0xCB89 => Some(MathInst(RES(1, C))),
+        0xCB8A => Some(MathInst(RES(1, D))),
+        0xCB8B => Some(MathInst(RES(1, E))),
+        0xCB8C => Some(MathInst(RES(1, H))),
+        0xCB8D => Some(MathInst(RES(1, L))),
+        0xCB8E => Some(MathInst(RES_addr(1, HL))),
+        0xCB8F => Some(MathInst(RES(1, A))),
 
-        0xCB88 => Some(MathInst(RES(1,B))),
-        0xCB89 => Some(MathInst(RES(1,C))),
-        0xCB8A => Some(MathInst(RES(1,D))),
-        0xCB8B => Some(MathInst(RES(1,E))),
-        0xCB8C => Some(MathInst(RES(1,H))),
-        0xCB8D => Some(MathInst(RES(1,L))),
-        0xCB8E => Some(MathInst(RES_addr(1,HL))),
-        0xCB8F => Some(MathInst(RES(1,A))),
+        0xCB90 => Some(MathInst(RES(2, B))),
+        0xCB91 => Some(MathInst(RES(2, C))),
+        0xCB92 => Some(MathInst(RES(2, D))),
+        0xCB93 => Some(MathInst(RES(2, E))),
+        0xCB94 => Some(MathInst(RES(2, H))),
+        0xCB95 => Some(MathInst(RES(2, L))),
+        0xCB96 => Some(MathInst(RES_addr(2, HL))),
+        0xCB97 => Some(MathInst(RES(2, A))),
 
-        0xCB90 => Some(MathInst(RES(2,B))),
-        0xCB91 => Some(MathInst(RES(2,C))),
-        0xCB92 => Some(MathInst(RES(2,D))),
-        0xCB93 => Some(MathInst(RES(2,E))),
-        0xCB94 => Some(MathInst(RES(2,H))),
-        0xCB95 => Some(MathInst(RES(2,L))),
-        0xCB96 => Some(MathInst(RES_addr(2,HL))),
-        0xCB97 => Some(MathInst(RES(2,A))),
+        0xCB98 => Some(MathInst(RES(3, B))),
+        0xCB99 => Some(MathInst(RES(3, C))),
+        0xCB9A => Some(MathInst(RES(3, D))),
+        0xCB9B => Some(MathInst(RES(3, E))),
+        0xCB9C => Some(MathInst(RES(3, H))),
+        0xCB9D => Some(MathInst(RES(3, L))),
+        0xCB9E => Some(MathInst(RES_addr(3, HL))),
+        0xCB9F => Some(MathInst(RES(3, A))),
 
-        0xCB98 => Some(MathInst(RES(3,B))),
-        0xCB99 => Some(MathInst(RES(3,C))),
-        0xCB9A => Some(MathInst(RES(3,D))),
-        0xCB9B => Some(MathInst(RES(3,E))),
-        0xCB9C => Some(MathInst(RES(3,H))),
-        0xCB9D => Some(MathInst(RES(3,L))),
-        0xCB9E => Some(MathInst(RES_addr(3,HL))),
-        0xCB9F => Some(MathInst(RES(3,A))),
+        0xCBA0 => Some(MathInst(RES(4, B))),
+        0xCBA1 => Some(MathInst(RES(4, C))),
+        0xCBA2 => Some(MathInst(RES(4, D))),
+        0xCBA3 => Some(MathInst(RES(4, E))),
+        0xCBA4 => Some(MathInst(RES(4, H))),
+        0xCBA5 => Some(MathInst(RES(4, L))),
+        0xCBA6 => Some(MathInst(RES_addr(4, HL))),
+        0xCBA7 => Some(MathInst(RES(4, A))),
 
-        0xCBA0 => Some(MathInst(RES(4,B))),
-        0xCBA1 => Some(MathInst(RES(4,C))),
-        0xCBA2 => Some(MathInst(RES(4,D))),
-        0xCBA3 => Some(MathInst(RES(4,E))),
-        0xCBA4 => Some(MathInst(RES(4,H))),
-        0xCBA5 => Some(MathInst(RES(4,L))),
-        0xCBA6 => Some(MathInst(RES_addr(4,HL))),
-        0xCBA7 => Some(MathInst(RES(4,A))),
+        0xCBA8 => Some(MathInst(RES(5, B))),
+        0xCBA9 => Some(MathInst(RES(5, C))),
+        0xCBAA => Some(MathInst(RES(5, D))),
+        0xCBAB => Some(MathInst(RES(5, E))),
+        0xCBAC => Some(MathInst(RES(5, H))),
+        0xCBAD => Some(MathInst(RES(5, L))),
+        0xCBAE => Some(MathInst(RES_addr(5, HL))),
+        0xCBAF => Some(MathInst(RES(5, A))),
 
-        0xCBA8 => Some(MathInst(RES(5,B))),
-        0xCBA9 => Some(MathInst(RES(5,C))),
-        0xCBAA => Some(MathInst(RES(5,D))),
-        0xCBAB => Some(MathInst(RES(5,E))),
-        0xCBAC => Some(MathInst(RES(5,H))),
-        0xCBAD => Some(MathInst(RES(5,L))),
-        0xCBAE => Some(MathInst(RES_addr(5,HL))),
-        0xCBAF => Some(MathInst(RES(5,A))),
+        0xCBB0 => Some(MathInst(RES(6, B))),
+        0xCBB1 => Some(MathInst(RES(6, C))),
+        0xCBB2 => Some(MathInst(RES(6, D))),
+        0xCBB3 => Some(MathInst(RES(6, E))),
+        0xCBB4 => Some(MathInst(RES(6, H))),
+        0xCBB5 => Some(MathInst(RES(6, L))),
+        0xCBB6 => Some(MathInst(RES_addr(6, HL))),
+        0xCBB7 => Some(MathInst(RES(6, A))),
 
-        0xCBB0 => Some(MathInst(RES(6,B))),
-        0xCBB1 => Some(MathInst(RES(6,C))),
-        0xCBB2 => Some(MathInst(RES(6,D))),
-        0xCBB3 => Some(MathInst(RES(6,E))),
-        0xCBB4 => Some(MathInst(RES(6,H))),
-        0xCBB5 => Some(MathInst(RES(6,L))),
-        0xCBB6 => Some(MathInst(RES_addr(6,HL))),
-        0xCBB7 => Some(MathInst(RES(6,A))),
+        0xCBB8 => Some(MathInst(RES(7, B))),
+        0xCBB9 => Some(MathInst(RES(7, C))),
+        0xCBBA => Some(MathInst(RES(7, D))),
+        0xCBBB => Some(MathInst(RES(7, E))),
+        0xCBBC => Some(MathInst(RES(7, H))),
+        0xCBBD => Some(MathInst(RES(7, L))),
+        0xCBBE => Some(MathInst(RES_addr(7, HL))),
+        0xCBBF => Some(MathInst(RES(7, A))),
 
-        0xCBB8 => Some(MathInst(RES(7,B))),
-        0xCBB9 => Some(MathInst(RES(7,C))),
-        0xCBBA => Some(MathInst(RES(7,D))),
-        0xCBBB => Some(MathInst(RES(7,E))),
-        0xCBBC => Some(MathInst(RES(7,H))),
-        0xCBBD => Some(MathInst(RES(7,L))),
-        0xCBBE => Some(MathInst(RES_addr(7,HL))),
-        0xCBBF => Some(MathInst(RES(7,A))),
+        0xCBC0 => Some(MathInst(SET(0, B))),
+        0xCBC1 => Some(MathInst(SET(0, C))),
+        0xCBC2 => Some(MathInst(SET(0, D))),
+        0xCBC3 => Some(MathInst(SET(0, E))),
+        0xCBC4 => Some(MathInst(SET(0, H))),
+        0xCBC5 => Some(MathInst(SET(0, L))),
+        0xCBC6 => Some(MathInst(SET_addr(0, HL))),
+        0xCBC7 => Some(MathInst(SET(0, A))),
 
-        0xCBC0 => Some(MathInst(SET(0,B))),
-        0xCBC1 => Some(MathInst(SET(0,C))),
-        0xCBC2 => Some(MathInst(SET(0,D))),
-        0xCBC3 => Some(MathInst(SET(0,E))),
-        0xCBC4 => Some(MathInst(SET(0,H))),
-        0xCBC5 => Some(MathInst(SET(0,L))),
-        0xCBC6 => Some(MathInst(SET_addr(0,HL))),
-        0xCBC7 => Some(MathInst(SET(0,A))),
+        0xCBC8 => Some(MathInst(SET(1, B))),
+        0xCBC9 => Some(MathInst(SET(1, C))),
+        0xCBCA => Some(MathInst(SET(1, D))),
+        0xCBCB => Some(MathInst(SET(1, E))),
+        0xCBCC => Some(MathInst(SET(1, H))),
+        0xCBCD => Some(MathInst(SET(1, L))),
+        0xCBCE => Some(MathInst(SET_addr(1, HL))),
+        0xCBCF => Some(MathInst(SET(1, A))),
 
-        0xCBC8 => Some(MathInst(SET(1,B))),
-        0xCBC9 => Some(MathInst(SET(1,C))),
-        0xCBCA => Some(MathInst(SET(1,D))),
-        0xCBCB => Some(MathInst(SET(1,E))),
-        0xCBCC => Some(MathInst(SET(1,H))),
-        0xCBCD => Some(MathInst(SET(1,L))),
-        0xCBCE => Some(MathInst(SET_addr(1,HL))),
-        0xCBCF => Some(MathInst(SET(1,A))),
+        0xCBD0 => Some(MathInst(SET(2, B))),
+        0xCBD1 => Some(MathInst(SET(2, C))),
+        0xCBD2 => Some(MathInst(SET(2, D))),
+        0xCBD3 => Some(MathInst(SET(2, E))),
+        0xCBD4 => Some(MathInst(SET(2, H))),
+        0xCBD5 => Some(MathInst(SET(2, L))),
+        0xCBD6 => Some(MathInst(SET_addr(0, HL))),
+        0xCBD7 => Some(MathInst(SET(2, A))),
 
-        0xCBD0 => Some(MathInst(SET(2,B))),
-        0xCBD1 => Some(MathInst(SET(2,C))),
-        0xCBD2 => Some(MathInst(SET(2,D))),
-        0xCBD3 => Some(MathInst(SET(2,E))),
-        0xCBD4 => Some(MathInst(SET(2,H))),
-        0xCBD5 => Some(MathInst(SET(2,L))),
-        0xCBD6 => Some(MathInst(SET_addr(0,HL))),
-        0xCBD7 => Some(MathInst(SET(2,A))),
+        0xCBD8 => Some(MathInst(SET(3, B))),
+        0xCBD9 => Some(MathInst(SET(3, C))),
+        0xCBDA => Some(MathInst(SET(3, D))),
+        0xCBDB => Some(MathInst(SET(3, E))),
+        0xCBDC => Some(MathInst(SET(3, H))),
+        0xCBDD => Some(MathInst(SET(3, L))),
+        0xCBDE => Some(MathInst(SET_addr(3, HL))),
+        0xCBDF => Some(MathInst(SET(3, A))),
 
-        0xCBD8 => Some(MathInst(SET(3,B))),
-        0xCBD9 => Some(MathInst(SET(3,C))),
-        0xCBDA => Some(MathInst(SET(3,D))),
-        0xCBDB => Some(MathInst(SET(3,E))),
-        0xCBDC => Some(MathInst(SET(3,H))),
-        0xCBDD => Some(MathInst(SET(3,L))),
-        0xCBDE => Some(MathInst(SET_addr(3,HL))),
-        0xCBDF => Some(MathInst(SET(3,A))),
+        0xCBE0 => Some(MathInst(SET(4, B))),
+        0xCBE1 => Some(MathInst(SET(4, C))),
+        0xCBE2 => Some(MathInst(SET(4, D))),
+        0xCBE3 => Some(MathInst(SET(4, E))),
+        0xCBE4 => Some(MathInst(SET(4, H))),
+        0xCBE5 => Some(MathInst(SET(4, L))),
+        0xCBE6 => Some(MathInst(SET_addr(4, HL))),
+        0xCBE7 => Some(MathInst(SET(4, A))),
 
-        0xCBE0 => Some(MathInst(SET(4,B))),
-        0xCBE1 => Some(MathInst(SET(4,C))),
-        0xCBE2 => Some(MathInst(SET(4,D))),
-        0xCBE3 => Some(MathInst(SET(4,E))),
-        0xCBE4 => Some(MathInst(SET(4,H))),
-        0xCBE5 => Some(MathInst(SET(4,L))),
-        0xCBE6 => Some(MathInst(SET_addr(4,HL))),
-        0xCBE7 => Some(MathInst(SET(4,A))),
+        0xCBE8 => Some(MathInst(SET(5, B))),
+        0xCBE9 => Some(MathInst(SET(5, C))),
+        0xCBEA => Some(MathInst(SET(5, D))),
+        0xCBEB => Some(MathInst(SET(5, E))),
+        0xCBEC => Some(MathInst(SET(5, H))),
+        0xCBED => Some(MathInst(SET(5, L))),
+        0xCBEE => Some(MathInst(SET_addr(5, HL))),
+        0xCBEF => Some(MathInst(SET(5, A))),
 
-        0xCBE8 => Some(MathInst(SET(5,B))),
-        0xCBE9 => Some(MathInst(SET(5,C))),
-        0xCBEA => Some(MathInst(SET(5,D))),
-        0xCBEB => Some(MathInst(SET(5,E))),
-        0xCBEC => Some(MathInst(SET(5,H))),
-        0xCBED => Some(MathInst(SET(5,L))),
-        0xCBEE => Some(MathInst(SET_addr(5,HL))),
-        0xCBEF => Some(MathInst(SET(5,A))),
+        0xCBF0 => Some(MathInst(SET(6, B))),
+        0xCBF1 => Some(MathInst(SET(6, C))),
+        0xCBF2 => Some(MathInst(SET(6, D))),
+        0xCBF3 => Some(MathInst(SET(6, E))),
+        0xCBF4 => Some(MathInst(SET(6, H))),
+        0xCBF5 => Some(MathInst(SET(6, L))),
+        0xCBF6 => Some(MathInst(SET_addr(6, HL))),
+        0xCBF7 => Some(MathInst(SET(6, A))),
 
-        0xCBF0 => Some(MathInst(SET(6,B))),
-        0xCBF1 => Some(MathInst(SET(6,C))),
-        0xCBF2 => Some(MathInst(SET(6,D))),
-        0xCBF3 => Some(MathInst(SET(6,E))),
-        0xCBF4 => Some(MathInst(SET(6,H))),
-        0xCBF5 => Some(MathInst(SET(6,L))),
-        0xCBF6 => Some(MathInst(SET_addr(6,HL))),
-        0xCBF7 => Some(MathInst(SET(6,A))),
-
-        0xCBF8 => Some(MathInst(SET(7,B))),
-        0xCBF9 => Some(MathInst(SET(7,C))),
-        0xCBFA => Some(MathInst(SET(7,D))),
-        0xCBFB => Some(MathInst(SET(7,E))),
-        0xCBFC => Some(MathInst(SET(7,H))),
-        0xCBFD => Some(MathInst(SET(7,L))),
-        0xCBFE => Some(MathInst(SET_addr(7,HL))),
-        0xCBFF => Some(MathInst(SET(7,A))),
+        0xCBF8 => Some(MathInst(SET(7, B))),
+        0xCBF9 => Some(MathInst(SET(7, C))),
+        0xCBFA => Some(MathInst(SET(7, D))),
+        0xCBFB => Some(MathInst(SET(7, E))),
+        0xCBFC => Some(MathInst(SET(7, H))),
+        0xCBFD => Some(MathInst(SET(7, L))),
+        0xCBFE => Some(MathInst(SET_addr(7, HL))),
+        0xCBFF => Some(MathInst(SET(7, A))),
 
         _ => {
-            println!("WARNING. can't lookup opcode {:04x}",code);
+            println!("WARNING. can't lookup opcode {:04x}", code);
             None
         }
-    }
+    };
 }
 
 pub fn lookup_opcode_info(op: &Instr) -> String {
@@ -895,7 +911,7 @@ pub fn lookup_opcode_info(op: &Instr) -> String {
     }
 }
 
-pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Special) {
+pub fn execute_special_instructions(cpu: &mut Z80, mmu: &mut MMU, special: &Special) {
     match special {
         Special::DisableInterrupts() => {
             cpu.inc_pc();
@@ -977,7 +993,7 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
             let value = mmu.read16(cpu.get_sp());
             cpu.inc_sp();
             cpu.inc_sp();
-            cpu.r.set_u16reg(rr,value);
+            cpu.r.set_u16reg(rr, value);
         }
         Special::RET() => {
             cpu.inc_pc();
@@ -1039,7 +1055,7 @@ pub fn execute_special_instructions(cpu:&mut Z80, mmu:&mut MMU, special: &Specia
         }
         Special::Invalid(v) => {
             cpu.inc_pc();
-            println!("invalid opcode {:02x}",v);
+            println!("invalid opcode {:02x}", v);
         }
     }
 }
@@ -1058,7 +1074,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             let n = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             let addr = 0xFF00 + (n as u16);
-            cpu.r.set_u8reg(&r,mmu.read8(addr));
+            cpu.r.set_u8reg(&r, mmu.read8(addr));
             // println!("assigned content of mem:{:x} value {:x}, to A",addr,cpu.r.a);
         }
         Load::Load_HI_U8_R(r) => {
@@ -1068,26 +1084,26 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             let addr = 0xFF00 + (e as u16);
             let val = cpu.r.get_u8reg(r);
             mmu.write8(addr, val);
-        },
+        }
         //LD (FF00+C),A    put contents of A into address 0xF00+C
         Load::Load_HI_R_R(off, r) => {
             cpu.inc_pc();
             let v = cpu.r.get_u8reg(r);
             let addr = 0xFF00 + (cpu.r.get_u8reg(off) as u16);
             // println!("copying value x{:02x} from register {} to address ${:04x}", v, r, addr);
-            mmu.write8(addr,v);
+            mmu.write8(addr, v);
         }
         Load::Load_R_HI_R(dst, src) => {
             cpu.inc_pc();
             let addr = 0xFF00 + (cpu.r.get_u8reg(src) as u16);
             let v = mmu.read8(addr);
-            cpu.r.set_u8reg(dst,v);
+            cpu.r.set_u8reg(dst, v);
             cpu.inc_pc();
         }
         Load::Load_R_R(dst, src) => {
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(src);
-            cpu.r.set_u8reg(dst,val);
+            cpu.r.set_u8reg(dst, val);
         }
 
         Load::Load_R2_U16(rr) => {
@@ -1095,7 +1111,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             let val = mmu.read16(cpu.get_pc());
             cpu.inc_pc();
             cpu.inc_pc();
-            cpu.r.set_u16reg(rr,val);
+            cpu.r.set_u16reg(rr, val);
             // println!("copied immediate value {:04x} into register {}",val,rr)
         }
         Load::Load_R_addr_R2(r, rr) => {
@@ -1103,7 +1119,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(rr);
             let val = mmu.read8(addr);
-            cpu.r.set_u8reg(r,val);
+            cpu.r.set_u8reg(r, val);
             // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
         }
         Load::Load_A_addr_R2_inc(rr) => {
@@ -1111,34 +1127,34 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(rr);
             let val = mmu.read8(addr);
-            cpu.r.set_u8reg(&A,val);
+            cpu.r.set_u8reg(&A, val);
             // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
-            let (v2,_bool) = cpu.r.get_u16reg(rr).overflowing_add(1);
-            cpu.r.set_u16reg(rr,v2);
-        },
+            let (v2, _bool) = cpu.r.get_u16reg(rr).overflowing_add(1);
+            cpu.r.set_u16reg(rr, v2);
+        }
         Load::Load_A_addr_R2_dec(rr) => {
             // load to the 8bit register A, data from the address in the 16 bit register, then increment that register
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(rr);
             let val = mmu.read8(addr);
-            cpu.r.set_u8reg(&A,val);
+            cpu.r.set_u8reg(&A, val);
             // println!("copied value {:02x} from address {:04x} determined from register {} into register A",val,addr,rr);
-            let (v2,_bool) = cpu.r.get_u16reg(rr).overflowing_sub(1);
-            cpu.r.set_u16reg(rr,v2);
-        },
+            let (v2, _bool) = cpu.r.get_u16reg(rr).overflowing_sub(1);
+            cpu.r.set_u16reg(rr, v2);
+        }
         Load::Load_addr_R2_A_inc(rr) => {
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(&A);
             let addr = cpu.r.get_u16reg(rr);
-            mmu.write8(addr,val);
-            cpu.r.set_hl(cpu.r.get_hl()+1);
+            mmu.write8(addr, val);
+            cpu.r.set_hl(cpu.r.get_hl() + 1);
         }
         Load::Load_addr_R2_A_dec(rr) => {
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(&A);
             let addr = cpu.r.get_u16reg(rr);
-            mmu.write8(addr,val);
-            cpu.r.set_hl(cpu.r.get_hl()-1);
+            mmu.write8(addr, val);
+            cpu.r.set_hl(cpu.r.get_hl() - 1);
         }
 
         Load::Load_addr_R2_r(rr, r) => {
@@ -1146,14 +1162,14 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(r);
             let addr = cpu.r.get_u16reg(rr);
-            mmu.write8(addr,val);
+            mmu.write8(addr, val);
         }
         Load::Load_addr_R2_u8(rr) => {
             cpu.inc_pc();
             let val = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(rr);
-            mmu.write8(addr,val);
+            mmu.write8(addr, val);
         }
 
         Load::Load_addr_u16_A() => {
@@ -1163,7 +1179,7 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(&A);
             // println!("writing {:02x} to address {:04x}",val,addr);
-            mmu.write8(addr,val);
+            mmu.write8(addr, val);
         }
         Load::Load_A_addr_u16() => {
             cpu.inc_pc();
@@ -1171,18 +1187,18 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
             cpu.inc_pc();
             cpu.inc_pc();
             let val = mmu.read8(addr);
-            cpu.r.set_u8reg(&A,val);
+            cpu.r.set_u8reg(&A, val);
         }
 
         Load::Load_addr_u16_R2(rr) => {
             cpu.inc_pc();
             let addr = mmu.read16(cpu.get_pc());
             let val = cpu.r.get_u16reg(rr);
-            mmu.write16(addr,val);
+            mmu.write16(addr, val);
             cpu.inc_pc();
             cpu.inc_pc();
         }
-        Load::Load_R2_R2_add_i8(R1, R2) =>{
+        Load::Load_R2_R2_add_i8(R1, R2) => {
             cpu.inc_pc();
             let b = u8_as_i8(mmu.read8(cpu.get_pc())) as u16;
             cpu.inc_pc();
@@ -1190,19 +1206,19 @@ pub fn execute_load_instructions(cpu: &mut Z80, mmu: &mut MMU, load: &Load) {
 
             cpu.r.zero_flag = false;
             cpu.r.subtract_n_flag = false;
-            cpu.r.half_flag  = (a & 0x000F) + (b & 0x000F) > 0x000F;
+            cpu.r.half_flag = (a & 0x000F) + (b & 0x000F) > 0x000F;
             cpu.r.carry_flag = (a & 0x00FF) + (b & 0x00FF) > 0x00FF;
-            cpu.r.set_u16reg(R1,a.wrapping_add(b));
+            cpu.r.set_u16reg(R1, a.wrapping_add(b));
         }
-        Load::Load_R2_R2(R1, R2) =>{
+        Load::Load_R2_R2(R1, R2) => {
             cpu.inc_pc();
             let val = cpu.r.get_u16reg(R2);
-            cpu.r.set_u16reg(R1,val);
+            cpu.r.set_u16reg(R1, val);
         }
     }
 }
 
-pub fn execute_compare_instructions(cpu:&mut Z80, mmu:&mut MMU, comp:&Compare) {
+pub fn execute_compare_instructions(cpu: &mut Z80, mmu: &mut MMU, comp: &Compare) {
     match comp {
         Compare::CP_A_n() => {
             cpu.inc_pc();
@@ -1240,7 +1256,7 @@ pub fn execute_compare_instructions(cpu:&mut Z80, mmu:&mut MMU, comp:&Compare) {
     }
 }
 
-pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
+pub fn execute_math_instructions(cpu: &mut Z80, mmu: &mut MMU, math: &Math) {
     match math {
         Math::XOR_A_r(r) => {
             cpu.inc_pc();
@@ -1249,7 +1265,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = false;
             cpu.r.carry_flag = false;
-            cpu.r.set_u8reg(&A,res);
+            cpu.r.set_u8reg(&A, res);
         }
         Math::XOR_A_u8() => {
             cpu.inc_pc();
@@ -1260,7 +1276,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = false;
             cpu.r.carry_flag = false;
-            cpu.r.set_u8reg(&A,res);
+            cpu.r.set_u8reg(&A, res);
         }
         Math::XOR_A_addr(rr) => {
             cpu.inc_pc();
@@ -1271,11 +1287,12 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = false;
             cpu.r.carry_flag = false;
-            cpu.r.set_u8reg(&A,res);
+            cpu.r.set_u8reg(&A, res);
         }
         Math::OR_A_r(r) => {
             cpu.inc_pc();
-            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) | cpu.r.get_u8reg(r));
+            cpu.r
+                .set_u8reg(&A, cpu.r.get_u8reg(&A) | cpu.r.get_u8reg(r));
             cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = false;
@@ -1303,7 +1320,8 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
         }
         Math::AND_A_r(r) => {
             cpu.inc_pc();
-            cpu.r.set_u8reg(&A, cpu.r.get_u8reg(&A) & cpu.r.get_u8reg(r));
+            cpu.r
+                .set_u8reg(&A, cpu.r.get_u8reg(&A) & cpu.r.get_u8reg(r));
             cpu.r.zero_flag = cpu.r.get_u8reg(&A) == 0;
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = true;
@@ -1352,7 +1370,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.carry_flag = (dst_v as u16) + (src_v as u16) > 0xFF;
             cpu.r.set_u8reg(dst, result);
         }
-        Math::ADD_RR_RR(dst,src) => {
+        Math::ADD_RR_RR(dst, src) => {
             cpu.inc_pc();
             let src_v = cpu.r.get_u16reg(src);
             let dst_v = cpu.r.get_u16reg(dst);
@@ -1361,7 +1379,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             //dont modify the zero flag
             cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
             cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
-            cpu.r.set_u16reg(dst,result);
+            cpu.r.set_u16reg(dst, result);
         }
         Math::ADD_RR_u8(dst) => {
             cpu.inc_pc();
@@ -1373,7 +1391,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             //dont modify the zero flag
             cpu.r.half_flag = (dst_v & 0x07FF) + (src_v & 0x07FF) > 0x07FF;
             cpu.r.carry_flag = (dst_v) > (0xFFFF - src_v);
-            cpu.r.set_u16reg(dst,result);
+            cpu.r.set_u16reg(dst, result);
         }
         Math::ADD_A_addr(rr) => {
             cpu.inc_pc();
@@ -1396,7 +1414,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.zero_flag = r == 0;
             cpu.r.half_flag = (a & 0x0F) + (b & 0x0f) + c > 0xF;
             cpu.r.subtract_n_flag = false;
-            cpu.r.carry_flag = (a as u16) + (b as u16)  + (c as u16)> 0xFF;
+            cpu.r.carry_flag = (a as u16) + (b as u16) + (c as u16) > 0xFF;
             cpu.r.set_u8reg(&A, r);
         }
         Math::ADC_A_u8() => {
@@ -1409,7 +1427,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.zero_flag = r == 0;
             cpu.r.half_flag = (a & 0x0F) + (b & 0x0f) + c > 0xF;
             cpu.r.subtract_n_flag = false;
-            cpu.r.carry_flag = (a as u16) + (b as u16)  + (c as u16)> 0xFF;
+            cpu.r.carry_flag = (a as u16) + (b as u16) + (c as u16) > 0xFF;
             cpu.r.set_u8reg(&A, r);
         }
         Math::ADC_A_addr(DR) => {
@@ -1422,26 +1440,26 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.zero_flag = r == 0;
             cpu.r.half_flag = (a & 0x0F) + (b & 0x0f) + c > 0xF;
             cpu.r.subtract_n_flag = false;
-            cpu.r.carry_flag = (a as u16) + (b as u16)  + (c as u16)> 0xFF;
+            cpu.r.carry_flag = (a as u16) + (b as u16) + (c as u16) > 0xFF;
             cpu.r.set_u8reg(&A, r);
         }
         Math::SUB_R_R(dst, src) => {
             cpu.inc_pc();
-            let c =  0;
+            let c = 0;
             let a = cpu.r.get_u8reg(dst);
             let b = cpu.r.get_u8reg(src);
             let r = a.wrapping_sub(b).wrapping_sub(c);
-            set_sub_flags(cpu,r,a,b,c);
+            set_sub_flags(cpu, r, a, b, c);
             cpu.r.set_u8reg(dst, r);
         }
         Math::SUB_A_addr(rr) => {
             cpu.inc_pc();
-            let c =  0;
+            let c = 0;
             let a = cpu.r.get_u8reg(&A);
             let addr = cpu.r.get_u16reg(rr);
             let b = mmu.read8(addr);
             let r = a.wrapping_sub(b).wrapping_sub(c);
-            set_sub_flags(cpu,r,a,b,c);
+            set_sub_flags(cpu, r, a, b, c);
             cpu.r.set_u8reg(&A, r);
         }
         Math::SUB_A_u8() => {
@@ -1450,16 +1468,16 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let b = mmu.read8(cpu.get_pc());
             cpu.inc_pc();
             let r = a.wrapping_sub(b);
-            set_sub_flags(cpu,r,a,b,0);
+            set_sub_flags(cpu, r, a, b, 0);
             cpu.r.set_u8reg(&A, r);
         }
         Math::SBC_R_R(dst, src) => {
             cpu.inc_pc();
-            let c = if cpu.r.carry_flag { 1} else { 0 };
+            let c = if cpu.r.carry_flag { 1 } else { 0 };
             let a = cpu.r.get_u8reg(dst);
             let b = cpu.r.get_u8reg(src);
             let r = a.wrapping_sub(b).wrapping_sub(c);
-            set_sub_flags(cpu,r,a,b,c);
+            set_sub_flags(cpu, r, a, b, c);
         }
         Math::SBC_R_addr(dst, src) => {
             cpu.inc_pc();
@@ -1468,7 +1486,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(src);
             let b = mmu.read8(addr);
             let r = a.wrapping_sub(b).wrapping_sub(c);
-            set_sub_flags(cpu,r,a,b,c);
+            set_sub_flags(cpu, r, a, b, c);
         }
         Math::Inc_r(dst_r) => {
             cpu.inc_pc();
@@ -1499,7 +1517,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(rr);
             let val = mmu.read8(addr);
             let result = val.wrapping_add(1);
-            mmu.write8(addr,result);
+            mmu.write8(addr, result);
         }
         Math::Dec_rr(rr) => {
             cpu.inc_pc();
@@ -1512,9 +1530,9 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(rr);
             let val = mmu.read8(addr);
             let result = val.wrapping_sub(1);
-            mmu.write8(addr,result);
+            mmu.write8(addr, result);
         }
-        Math::BIT(b,r) => {
+        Math::BIT(b, r) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let val = cpu.r.get_u8reg(r);
@@ -1527,39 +1545,39 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(r);
             let val = mmu.read8(addr);
             cpu.inc_pc();
-            cpu.r.zero_flag = !get_bit_as_bool(val,*b);
+            cpu.r.zero_flag = !get_bit_as_bool(val, *b);
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = true;
         }
-        Math::RES(b,r) => {
+        Math::RES(b, r) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let mut val = cpu.r.get_u8reg(r);
-            val = set_bit(val,*b,false);
-            cpu.r.set_u8reg(r,val);
+            val = set_bit(val, *b, false);
+            cpu.r.set_u8reg(r, val);
         }
-        Math::RES_addr(b,r) => {
+        Math::RES_addr(b, r) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(r);
             let mut val = mmu.read8(addr);
-            val = set_bit(val,*b,false);
-            mmu.write8(addr,val);
+            val = set_bit(val, *b, false);
+            mmu.write8(addr, val);
         }
-        Math::SET(b,r) => {
+        Math::SET(b, r) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let mut val = cpu.r.get_u8reg(r);
-            val = set_bit(val,*b,true);
-            cpu.r.set_u8reg(r,val);
+            val = set_bit(val, *b, true);
+            cpu.r.set_u8reg(r, val);
         }
-        Math::SET_addr(b,r) => {
+        Math::SET_addr(b, r) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let addr = cpu.r.get_u16reg(r);
             let mut val = mmu.read8(addr);
-            val = set_bit(val,*b,true);
-            mmu.write8(addr,val);
+            val = set_bit(val, *b, true);
+            mmu.write8(addr, val);
         }
         Math::RLC(R) => {
             cpu.inc_pc();
@@ -1568,7 +1586,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let c = a & 0x80 == 0x80;
             let r = (a << 1) | if c { 1 } else { 0 };
             cpu.r.set_u8reg(R, r);
-            set_sr_flags(cpu, r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::RLC_addr(R) => {
             cpu.inc_pc();
@@ -1577,8 +1595,8 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = mmu.read8(addr);
             let c = a & 0x80 == 0x80;
             let r = (a << 1) | if c { 1 } else { 0 };
-            mmu.write8(addr,r);
-            set_sr_flags(cpu, r,c);
+            mmu.write8(addr, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::RLCA() => {
             cpu.inc_pc();
@@ -1586,7 +1604,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let c = a & 0x80 == 0x80;
             let r = (a << 1) | if c { 1 } else { 0 };
             cpu.r.set_u8reg(&A, r);
-            set_sr_flags(cpu,r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::RL(R) => {
             cpu.inc_pc();
@@ -1595,7 +1613,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let c = a & 0x80 == 0x80;
             let r = (a << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
             cpu.r.set_u8reg(R, r);
-            set_sr_flags(cpu,r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::RL_addr(R) => {
             cpu.inc_pc();
@@ -1604,8 +1622,8 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = mmu.read8(addr);
             let c = a & 0x80 == 0x80;
             let r = (a << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
-            mmu.write8(addr,r);
-            set_sr_flags(cpu,r,c);
+            mmu.write8(addr, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::RLA() => {
             cpu.inc_pc();
@@ -1613,16 +1631,16 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let c = a & 0x80 == 0x80;
             let r = (a << 1) | (if cpu.r.carry_flag { 1 } else { 0 });
             cpu.r.set_u8reg(&A, r);
-            set_sr_flags(cpu,r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::RRC(R) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let a = cpu.r.get_u8reg(R);
             let c = a & 0x01 == 0x01;
-            let r = (a >> 1) | (if c {0x80} else { 0x00 });
+            let r = (a >> 1) | (if c { 0x80 } else { 0x00 });
             cpu.r.set_u8reg(R, r);
-            set_sr_flags(cpu,r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::RRC_addr(R) => {
             cpu.inc_pc();
@@ -1630,17 +1648,17 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(R);
             let a = mmu.read8(addr);
             let c = a & 0x01 == 0x01;
-            let r = (a >> 1) | (if c {0x80} else { 0x00 });
-            mmu.write8(addr,r);
-            set_sr_flags(cpu,r,c);
+            let r = (a >> 1) | (if c { 0x80 } else { 0x00 });
+            mmu.write8(addr, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::RRCA() => {
             cpu.inc_pc();
             let a = cpu.r.get_u8reg(&A);
             let c = a & 0x01 == 0x01;
-            let r = (a >> 1) | (if c {0x80} else { 0x00 });
+            let r = (a >> 1) | (if c { 0x80 } else { 0x00 });
             cpu.r.set_u8reg(&A, r);
-            set_sr_flags(cpu,r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::RR(R) => {
             cpu.inc_pc();
@@ -1658,7 +1676,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = mmu.read8(addr);
             let c = a & 0x01 == 0x01;
             let r = (a >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
-            mmu.write8(addr,r);
+            mmu.write8(addr, r);
             set_sr_flags(cpu, r, c);
         }
         Math::RRA() => {
@@ -1667,7 +1685,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let c = a & 0x01 == 0x01;
             let r = (a >> 1) | (if cpu.r.carry_flag { 0x80 } else { 0x00 });
             cpu.r.set_u8reg(&A, r);
-            set_sr_flags(cpu,r,c);
+            set_sr_flags(cpu, r, c);
         }
         Math::SLA(R) => {
             cpu.inc_pc();
@@ -1675,8 +1693,8 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = cpu.r.get_u8reg(R);
             let c = a & 0x80 == 0x80;
             let r = a << 1;
-            cpu.r.set_u8reg(R,r);
-            set_sr_flags(cpu,r,c);
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::SLA_addr(R) => {
             cpu.inc_pc();
@@ -1685,17 +1703,17 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = mmu.read8(addr);
             let c = a & 0x80 == 0x80;
             let r = a << 1;
-            mmu.write8(addr,r);
-            set_sr_flags(cpu,r,c);
+            mmu.write8(addr, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::SRA(R) => {
             cpu.inc_pc();
             cpu.inc_pc();
             let a = cpu.r.get_u8reg(R);
             let c = a & 0x01 == 0x01;
-            let r = (a >> 1) | (a &0x80);
-            cpu.r.set_u8reg(R,r);
-            set_sr_flags(cpu,r,c);
+            let r = (a >> 1) | (a & 0x80);
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::SRA_addr(R) => {
             cpu.inc_pc();
@@ -1703,9 +1721,9 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(R);
             let a = mmu.read8(addr);
             let c = a & 0x01 == 0x01;
-            let r = (a >> 1) | (a &0x80);
-            mmu.write8(addr,r);
-            set_sr_flags(cpu,r,c);
+            let r = (a >> 1) | (a & 0x80);
+            mmu.write8(addr, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::SRL(R) => {
             cpu.inc_pc();
@@ -1713,8 +1731,8 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = cpu.r.get_u8reg(R);
             let c = a & 0x01 == 0x01;
             let r = a >> 1;
-            cpu.r.set_u8reg(R,r);
-            set_sr_flags(cpu,r,c);
+            cpu.r.set_u8reg(R, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::SRL_addr(R) => {
             cpu.inc_pc();
@@ -1724,17 +1742,23 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let a = mmu.read8(addr);
             let c = a & 0x01 == 0x01;
             let r = a >> 1;
-            mmu.write8(addr,r);
-            set_sr_flags(cpu,r,c);
+            mmu.write8(addr, r);
+            set_sr_flags(cpu, r, c);
         }
         Math::DAA() => {
             cpu.inc_pc();
             let mut a = cpu.r.get_u8reg(&A);
             let mut adjust = if cpu.r.carry_flag { 0x60 } else { 0x00 };
-            if cpu.r.half_flag { adjust |= 0x06; };
+            if cpu.r.half_flag {
+                adjust |= 0x06;
+            };
             if !cpu.r.zero_flag {
-                if a & 0x0F > 0x09 { adjust |= 0x06; };
-                if a > 0x99 { adjust |= 0x60; };
+                if a & 0x0F > 0x09 {
+                    adjust |= 0x06;
+                };
+                if a > 0x99 {
+                    adjust |= 0x60;
+                };
                 a = a.wrapping_add(adjust);
             } else {
                 a = a.wrapping_sub(adjust);
@@ -1743,13 +1767,13 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.r.zero_flag = a == 0;
             cpu.r.carry_flag = adjust >= 0x60;
             cpu.r.half_flag = false;
-            cpu.r.set_u8reg(&A,a);
+            cpu.r.set_u8reg(&A, a);
         }
         Math::CPL() => {
             cpu.inc_pc();
             let v = cpu.r.get_u8reg(&A);
             let v = !v;
-            cpu.r.set_u8reg(&A,v);
+            cpu.r.set_u8reg(&A, v);
             //Z not affected
             cpu.r.subtract_n_flag = true;
             cpu.r.half_flag = true;
@@ -1766,7 +1790,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             cpu.inc_pc();
             let v = cpu.r.get_u8reg(r);
             let v2 = ((v & 0x0f) << 4) | ((v & 0xf0) >> 4);
-            cpu.r.set_u8reg(&A,v2);
+            cpu.r.set_u8reg(&A, v2);
             cpu.r.zero_flag = v2 == 0;
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = false;
@@ -1777,7 +1801,7 @@ pub fn execute_math_instructions(cpu:&mut Z80, mmu:&mut MMU, math: &Math) {
             let addr = cpu.r.get_u16reg(R);
             let a = mmu.read8(addr);
             let r = ((a & 0x0f) << 4) | ((a & 0xf0) >> 4);
-            mmu.write8(addr,r);
+            mmu.write8(addr, r);
             cpu.r.zero_flag = r == 0;
             cpu.r.subtract_n_flag = false;
             cpu.r.half_flag = false;
@@ -1806,7 +1830,7 @@ fn set_sr_flags(cpu: &mut Z80, r: u8, carry: bool) {
     cpu.r.carry_flag = carry;
 }
 
-pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
+pub fn execute_jump_instructions(cpu: &mut Z80, mmu: &mut MMU, jump: &Jump) {
     match jump {
         Jump::Absolute_u16() => {
             cpu.inc_pc();
@@ -1817,32 +1841,38 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
-        },
+        }
         Jump::Absolute_R2(rr) => {
             let addr = cpu.r.get_u16reg(rr);
             // info!("Jumping to {:04x}",addr);
             cpu.set_pc(addr);
             // println!("abs jump to {:04x}",addr);
             // info!("Abs Jump to {:04x}",addr);
-        },
+        }
         Jump::Relative_cond_carry_i8() => {
             cpu.inc_pc();
             let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
             // println!("carry flag is set to {}",cpu.r.carry_flag);
-            if cpu.r.carry_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
-        },
+            if cpu.r.carry_flag {
+                cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16);
+            }
+        }
         Jump::Relative_cond_notcarry_i8() => {
             cpu.inc_pc();
             let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
-            if !cpu.r.carry_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
+            if !cpu.r.carry_flag {
+                cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16);
+            }
         }
         Jump::Relative_cond_zero_i8() => {
             cpu.inc_pc();
             let e = u8_as_i8(mmu.read8(cpu.get_pc()));
             cpu.inc_pc();
-            if cpu.r.zero_flag { cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16); }
+            if cpu.r.zero_flag {
+                cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16);
+            }
         }
         Jump::Relative_cond_notzero_i8() => {
             cpu.inc_pc();
@@ -1851,7 +1881,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
             if !cpu.r.zero_flag {
                 cpu.set_pc((((cpu.get_pc()) as i32) + e as i32) as u16);
             }
-        },
+        }
         Jump::Absolute_cond_notzero_u16() => {
             cpu.inc_pc();
             let dst = mmu.read16(cpu.get_pc());
@@ -1861,7 +1891,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
                 // info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
-        },
+        }
         Jump::Absolute_cond_zero_u16() => {
             cpu.inc_pc();
             let dst = mmu.read16(cpu.get_pc());
@@ -1871,7 +1901,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
                 // info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
-        },
+        }
         Jump::Absolute_cond_carry_u16() => {
             cpu.inc_pc();
             let dst = mmu.read16(cpu.get_pc());
@@ -1881,7 +1911,7 @@ pub fn execute_jump_instructions(cpu:&mut Z80, mmu:&mut MMU, jump: &Jump) {
                 // info!("Jumping to {:04x}",dst);
                 cpu.set_pc(dst);
             }
-        },
+        }
         Jump::Relative_i8() => {
             cpu.inc_pc();
             let e = u8_as_i8(mmu.read8(cpu.get_pc()));

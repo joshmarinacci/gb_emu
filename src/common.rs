@@ -1,21 +1,25 @@
 use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::{Path, PathBuf};
 use std::io::Result;
+use std::path::{Path, PathBuf};
 
 pub struct RomFile {
     pub data: Vec<u8>,
-    pub(crate) path:String,
+    pub(crate) path: String,
 }
 
-pub fn get_bit(by:u8, n:u8) -> u8 {
-    if by & (1<<n) != 0 { 1 } else { 0 }
+pub fn get_bit(by: u8, n: u8) -> u8 {
+    if by & (1 << n) != 0 {
+        1
+    } else {
+        0
+    }
 }
-pub fn get_bit_as_bool(by:u8, n:u8) -> bool {
-    by & (1<<n) != 0
+pub fn get_bit_as_bool(by: u8, n: u8) -> bool {
+    by & (1 << n) != 0
 }
-pub fn set_bit(by:u8, n:u8, on:bool) -> u8 {
+pub fn set_bit(by: u8, n: u8, on: bool) -> u8 {
     if on {
         let mask = match n {
             0 => 0b0000_0001,
@@ -47,12 +51,10 @@ pub fn set_bit(by:u8, n:u8, on:bool) -> u8 {
         };
         by & mask
     }
-
 }
 
-
 pub struct Bitmap {
-    pub(crate) data:Vec<u8>,
+    pub(crate) data: Vec<u8>,
     pub(crate) w: i32,
     pub(crate) h: i32,
 }
@@ -83,35 +85,39 @@ impl Bitmap {
 }
 
 impl Bitmap {
-    pub(crate) fn set_pixel_rgb(&mut self, x: i32, y: i32, r: u8, g:u8, b:u8)  {
-        if x < 0 { return; }
-        if y < 0 { return; }
-        if x > self.w-1 { return ;}
-        if y > self.h-1 { return ;}
-        let n:usize = ((x + self.w*y)*4) as usize;
+    pub(crate) fn set_pixel_rgb(&mut self, x: i32, y: i32, r: u8, g: u8, b: u8) {
+        if x < 0 {
+            return;
+        }
+        if y < 0 {
+            return;
+        }
+        if x > self.w - 1 {
+            return;
+        }
+        if y > self.h - 1 {
+            return;
+        }
+        let n: usize = ((x + self.w * y) * 4) as usize;
         // println!("n is {}",n);
-        self.data[n+0] = r;
-        self.data[n+1] = g;
-        self.data[n+2] = b;
-        self.data[n+3] = 255;
+        self.data[n + 0] = r;
+        self.data[n + 1] = g;
+        self.data[n + 2] = b;
+        self.data[n + 3] = 255;
     }
-    pub(crate) fn get_pixel_rgb(&self, x: i32, y: i32) -> (u8,u8,u8) {
-        let n:usize = ((x + self.w*y)*4) as usize;
-        (self.data[n+0],self.data[n+1],self.data[n+2])
+    pub(crate) fn get_pixel_rgb(&self, x: i32, y: i32) -> (u8, u8, u8) {
+        let n: usize = ((x + self.w * y) * 4) as usize;
+        (self.data[n + 0], self.data[n + 1], self.data[n + 2])
     }
 }
 
 impl Bitmap {
-    pub fn init(w:i32,h:i32) -> Bitmap {
-        let mut data:Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
-        data.resize((w * h * 4) as usize,255);
+    pub fn init(w: i32, h: i32) -> Bitmap {
+        let mut data: Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
+        data.resize((w * h * 4) as usize, 255);
         data.fill(255);
-        println!("Length is {}",data.len());
-        Bitmap {
-            w,
-            h,
-            data,
-        }
+        println!("Length is {}", data.len());
+        Bitmap { w, h, data }
     }
 }
 
@@ -120,24 +126,52 @@ pub struct HWReg {
     pub(crate) name: &'static str,
     pub(crate) value: u8,
 }
-pub const LCDC:HWReg = HWReg { addr: 0xFF40, name: "LCDC", value:0};
-pub const STAT:HWReg = HWReg { addr: 0xFF41, name: "STAT", value:0};
-pub const LY:HWReg   = HWReg { addr: 0xFF44, name: "LY",   value:0};
-pub const SCY:HWReg =  HWReg { addr: 0xFF42, name: "SCY",  value:0};
-pub const SCX:HWReg =  HWReg { addr: 0xFF43, name: "SCX",  value:0};
+pub const LCDC: HWReg = HWReg {
+    addr: 0xFF40,
+    name: "LCDC",
+    value: 0,
+};
+pub const STAT: HWReg = HWReg {
+    addr: 0xFF41,
+    name: "STAT",
+    value: 0,
+};
+pub const LY: HWReg = HWReg {
+    addr: 0xFF44,
+    name: "LY",
+    value: 0,
+};
+pub const SCY: HWReg = HWReg {
+    addr: 0xFF42,
+    name: "SCY",
+    value: 0,
+};
+pub const SCX: HWReg = HWReg {
+    addr: 0xFF43,
+    name: "SCX",
+    value: 0,
+};
 
 impl HWReg {
-    pub fn register_from_addr(addr:u16) -> Option<HWReg> {
-        if addr == LCDC.addr { return Some(LCDC); }
-        if addr == STAT.addr { return Some(STAT); }
-        if addr == LY.addr { return Some(LY); }
-        if addr == SCX.addr { return Some(SCX); }
-        if addr == SCY.addr { return Some(SCY); }
+    pub fn register_from_addr(addr: u16) -> Option<HWReg> {
+        if addr == LCDC.addr {
+            return Some(LCDC);
+        }
+        if addr == STAT.addr {
+            return Some(STAT);
+        }
+        if addr == LY.addr {
+            return Some(LY);
+        }
+        if addr == SCX.addr {
+            return Some(SCX);
+        }
+        if addr == SCY.addr {
+            return Some(SCY);
+        }
         return None;
     }
 }
-
-
 
 #[derive(Debug)]
 pub enum JoyPadKey {
@@ -148,7 +182,7 @@ pub enum JoyPadKey {
     Up,
     Down,
     Left,
-    Right
+    Right,
 }
 #[derive(Debug)]
 pub enum InputEvent {
@@ -158,40 +192,39 @@ pub enum InputEvent {
     JumpNextVBlank(),
 }
 
-
 pub fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
-    let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
-    let data:Vec<u8> = fs::read(pth)?;
-    println!("0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",data[0x0104],data[0x0105]);
+    let pth2: String = pth.as_path().to_str().unwrap().parse().unwrap();
+    let data: Vec<u8> = fs::read(pth)?;
+    println!(
+        "0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",
+        data[0x0104], data[0x0105]
+    );
     print!("name = ");
-    for ch in 0x0134 .. 0x0142 {
+    for ch in 0x0134..0x0142 {
         print!("{}", char::from_u32(data[ch] as u32).unwrap());
     }
     println!("   ");
     // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
-    println!("0x0143 color or not {:02x}",data[0x0143]);
-    println!("0x0146 SGB indicator {:02x}",data[0x0146]);
-    println!("0x0147 cart type {:02x}",data[0x0147]);
-    println!("0x0148 ROM size {:02x}",data[0x0148]);
-    println!("0x0149 RAM size {:02x}",data[0x0149]);
-    println!("0x014A dest code {:02x}",data[0x014A]);
+    println!("0x0143 color or not {:02x}", data[0x0143]);
+    println!("0x0146 SGB indicator {:02x}", data[0x0146]);
+    println!("0x0147 cart type {:02x}", data[0x0147]);
+    println!("0x0148 ROM size {:02x}", data[0x0148]);
+    println!("0x0149 RAM size {:02x}", data[0x0149]);
+    println!("0x014A dest code {:02x}", data[0x014A]);
 
     let cart_type = data[0x0147];
     match cart_type {
         0x0 => println!("ROM only. Great!"),
         0x1..=0x3 => println!("MBC1! Not supported!"),
-        0x5|0x6 => println!("MBC2! Not supported!"),
-        0x12|0x13 => println!("MBC3! Not supported!"),
-        0x19|0x1A|0x1B|0x1C|0x1D|0x1E => println!("MBC5! Not supported!"),
+        0x5 | 0x6 => println!("MBC2! Not supported!"),
+        0x12 | 0x13 => println!("MBC3! Not supported!"),
+        0x19 | 0x1A | 0x1B | 0x1C | 0x1D | 0x1E => println!("MBC5! Not supported!"),
         0x1F => println!("Bocket Camera, unsupported!"),
         0xFD => println!("Bocket Camera, unsupported!"),
-        0xFE|0xFF => println!("Hudson HuC, unsupported!"),
+        0xFE | 0xFF => println!("Hudson HuC, unsupported!"),
         _ => {
             println!("trying anyway");
         }
     }
-    Ok(RomFile {
-        data,
-        path: pth2,
-    })
+    Ok(RomFile { data, path: pth2 })
 }
