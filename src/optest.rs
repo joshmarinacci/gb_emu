@@ -28,23 +28,22 @@ use crate::ppu2::PPU2;
 
 #[derive(Debug, Copy, Clone)]
 pub enum R8  { A, B, C, D, E, H, L,}
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum R16 { BC, HL, DE, SP,}
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Src8  {  SrcR8(R8), Mem(R16), MemWithInc(R16), MemWithDec(R16), Im8(), HiMemIm8(), MemIm16() }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Src16 {  SrcR16(R16), Im16(),   }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Dst8  {  DstR8(R8), AddrDst(R16), HiMemIm8(), HiMemR8(R8), MemIm16(), MemWithInc(R16), MemWithDec(R16)  }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Dst16 {  DstR16(R16), }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum AddrSrc {
     Imu16(),
     Src16(R16)
 }
-#[derive(Debug)]
-
+#[derive(Debug, Copy, Clone)]
 enum BinOp {
     Or,
     Xor,
@@ -53,7 +52,7 @@ enum BinOp {
     Add,
     ADC,
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum BitOps {
     BIT(u8, R8),
     RES(u8, R8),
@@ -70,21 +69,21 @@ enum BitOps {
     CPL(),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Cond {
     Carry(),
     NotCarry(),
     Zero(),
     NotZero(),
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum JumpType {
     Absolute(AddrSrc),
     RelativeCond(Cond,Src8),
     Relative(Src8),
     Restart(u8)
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum CallType {
     CallU16(),
     RET(),
@@ -92,7 +91,7 @@ enum CallType {
     Pop(R16),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum OpType {
     Noop(),
     Jump(JumpType),
@@ -113,7 +112,7 @@ enum OpType {
     Dec8(R8),
     BitOp(BitOps),
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Op {
     code:u16,
     len:u16,
@@ -127,6 +126,21 @@ struct GBState {
     ppu:PPU2,
     clock:u32,
     count:u32,
+    ops:OpTable,
+}
+
+
+
+impl GBState {
+    pub(crate) fn fetch_next_opcode(&self) -> u16 {
+        let fb:u8 = self.mmu.read8(self.cpu.get_pc());
+        if fb == 0xcb {
+            let sb:u8 = self.mmu.read8(self.cpu.get_pc()+1);
+            0xcb00 | sb as u16
+        } else {
+            fb as u16
+        }
+    }
 }
 
 impl GBState {
@@ -137,13 +151,11 @@ impl GBState {
             ppu: PPU2::init(),
             clock: 0,
             count: 0,
+            ops:make_op_table(),
         };
         gb.cpu.set_pc(0);
         return gb;
     }
-}
-
-impl GBState {
     pub(crate) fn dump_current_state(&self) {
         println!("PC: {:04x}  OP: {:04x}  clock={}   count={}",
                  self.cpu.get_pc(),
@@ -461,165 +473,177 @@ fn named_addr(addr: u16, gb: &GBState) -> String {
     }
 }
 
-impl Op {
-    pub(crate) fn execute(&self, gb:&mut GBState) {
-        match &self.typ {
-            OpType::Noop() => gb.cpu.inc_pc(),
+impl GBState {
+    pub(crate) fn execute(&mut self) -> Op {
+        let code = self.fetch_next_opcode();
+        let opx = self.ops.ops.get(&code).unwrap();
+        let op: Op = (*opx).clone();
+        self.stuff(&op);
+        self.clock += (op.cycles as u32);
+        self.count += 1;
+        return op;
+    }
+}
+
+impl GBState {
+    pub(crate) fn stuff(&mut self, op: &Op) {
+        match &op.typ {
+            OpType::Noop() => self.cpu.inc_pc(),
             Jump(typ) => {
                 match typ {
                     Absolute(src) => {
-                        let addr = src.get_addr(gb);
-                        gb.cpu.set_pc(addr);
+                        let addr = src.get_addr(self);
+                        self.cpu.set_pc(addr);
                     }
                     RelativeCond(cond,src) => {
-                        let off = src.get_value(gb);
+                        let off = src.get_value(self);
                         let e = u8_as_i8(off);
-                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-                        if cond.get_value(gb) {
-                            let addr:u16 = (((gb.cpu.get_pc()) as i32) + (e as i32)) as u16;
-                            gb.cpu.set_pc(addr);
+                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                        if cond.get_value(self) {
+                            let addr:u16 = (((self.cpu.get_pc()) as i32) + (e as i32)) as u16;
+                            self.cpu.set_pc(addr);
                         }
                     }
                     Relative(src) => {
-                        let e = u8_as_i8(src.get_value(gb));
+                        let e = u8_as_i8(src.get_value(self));
                         //update the pc before calculating the relative address
-                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
-                        let addr:u16 = ((gb.cpu.get_pc() as i32) + (e as i32)) as u16;
-                        gb.cpu.set_pc(addr);
+                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                        let addr:u16 = ((self.cpu.get_pc() as i32) + (e as i32)) as u16;
+                        self.cpu.set_pc(addr);
                     }
                     JumpType::Restart(n) => {
-                        let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
-                        gb.cpu.dec_sp();
-                        gb.cpu.dec_sp();
-                        gb.cpu.set_pc(*n as u16);
+                        let addr = self.mmu.read16(self.cpu.get_pc()+1);
+                        self.cpu.dec_sp();
+                        self.cpu.dec_sp();
+                        self.cpu.set_pc(*n as u16);
                     }
                 }
             }
             OpType::Call(typ) => {
                 match typ {
                     CallType::CallU16() => {
-                        let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
-                        gb.cpu.dec_sp();
-                        gb.cpu.dec_sp();
-                        gb.mmu.write16(gb.cpu.get_sp(), gb.cpu.get_pc()+3);
-                        gb.cpu.set_pc(addr);
+                        let addr = self.mmu.read16(self.cpu.get_pc()+1);
+                        self.cpu.dec_sp();
+                        self.cpu.dec_sp();
+                        self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc()+3);
+                        self.cpu.set_pc(addr);
                     }
                     CallType::Push(src) => {
-                        let value = src.get_value(gb);
-                        gb.cpu.dec_sp();
-                        gb.cpu.dec_sp();
-                        gb.mmu.write16(gb.cpu.get_sp(), value);
-                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                        let value = src.get_value(self);
+                        self.cpu.dec_sp();
+                        self.cpu.dec_sp();
+                        self.mmu.write16(self.cpu.get_sp(), value);
+                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
                     }
                     CallType::Pop(src) => {
-                        let value = gb.mmu.read16(gb.cpu.get_sp());
-                        gb.cpu.inc_sp();
-                        gb.cpu.inc_sp();
-                        src.set_value(gb,value);
-                        gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                        let value = self.mmu.read16(self.cpu.get_sp());
+                        self.cpu.inc_sp();
+                        self.cpu.inc_sp();
+                        src.set_value(self,value);
+                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
                     }
                     CallType::RET() => {
-                        let addr = gb.mmu.read16(gb.cpu.get_sp());
-                        gb.cpu.inc_sp();
-                        gb.cpu.inc_sp();
-                        gb.cpu.set_pc(addr);
+                        let addr = self.mmu.read16(self.cpu.get_sp());
+                        self.cpu.inc_sp();
+                        self.cpu.inc_sp();
+                        self.cpu.set_pc(addr);
                     }
                 }
             }
             Load16(dst,src) => {
-                let val = src.get_value(gb);
-                dst.set_value(gb,val);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                let val = src.get_value(self);
+                dst.set_value(self,val);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Load8(dst,src) => {
                 // println!("executing Load8 dst = {:?} src = {:?}",dst,src);
-                let val = src.get_value(gb);
+                let val = src.get_value(self);
                 // println!("value from src is {:02x}",val);
-                dst.set_value(gb,val);
+                dst.set_value(self,val);
                 if let Src8::MemWithInc(r2) = src {
-                    let v = r2.get_value(gb);
+                    let v = r2.get_value(self);
                     let (v2,b) = v.overflowing_add(1);
-                    r2.set_value(gb,v2);
+                    r2.set_value(self,v2);
                 }
                 if let Src8::MemWithDec(r2) = src {
-                    let v = r2.get_value(gb);
+                    let v = r2.get_value(self);
                     let (v2,b) = v.overflowing_sub(1);
-                    r2.set_value(gb,v2);
+                    r2.set_value(self,v2);
                 }
                 if let Dst8::MemWithInc(r2) = dst {
-                    let v = r2.get_value(gb);
+                    let v = r2.get_value(self);
                     let (v2,b) = v.overflowing_add(1);
-                    r2.set_value(gb,v2);
+                    r2.set_value(self,v2);
                 }
                 if let Dst8::MemWithDec(r2) = dst {
-                    let v = r2.get_value(gb);
+                    let v = r2.get_value(self);
                     let (v2,b) = v.overflowing_sub(1);
-                    r2.set_value(gb,v2);
+                    r2.set_value(self,v2);
                 }
                 // println!("Len is {}",self.len);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             OpType::DisableInterrupts() => {
                 println!("pretending to disable interrupts");
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             OpType::EnableInterrupts() => {
                 println!("pretending to enable interrupts");
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             OpType::Compare(dst, src) => {
-                let src_v = src.get_value(gb);
-                let dst_v = dst.get_value(gb);
+                let src_v = src.get_value(self);
+                let dst_v = dst.get_value(self);
 
                 let result = src_v.wrapping_sub(dst_v);
                 // println!("comparing {:02x} with {:02x}",dst_v, src_v);
-                gb.cpu.r.zero_flag = result == 0;
-                gb.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
-                gb.cpu.r.subtract_n_flag = true;
-                gb.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (dst_v & 0x0F) < (src_v & 0x0f);
+                self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.carry_flag = (dst_v as u16) < (src_v as u16);
 
 
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Inc16(dst) => {
-                let v1 = dst.get_value(gb);
+                let v1 = dst.get_value(self);
                 let v2 = v1.wrapping_add(1);
-                dst.set_value(gb, v2);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                dst.set_value(self, v2);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Inc8(dst) => {
-                let v1 = dst.get_value(gb);
+                let v1 = dst.get_value(self);
                 let result = v1.wrapping_add(1);
-                dst.set_value(gb, result);
-                gb.cpu.r.zero_flag = result == 0;
-                gb.cpu.r.half_flag = (result & 0x0F) + 1 > 0x0F;
-                gb.cpu.r.subtract_n_flag = false;
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                dst.set_value(self, result);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.half_flag = (result & 0x0F) + 1 > 0x0F;
+                self.cpu.r.subtract_n_flag = false;
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Dec16(dst) => {
-                let v1 = dst.get_value(gb);
+                let v1 = dst.get_value(self);
                 let v2 = v1.wrapping_sub(1);
                 // println!(" ### DEC {:04x}",v2);
-                dst.set_value(gb, v2);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                dst.set_value(self, v2);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Dec8(dst) => {
-                let v1 = dst.get_value(gb);
+                let v1 = dst.get_value(self);
                 let result = v1.wrapping_sub(1);
-                dst.set_value(gb, result);
-                gb.cpu.r.zero_flag = result == 0;
-                gb.cpu.r.subtract_n_flag = true;
-                gb.cpu.r.half_flag = (result & 0x0F) == 0;
+                dst.set_value(self, result);
+                self.cpu.r.zero_flag = result == 0;
+                self.cpu.r.subtract_n_flag = true;
+                self.cpu.r.half_flag = (result & 0x0F) == 0;
                 // carry not modified
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Math(binop, dst,src) => {
-                let b = src.get_value(gb);
-                let a = dst.get_value(gb);
+                let b = src.get_value(self);
+                let a = dst.get_value(self);
                 let (res,sub, half, carry) = match binop {
-                    Or  => (a | b, false, false, gb.cpu.r.carry_flag),
-                    Xor => (a ^ b, false, false, gb.cpu.r.carry_flag),
-                    And => (a & b, false, true,  gb.cpu.r.carry_flag),
+                    Or  => (a | b, false, false, self.cpu.r.carry_flag),
+                    Xor => (a ^ b, false, false, self.cpu.r.carry_flag),
+                    And => (a & b, false, true,  self.cpu.r.carry_flag),
                     Add => {
                         let c = 0;
                         let r = a.wrapping_add(b).wrapping_add(c);
@@ -628,7 +652,7 @@ impl Op {
                         (r, false, half,carry)
                     },
                     BinOp::ADC => {
-                        let c = if gb.cpu.r.carry_flag { 1 } else { 0 };
+                        let c = if self.cpu.r.carry_flag { 1 } else { 0 };
                         let r = a.wrapping_add(b).wrapping_add(c);
                         let half = (a & 0x0F) + (b & 0x0F) + c > 0xF;
                         let carry = (a as u16) + (b as u16) + (c as u16) > 0xFF;
@@ -642,16 +666,16 @@ impl Op {
                         (r,true,half,carry)
                     },
                 };
-                gb.cpu.r.zero_flag = res == 0;
-                gb.cpu.r.subtract_n_flag = sub;
-                gb.cpu.r.half_flag = half;
-                gb.cpu.r.carry_flag = carry;
-                dst.set_value(gb,res);
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.r.zero_flag = res == 0;
+                self.cpu.r.subtract_n_flag = sub;
+                self.cpu.r.half_flag = half;
+                self.cpu.r.carry_flag = carry;
+                dst.set_value(self,res);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             Math16(binop, dst, src) => {
-                let b = src.get_value(gb);
-                let a = dst.get_value(gb);
+                let b = src.get_value(self);
+                let a = dst.get_value(self);
                 match binop {
                     Or => {}
                     Xor => {}
@@ -659,143 +683,150 @@ impl Op {
                     SUB => {}
                     Add => {
                         let r = a.wrapping_add(b);
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag  = (a & 0x07FF) + (b & 0x07FF) > 0x07FF;
-                        gb.cpu.r.carry_flag = (a) > (0xFFFF - b);
-                        dst.set_value(gb,r);
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag  = (a & 0x07FF) + (b & 0x07FF) > 0x07FF;
+                        self.cpu.r.carry_flag = (a) > (0xFFFF - b);
+                        dst.set_value(self,r);
                     }
                     BinOp::ADC => {}
                 };
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
             BitOp(bop) => {
                 match bop {
                     BIT(n, r8) => {
-                        let val = r8.get_value(gb);
-                        gb.cpu.r.zero_flag = !get_bit_as_bool(val, *n);
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = true;
+                        let val = r8.get_value(self);
+                        self.cpu.r.zero_flag = !get_bit_as_bool(val, *n);
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = true;
                     }
                     RES(n, r8) => {
-                        let val = r8.get_value(gb);
+                        let val = r8.get_value(self);
                         let val2 = set_bit(val,*n,false);
-                        r8.set_value(gb,val2);
+                        r8.set_value(self,val2);
                     }
                     SET(n, r8) => {
-                        let val = r8.get_value(gb);
+                        let val = r8.get_value(self);
                         let val2 = set_bit(val,*n,true);
-                        r8.set_value(gb,val2);
+                        r8.set_value(self,val2);
                     }
                     BitOps::CPL() => {
-                        let val = A.get_value(gb);
+                        let val = A.get_value(self);
                         let val2 = !val;
-                        A.set_value(gb,val2);
+                        A.set_value(self,val2);
                         // Z not affected
-                        gb.cpu.r.subtract_n_flag = true;
-                        gb.cpu.r.half_flag = true;
+                        self.cpu.r.subtract_n_flag = true;
+                        self.cpu.r.half_flag = true;
                         //C not affected
                     }
                     BitOps::RLC(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x80 == 0x80;
                         let r = (a << 1) | if c { 1 } else { 0 };
-                        r8.set_value(gb,r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        r8.set_value(self,r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                         // set_sr_flags(cpu, r,c);
                     }
                     BitOps::RRC(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x01 == 0x01;
                         let r = (a >> 1) | (if c {0x80} else { 0x00 });
-                        r8.set_value(gb,r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        r8.set_value(self,r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                         // set_sr_flags(cpu,r,c);
                     }
                     BitOps::RL(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x80 == 0x80;
-                        let r = (a << 1) | (if gb.cpu.r.carry_flag { 1 } else { 0 });
-                        r8.set_value(gb,r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        let r = (a << 1) | (if self.cpu.r.carry_flag { 1 } else { 0 });
+                        r8.set_value(self,r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                         // set_sr_flags(cpu,r,c);
                     }
                     BitOps::RR(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x01 == 0x01;
-                        let r = (a >> 1) | (if gb.cpu.r.carry_flag { 0x80 } else { 0x00 });
-                        r8.set_value(gb,r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        let r = (a >> 1) | (if self.cpu.r.carry_flag { 0x80 } else { 0x00 });
+                        r8.set_value(self,r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                         // set_sr_flags(cpu, r, c);
                     }
                     BitOps::SLA(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x80 == 0x80;
                         let r = a << 1;
-                        r8.set_value(gb,r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        r8.set_value(self,r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                         // set_sr_flags(cpu,r,c);
                     }
                     BitOps::SRA(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x01 == 0x01;
                         let r = (a >> 1) | (a &0x80);
-                        r8.set_value(gb,r);
+                        r8.set_value(self,r);
                         // set_sr_flags(cpu,r,c);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                     }
                     BitOps::SRL(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let c = a & 0x01 == 0x01;
                         let r = a >> 1;
-                        r8.set_value(gb,r);
+                        r8.set_value(self,r);
                         // set_sr_flags(cpu,r,c);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                     }
                     BitOps::SWAP(r8) => {
-                        let a = r8.get_value(gb);
+                        let a = r8.get_value(self);
                         let r = ((a & 0x0f) << 4) | ((a & 0xf0) >> 4);
-                        r8.set_value(gb, r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = false;
+                        r8.set_value(self, r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = false;
                     }
                     BitOps::RLA() => {
-                        let a:u8 = A.get_value(gb);
+                        let a:u8 = A.get_value(self);
                         let c = a & 0x80 == 0x80;
-                        let r = (a << 1) | (if gb.cpu.r.carry_flag { 1 } else { 0 });
-                        A.set_value(gb,r);
-                        gb.cpu.r.zero_flag = r == 0;
-                        gb.cpu.r.subtract_n_flag = false;
-                        gb.cpu.r.half_flag = false;
-                        gb.cpu.r.carry_flag = c;
+                        let r = (a << 1) | (if self.cpu.r.carry_flag { 1 } else { 0 });
+                        A.set_value(self,r);
+                        self.cpu.r.zero_flag = r == 0;
+                        self.cpu.r.subtract_n_flag = false;
+                        self.cpu.r.half_flag = false;
+                        self.cpu.r.carry_flag = c;
                     }
                 }
-                gb.cpu.set_pc(gb.cpu.get_pc()+self.len);
+                self.cpu.set_pc(self.cpu.get_pc()+op.len);
             }
         }
+
     }
+}
+
+
+
+
+impl Op {
     pub(crate) fn to_asm(&self) -> String {
         match &self.typ {
             OpType::Noop() => "NOOP".to_string(),
@@ -1205,6 +1236,7 @@ fn setup_test_rom(fname: &str) -> Option<GBState> {
                 ppu: PPU2::init(),
                 clock: 0,
                 count: 0,
+                ops: make_op_table(),
             };
             gb.cpu.reset();
             gb.cpu.r.pc = 0x100;
@@ -1228,11 +1260,12 @@ fn test_cpuins() {
             gb.dump_current_state();
             break;
         }
-        let op = op_table.lookup(&opcode).unwrap();
-        println!("PC {:04x} op {:04x} {}  ({},{})",gb.cpu.get_pc(), op.code, op.to_asm(), op.len,op.cycles);
-        println!("PC {:04x} {}",gb.cpu.get_pc(),op.real(&gb));
+        // let op = op_table.lookup(&opcode).unwrap();
+        // println!("PC {:04x} op {:04x} {}  ({},{})",gb.cpu.get_pc(), op.code, op.to_asm(), op.len,op.cycles);
+        // println!("PC {:04x} {}",gb.cpu.get_pc(),op.real(&gb));
         let prev_pc = gb.cpu.get_pc();
-        op.execute(&mut gb);
+        gb.execute();
+        // op.execute(&mut gb);
         if gb.cpu.get_pc() == prev_pc {
             println!("stuck in an infinite loop. pc = {:04x}",gb.cpu.get_pc());
             gb.dump_current_state();
@@ -1241,8 +1274,6 @@ fn test_cpuins() {
         // gb.cpu.set_pc(gb.cpu.get_pc()+op.len);
         // mmu.update(&mut cpu, ss, &mut clock);
         // ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
-        gb.clock += (op.cycles as u32);
-        gb.count += 1;
     }
     let goal = 7;
     println!("hopefully we reached count = {}  really = {} ", goal,gb.count);
@@ -1273,21 +1304,8 @@ fn test_hellogithub() {
             println!("==========");
             println!("PC {:04x}    clock = {}   count = {}", gb.cpu.get_pc(), gb.clock, gb.count);
         }
-        let opcode = fetch_opcode_from_memory(&gb);
-        // println!("opcode is {:04x}",opcode);
-        if let None = op_table.lookup(&opcode) {
-            println!("failed to lookup op for code {:04x}",opcode);
-            break;
-        }
-        let op = op_table.lookup(&opcode).unwrap();
-        if debug {
-            println!("PC {:04x} {:04x}  =  {}      ({},{})", gb.cpu.get_pc(), op.code, op.to_asm(), op.len, op.cycles);
-            println!("                 {}", op.real(&gb));
-            // println!("contents of ram at 0x150 {:02x}", gb.mmu.read8(0x0150));
-            // println!("contents of ram at 0x9000 {:02x}", gb.mmu.read8(0x9000));
-        }
         let prev_pc = gb.cpu.get_pc();
-        op.execute(&mut gb);
+        gb.execute();
         if debug {
             println!("after A:{:02x} B:{:02x} C:{:02x}     BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
                      gb.cpu.r.a,
@@ -1310,8 +1328,8 @@ fn test_hellogithub() {
         // gb.cpu.set_pc(gb.cpu.get_pc()+op.len);
         // mmu.update(&mut cpu, ss, &mut clock);
         // ppu.update(&mut self.mmu, ss, &mut self.clock, &self.to_screen, &self.receive_cpu, self.screen_enabled);
-        gb.clock += (op.cycles as u32);
-        gb.count += 1;
+        // gb.clock += (op.cycles as u32);
+        // gb.count += 1;
 
         if gb.count % 20 == 0 {
             let mut v = gb.mmu.read8_IO(IORegister::LY);
@@ -1343,6 +1361,7 @@ fn test_bootrom() {
         ppu: PPU2::init(),
         clock: 0,
         count: 0,
+        ops:make_op_table(),
     };
     gb.mmu.enable_bootrom();
 
@@ -1367,7 +1386,7 @@ fn test_bootrom() {
             println!("                 {}", op.real(&gb));
         }
         let prev_pc = gb.cpu.get_pc();
-        op.execute(&mut gb);
+        gb.execute();
         if debug {
             println!("after A:{:02x} B:{:02x} C:{:02x}  H:{:02x}    BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
                      gb.cpu.r.a,
@@ -1452,6 +1471,7 @@ fn test_tetris() {
         ppu: PPU2::init(),
         clock: 0,
         count: 0,
+        ops:make_op_table(),
     };
     // gb.mmu.enable_bootrom();
 
@@ -1526,13 +1546,9 @@ fn test_tetris() {
             gb.dump_current_state();
             panic!("failed to find opcode");
         }
-        let op = op_table.lookup(&opcode).unwrap();
-        if debug {
-            println!("PC {:04x} {:04x}  =  {}      ({},{})", gb.cpu.get_pc(), op.code, op.to_asm(), op.len, op.cycles);
-            println!("                 {}", op.real(&gb));
-        }
+
         let prev_pc = gb.cpu.get_pc();
-        op.execute(&mut gb);
+        gb.execute();
         if debug {
             println!("after A:{:02x} B:{:02x} C:{:02x}  H:{:02x}    BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
                      gb.cpu.r.a,
@@ -1561,7 +1577,7 @@ fn test_tetris() {
         }
 
 
-        gb.clock += (op.cycles as u32);
+        // gb.clock += (op.cycles as u32);
         gb.count += 1;
         if gb.count % 500 == 0 {
             let mut v = gb.mmu.read8_IO(IORegister::LY);
@@ -1605,6 +1621,7 @@ fn op_tests() {
         cpu: Z80::init(),
         mmu: MMU2::init_empty(0xDE),
         ppu: PPU2::init(),
+        ops:make_op_table(),
         clock: 0,
         count: 0
     };
@@ -1632,7 +1649,7 @@ fn op_tests() {
         assert_eq!(gb.mmu.read8(addr),0xDE);
 
         //execute instruction
-        op.execute(&mut gb);
+        let op = gb.execute();
 
         //confirm x8000 now has x99 in it
         assert_eq!(gb.mmu.read8(addr),payload);
@@ -1651,11 +1668,8 @@ fn op_tests() {
 fn test_write_register_A() {
     let rom:[u8;2] = [0x3e,0x05]; // LD A, 0x05
     let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
-    let op_table = make_op_table();
-    let code = fetch_opcode_from_memory(&gb);
-    let op = op_table.lookup(&code).unwrap();
-    op.execute(&mut gb);
-    println!("op is {:?}", op);
+    gb.execute();
+    // println!("op is {:?}", op);
     assert_eq!(gb.cpu.r.a,0x05);
 }
 
@@ -1663,10 +1677,9 @@ fn test_write_register_A() {
 fn test_write_register_D() {
     let rom:[u8;2] = [0x16,0x05]; // LD D, 0x05
     let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
-    let op_table = make_op_table();
-    let code = fetch_opcode_from_memory(&gb);
-    let op = op_table.lookup(&code).unwrap();
-    op.execute(&mut gb);
+    gb.execute();
+    // let code = gb.fetch_next_opcode();
+    // let op = gb.ops.lookup(&code).unwrap();
     assert_eq!(gb.cpu.r.d,0x05);
 }
 
@@ -1674,10 +1687,7 @@ fn test_write_register_D() {
 fn test_write_register_DE() {
     let rom:[u8;2] = [0x16,0x05]; // LD D, 0x05
     let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
-    let op_table = make_op_table();
-    let code = fetch_opcode_from_memory(&gb);
-    let op = op_table.lookup(&code).unwrap();
-    op.execute(&mut gb);
+    gb.execute();
     assert_eq!(gb.cpu.r.d,0x05);
 }
 
