@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use log::info;
 use crate::common::{get_bit, get_bit_as_bool, HWReg, LCDC, SCX, set_bit};
 use crate::ppu::ScreenState;
-use crate::{common, Z80};
+use crate::cpu::Z80;
 
 #[derive(Debug)]
 pub enum InterruptType {
@@ -16,8 +16,8 @@ pub enum InterruptType {
 }
 #[derive()]
 pub struct Hardware {
-    pub SCY:HWReg,
-    pub SCX:HWReg,
+    pub SCY:u8,
+    pub SCX:u8,
     pub LY:u8,
     pub LYC:u8,
     pub WY:u8,
@@ -51,8 +51,8 @@ pub struct Hardware {
 impl Hardware {
     fn init() -> Hardware {
         Hardware {
-            SCY: common::SCY,
-            SCX: common::SCX,
+            SCY: 0,//common::SCY,
+            SCX: 0,//common::SCX,
             LY: 0,
             LYC: 0,
             WY: 0,
@@ -253,7 +253,7 @@ impl MMU {
             self.data[i] = self.cart_rom[i];
         }
     }
-    pub(crate) fn overlay_boot(&mut self) {
+    pub fn overlay_boot(&mut self) {
         //copy over the bios
         for i in 0..self.bios.len() {
             self.data[i] = self.bios[i];
@@ -276,8 +276,8 @@ impl MMU {
             info!("reading LYC");
             return self.hardware.LYC;
         }
-        if addr == SCX_SCROLL_X { return self.hardware.SCX.value; }
-        if addr == SCY_SCROLL_Y { return self.hardware.SCY.value; }
+        if addr == SCX_SCROLL_X { return self.hardware.SCX; }
+        if addr == SCY_SCROLL_Y { return self.hardware.SCY; }
         if addr == LCDC_LCDCONTROL {
             info!("reading LCDC register");
             return self.hardware.LCDC;
@@ -483,12 +483,12 @@ impl MMU {
         if addr == OBP1_ADDR  { self.hardware.OBP1 = val; return; }
         if addr == WX_ADDR  { self.hardware.WX = val; return; }
         if addr == WY_ADDR  { self.hardware.WY = val; return; }
-        if addr == SCX_SCROLL_X { self.hardware.SCX.value = val; return;  }
+        if addr == SCX_SCROLL_X { self.hardware.SCX = val; return;  }
         if addr == LYC_LCDC_Y_COMPARE {
             // info!("writing to the LYC register");
             self.hardware.LYC = val;
         }
-        if addr == SCY_SCROLL_Y {  self.hardware.SCY.value = val; return; }
+        if addr == SCY_SCROLL_Y {  self.hardware.SCY = val; return; }
         if addr >= INTERNAL_RAM_START && addr <= INTERNAL_RAM_END {
             // println!("writing to internal ram:  {:04x} := {:02x}",addr, val);
             self.lowest_used_iram = min(self.lowest_used_iram,addr);

@@ -22,7 +22,7 @@ pub struct Z80_registers {
     pub(crate) l:u8,
 
     // 16 bit registers
-    pub(crate) pc:u16, // program counter
+    pub pc:u16, // program counter
     pub(crate) sp:u16, // stack pointer
 
 }
@@ -132,10 +132,10 @@ pub struct Z80 {
 
 
 impl Z80 {
-    pub(crate) fn set_pc(&mut self, addr: u16) {
+    pub fn set_pc(&mut self, addr: u16) {
         self.r.pc = addr;
     }
-    pub(crate) fn get_pc(&self) -> u16 {
+    pub fn get_pc(&self) -> u16 {
         self.r.pc
     }
     pub(crate) fn inc_pc(&mut self) {
@@ -169,7 +169,7 @@ impl Z80 {
 }
 
 impl Z80 {
-    pub(crate) fn init() -> Z80 {
+    pub fn init() -> Z80 {
         Z80 {
             r: Z80_registers {
                 a: 0,
@@ -188,7 +188,7 @@ impl Z80 {
             },
         }
     }
-    pub(crate) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.r.a = 0;
         self.r.b = 0;
         self.r.c = 0;

@@ -10,8 +10,8 @@ use Dst8::AddrDst;
 use JumpType::Absolute;
 use OpType::{BitOp, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
 use Src16::{Im16, SrcR16};
-use crate::{load_romfile, MMU, Z80};
-use crate::common::{get_bit_as_bool, set_bit};
+use crate::common::{get_bit_as_bool, load_romfile, set_bit};
+use crate::cpu::Z80;
 use crate::mmu::{BGP, LCDC_LCDCONTROL, NR50_SOUND, NR52_SOUND};
 use crate::mmu2::{IORegister, MMU2};
 use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
@@ -113,15 +113,15 @@ enum OpType {
     BitOp(BitOps),
 }
 #[derive(Debug, Clone)]
-struct Op {
+pub struct Op {
     code:u16,
     len:u16,
     cycles:u16,
     typ:OpType,
 }
 
-struct GBState {
-    cpu:Z80,
+pub struct GBState {
+    pub cpu:Z80,
     mmu:MMU2,
     ppu:PPU2,
     clock:u32,
@@ -474,7 +474,7 @@ fn named_addr(addr: u16, gb: &GBState) -> String {
 }
 
 impl GBState {
-    pub(crate) fn execute(&mut self) -> Op {
+    pub fn execute(&mut self) -> Op {
         let code = self.fetch_next_opcode();
         let opx = self.ops.ops.get(&code).unwrap();
         let op: Op = (*opx).clone();
@@ -1227,7 +1227,7 @@ fn make_op_table() -> OpTable {
     op_table
 }
 
-fn setup_test_rom(fname: &str) -> Option<GBState> {
+pub fn setup_test_rom(fname: &str) -> Option<GBState> {
     match load_romfile(&PathBuf::from(fname)) {
         Ok(cart) => {
             let mut gb = GBState {

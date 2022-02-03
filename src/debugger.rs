@@ -6,17 +6,15 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use console::Color::{Black, Red, White};
 use dialoguer::theme::ColorfulTheme;
 use log::{debug, info};
-use Load::Load_R_u8;
-use crate::{common, MMU, opcodes, ScreenSettings, Z80};
-use crate::common::{Bitmap, get_bit_as_bool, HWReg, LCDC, LY, RomFile, SCX, SCY, STAT};
-use crate::mmu::{LCDC_LCDCONTROL, P1_JOYPAD_INFO, TEST_ADDR, TIMER_INTERRUPT_ADDR};
+use crate::common::{InputEvent, JoyPadKey, LCDC, LY, RomFile, SCX, SCY, STAT};
+use crate::cpu::Z80;
+use crate::mmu::{MMU, P1_JOYPAD_INFO, TEST_ADDR};
+use crate::opcodes;
 use crate::opcodes::{Compare, DoubleRegister, Instr, Jump, Load, lookup_opcode, Math, RegisterName, Special, u8_as_i8};
-use crate::opcodes::Compare::CP_A_r;
-use crate::opcodes::DoubleRegister::BC;
 use crate::opcodes::Instr::{LoadInstr, SpecialInstr};
-use crate::opcodes::RegisterName::{A, B, C, D};
+use crate::opcodes::RegisterName::A;
 use crate::ppu::{PPU, ScreenState};
-use crate::screen::Screen;
+use crate::screen::{Screen, ScreenSettings};
 
 struct Ctx {
     cpu:Z80,
@@ -37,13 +35,13 @@ struct Ctx {
 }
 
 impl Ctx {
-    pub(crate) fn execute_n_cycles(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>,count:u32) -> Result<()>{
+    pub fn execute_n_cycles(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, count:u32) -> Result<()>{
         for n in 0 .. count {
             self.execute(term, screenstate)?;
         }
         Ok(())
     }
-    pub(crate) fn jump_to_next_vblank(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, ) -> Result<()>{
+    pub fn jump_to_next_vblank(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, ) -> Result<()>{
         println!("running to next frame done");
         while self.mmu.hardware.LY > 1 {
             // println!("LY is {}",ctx.mmu.hardware.LY);
@@ -51,7 +49,7 @@ impl Ctx {
         }
         Ok(())
     }
-    pub(crate) fn run_until_write(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
+    pub fn run_until_write(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
         loop {
             self.execute(term, screenstate).unwrap();
             if self.mmu.last_write_addr == addr {
@@ -59,7 +57,7 @@ impl Ctx {
             }
         }
     }
-    pub(crate) fn run_until_pc(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
+    pub fn run_until_pc(&mut self, term: &mut Term, screenstate: &mut Arc<Mutex<ScreenState>>, addr: u16) {
         loop {
             self.execute(term, screenstate).unwrap();
             if self.cpu.get_pc() == addr {
@@ -95,7 +93,7 @@ impl Ctx {
 
 // const TEST_NEW_OPS:bool = false;
 impl Ctx {
-    pub(crate) fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>) -> Result<()>{
+    pub fn execute(&mut self, term: &mut Term, ss: &mut Arc<Mutex<ScreenState>>) -> Result<()>{
         self.mmu.last_write_addr = 0;
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         // if TEST_NEW_OPS {
@@ -135,24 +133,6 @@ impl Ctx {
     }
 }
 
-#[derive(Debug)]
-pub enum JoyPadKey {
-    A,
-    B,
-    Select,
-    Start,
-    Up,
-    Down,
-    Left,
-    Right
-}
-#[derive(Debug)]
-pub enum InputEvent {
-    Press(JoyPadKey),
-    Release(JoyPadKey),
-    Stop(),
-    JumpNextVBlank(),
-}
 
 pub fn start_debugger(cpu: Z80, mmu: MMU, cart: Option<RomFile>,
                       fast_forward: u32,
@@ -624,7 +604,7 @@ fn show_full_hardware_registers(term: &Term, ctx: &Ctx) -> Result<()>{
     let reg = Style::new().bg(Color::Cyan).red().bold();
     let regs = &ctx.mmu.hardware;
     term.write_line(&format!("registers are {} ",reg.apply_to("cool")))?;
-    term.write_line(&format!("LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",regs.LY, regs.LYC,  regs.SCX.value,  regs.SCY.value))?;
+    term.write_line(&format!("LY   {:02x}    LYC  {:02x}    SCX {:02x}  SCY {:02x}",regs.LY, regs.LYC,  regs.SCX,  regs.SCY))?;
     term.write_line(&format!("LCDC {:08b}  STAT {:08b}",regs.LCDC, regs.STAT))?;
     term.write_line(&format!("IME  {:08b}    IE {:08b}",regs.IME, regs.IE,))?;
     term.write_line(&format!("BGP  {:08b}",ctx.mmu.hardware.BGP))?;
@@ -650,7 +630,7 @@ fn fetch_opcode(cpu: &Z80, mmu: &MMU) -> (u16,u16) {
 }
 
 impl Ctx {
-    pub(crate) fn execute_test(&mut self) {
+    pub fn execute_test(&mut self) {
         let (opcode, _off) = fetch_opcode_from_memory(&self.cpu, &self.mmu);
         if let Some(instr) = lookup_opcode(opcode) {
             println!("executing {}  PC {:04x}  SP {:04x}  {:02x}  {:?}",  self.clock,

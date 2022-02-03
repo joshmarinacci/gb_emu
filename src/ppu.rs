@@ -1,10 +1,9 @@
 use std::io::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::mpsc::{Receiver, Sender};
-use crate::{common, MMU};
-use crate::common::{Bitmap, get_bit_as_bool, set_bit};
-use crate::debugger::InputEvent;
-use crate::mmu::STAT_LCDCONTROL;
+use crate::common;
+use crate::common::{Bitmap, get_bit_as_bool, InputEvent, set_bit};
+use crate::mmu::{MMU, STAT_LCDCONTROL};
 use crate::opcodes::u8_as_i8;
 
 pub struct PPU {
@@ -186,8 +185,8 @@ impl PPU {
         println!("signed mode = {}",!unsigned_mode);
             if bg_enabled {
                 let img = &mut screenstate.backbuffer;
-                let sx = mmu.hardware.SCX.value as usize;
-                let sy = mmu.hardware.SCY.value as usize;
+                let sx = mmu.hardware.SCX as usize;
+                let sy = mmu.hardware.SCY as usize;
                 let spacing = 8;
                 for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
                     if y > 0x10 {

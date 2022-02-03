@@ -2,17 +2,6 @@
 #![allow(non_snake_case)]
 #![allow(unused)]
 
-mod cpu;
-mod mmu;
-mod opcodes;
-mod debugger;
-mod common;
-mod screen;
-mod ppu;
-mod optest;
-mod mmu2;
-mod ppu2;
-
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::{fs, thread};
@@ -24,11 +13,11 @@ use log4rs::Config;
 use log4rs::config::{Appender, Root};
 use log::{debug, info, LevelFilter};
 use structopt::StructOpt;
-use common::RomFile;
-use crate::cpu::Z80;
-use crate::debugger::start_debugger;
-use crate::mmu::MMU;
-use crate::screen::ScreenSettings;
+use gb_emu::common::{load_romfile, RomFile};
+use gb_emu::cpu::Z80;
+use gb_emu::debugger::start_debugger;
+use gb_emu::mmu::MMU;
+use gb_emu::screen::ScreenSettings;
 
 fn main() -> Result<()>{
     let args = init_setup();
@@ -66,42 +55,6 @@ fn run_romfile(cart: RomFile, args:&Cli) -> Result<()>{
     Ok(())
 }
 
-pub fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
-    let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
-    let data:Vec<u8> = fs::read(pth)?;
-    println!("0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",data[0x0104],data[0x0105]);
-    print!("name = ");
-    for ch in 0x0134 .. 0x0142 {
-        print!("{}", char::from_u32(data[ch] as u32).unwrap());
-    }
-    println!("   ");
-    // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
-    println!("0x0143 color or not {:02x}",data[0x0143]);
-    println!("0x0146 SGB indicator {:02x}",data[0x0146]);
-    println!("0x0147 cart type {:02x}",data[0x0147]);
-    println!("0x0148 ROM size {:02x}",data[0x0148]);
-    println!("0x0149 RAM size {:02x}",data[0x0149]);
-    println!("0x014A dest code {:02x}",data[0x014A]);
-
-    let cart_type = data[0x0147];
-    match cart_type {
-        0x0 => println!("ROM only. Great!"),
-        0x1..=0x3 => println!("MBC1! Not supported!"),
-        0x5|0x6 => println!("MBC2! Not supported!"),
-        0x12|0x13 => println!("MBC3! Not supported!"),
-        0x19|0x1A|0x1B|0x1C|0x1D|0x1E => println!("MBC5! Not supported!"),
-        0x1F => println!("Bocket Camera, unsupported!"),
-        0xFD => println!("Bocket Camera, unsupported!"),
-        0xFE|0xFF => println!("Hudson HuC, unsupported!"),
-        _ => {
-            println!("trying anyway");
-        }
-    }
-    Ok(RomFile {
-        data,
-        path: pth2,
-    })
-}
 
 fn parse_hex(src:&str) -> std::result::Result<u16, ParseIntError> {
     u16::from_str_radix(src,16)
@@ -140,7 +93,7 @@ fn init_setup() -> Cli {
 
     // create file appender with target file path
     let logfile = FileAppender::builder()
-        .build("log/output.log").expect("error setting up file appender");
+        .build("../../log/output.log").expect("error setting up file appender");
 
     // make a config
     let config = Config::builder()

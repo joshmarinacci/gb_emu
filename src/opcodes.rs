@@ -11,8 +11,9 @@ use crate::opcodes::Load::{Load_A_addr_R2_dec, Load_A_addr_u16, Load_addr_R2_u8,
 use crate::opcodes::Math::{ADC_A_addr, ADC_A_R, ADC_A_u8, ADD_A_addr, ADD_RR_RR, ADD_RR_u8, AND_A_addr, AND_A_u8, CCF, CPL, DAA, Dec_rr_addr, Inc_rr_addr, OR_A_addr, OR_A_u8, RES, RES_addr, RL_addr, RLC_addr, RR_addr, RRC_addr, SBC_R_addr, SBC_R_R, SCF, SET, SET_addr, SLA_addr, SRA, SRA_addr, SRL, SRL_addr, SUB_A_addr, SUB_A_u8, SWAP, SWAP_addr, XOR_A_addr, XOR_A_u8};
 use crate::opcodes::RegisterName::{A, B, C, D, E, F, H, L};
 use crate::opcodes::Special::{CALL_C_U16, CALL_NZ_U16, CALL_u16, CALL_Z_U16, DisableInterrupts, EnableInterrupts, HALT, Invalid, NOOP, POP, PUSH, RET, RETC, RETI, RETNC, RETNZ, RETZ, RST, STOP};
-use crate::{MMU, Z80};
 use crate::common::{get_bit_as_bool, set_bit};
+use crate::cpu::Z80;
+use crate::mmu::MMU;
 use crate::opcodes::Jump::{Absolute_cond_carry_u16, Absolute_cond_zero_u16, Absolute_R2};
 
 pub fn u8_as_i8(v: u8) -> i8 {

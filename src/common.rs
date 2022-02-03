@@ -1,9 +1,11 @@
+use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::io::Result;
 
 pub struct RomFile {
-    pub(crate) data: Vec<u8>,
+    pub data: Vec<u8>,
     pub(crate) path:String,
 }
 
@@ -136,3 +138,60 @@ impl HWReg {
 }
 
 
+
+#[derive(Debug)]
+pub enum JoyPadKey {
+    A,
+    B,
+    Select,
+    Start,
+    Up,
+    Down,
+    Left,
+    Right
+}
+#[derive(Debug)]
+pub enum InputEvent {
+    Press(JoyPadKey),
+    Release(JoyPadKey),
+    Stop(),
+    JumpNextVBlank(),
+}
+
+
+pub fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
+    let pth2:String = pth.as_path().to_str().unwrap().parse().unwrap();
+    let data:Vec<u8> = fs::read(pth)?;
+    println!("0x0104. start of Nintendo graphic {:02X} {:02X} (should be CE ED)",data[0x0104],data[0x0105]);
+    print!("name = ");
+    for ch in 0x0134 .. 0x0142 {
+        print!("{}", char::from_u32(data[ch] as u32).unwrap());
+    }
+    println!("   ");
+    // println!("0x0134. start of name {:?}",data[0x0134..0x0142]);
+    println!("0x0143 color or not {:02x}",data[0x0143]);
+    println!("0x0146 SGB indicator {:02x}",data[0x0146]);
+    println!("0x0147 cart type {:02x}",data[0x0147]);
+    println!("0x0148 ROM size {:02x}",data[0x0148]);
+    println!("0x0149 RAM size {:02x}",data[0x0149]);
+    println!("0x014A dest code {:02x}",data[0x014A]);
+
+    let cart_type = data[0x0147];
+    match cart_type {
+        0x0 => println!("ROM only. Great!"),
+        0x1..=0x3 => println!("MBC1! Not supported!"),
+        0x5|0x6 => println!("MBC2! Not supported!"),
+        0x12|0x13 => println!("MBC3! Not supported!"),
+        0x19|0x1A|0x1B|0x1C|0x1D|0x1E => println!("MBC5! Not supported!"),
+        0x1F => println!("Bocket Camera, unsupported!"),
+        0xFD => println!("Bocket Camera, unsupported!"),
+        0xFE|0xFF => println!("Hudson HuC, unsupported!"),
+        _ => {
+            println!("trying anyway");
+        }
+    }
+    Ok(RomFile {
+        data,
+        path: pth2,
+    })
+}

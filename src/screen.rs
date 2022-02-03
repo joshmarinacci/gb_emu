@@ -7,18 +7,16 @@ use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
 use sdl2::render::{Texture, TextureAccess, WindowCanvas};
 use sdl2::Sdl;
-use crate::common::Bitmap;
-use crate::debugger::{InputEvent, JoyPadKey};
-use crate::debugger::InputEvent::{JumpNextVBlank, Press, Release};
-use crate::debugger::JoyPadKey::A;
+use crate::common::{Bitmap, InputEvent, JoyPadKey};
+use crate::common::InputEvent::{JumpNextVBlank, Press, Release};
 use crate::ppu::ScreenState;
 
 #[derive(Debug)]
 pub struct ScreenSettings {
-    pub(crate) x:i32,
-    pub(crate) y:i32,
-    pub(crate) scale:f32,
-    pub(crate) enabled:bool,
+    pub x:i32,
+    pub y:i32,
+    pub scale:f32,
+    pub enabled:bool,
 }
 pub struct Screen {
     canvas:WindowCanvas,
