@@ -4,13 +4,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{And, Or, SUB, Xor};
 use BitOps::{BIT, RES, SET};
+use CallType::{CallU16, Pop, Push};
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use CPUR8::{R8A, R8B, R8C};
 use CPURegister::CpuR8;
 use Dst16::DstR16;
 use Dst8::AddrDst;
-use JumpType::Absolute;
-use OpType::{BitOp, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
+use JumpType::{Absolute, Restart};
+use OpType::{BitOp, Call, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
 use Src16::{Im16, SrcR16};
 use crate::common::{get_bit_as_bool, load_romfile, set_bit};
 use crate::cpu2::{CPU, CPUR16, CPUR8, CPURegister};
@@ -126,24 +127,55 @@ pub struct Op {
 
 pub struct GBState {
     pub cpu:CPU,
-    mmu:MMU2,
-    ppu:PPU2,
-    clock:u32,
-    count:u32,
+    pub mmu:MMU2,
+    pub ppu:PPU2,
+    pub clock:u32,
+    pub count:u32,
     ops:OpTable,
+    debug:bool,
+}
+
+impl GBState {
+    pub fn draw_full_screen(&mut self) {
+        self.ppu.draw_full_screen(&self.mmu);
+    }
+    pub fn set_pc(&mut self, pc:u16) {
+        if pc == 0xF0c9 {
+            println!("error error erro. bad new pc. current pc is {:04x}",self.cpu.pc);
+            println!("curren regs are: {}", self.cpu.reg_to_str());
+            self.dump_current_state();
+
+            let str:String = self.cpu.recent_pcs.iter().map(|b|format!("{:04x} ",b)).collect();
+            println!("previous pcs are {:?}",str);
+
+            for p in self.cpu.recent_pcs.iter() {
+                let opcode = self.fetch_opcode_at(*p);
+                if let Some(op) = self.ops.lookup(&opcode) {
+                    println!("PC:{:04x}  op:{:02x} {:?}", p, opcode, op);
+                } else {
+                    println!("PC:{:04x}  op:{:02x} unknown opcode", p, opcode);
+                }
+            }
+
+            panic!("jumpoing to no mans land");
+        }
+        self.cpu.real_set_pc(pc);
+    }
 }
 
 
-
 impl GBState {
-    pub(crate) fn fetch_next_opcode(&self) -> u16 {
-        let fb:u8 = self.mmu.read8(self.cpu.get_pc());
+    fn fetch_opcode_at(&self, pc: u16) -> u16 {
+        let fb:u8 = self.mmu.read8(pc);
         if fb == 0xcb {
             let sb:u8 = self.mmu.read8(self.cpu.get_pc()+1);
             0xcb00 | sb as u16
         } else {
             fb as u16
         }
+    }
+    pub(crate) fn fetch_next_opcode(&self) -> u16 {
+        self.fetch_opcode_at(self.cpu.get_pc())
     }
 }
 
@@ -156,8 +188,9 @@ impl GBState {
             clock: 0,
             count: 0,
             ops:make_op_table(),
+            debug: false
         };
-        gb.cpu.set_pc(0);
+        gb.set_pc(0);
         return gb;
     }
     pub(crate) fn dump_current_state(&self) {
@@ -182,6 +215,24 @@ impl GBState {
                  self.cpu.get_r16(CPUR16::DE),
                  self.cpu.get_r16(CPUR16::HL),
         );
+
+        //back PC up to nearest 32byt boundary, then back up another 32 bytes, then print out 10 rows of memory
+        let mut start = self.cpu.get_pc()/32;
+        if start > 2 {
+            start = start -2
+        } else {
+            start = 0;
+        }
+        let pc = start *32;
+        println!("went from {:04x} to {:04x}",self.cpu.get_pc(),pc);
+        let ram = self.mmu.borrow_slice(pc as usize, (pc + (16 * 8) + 1) as usize);
+        for (n, row) in ram.chunks_exact(16).enumerate() {
+            let line_str:String = row.iter()
+                .map(|b|format!("{:02x} ",b))
+                .collect();
+            println!("{:04x} {}",(pc+((n as u16)*16)) as u16, line_str);
+        }
+
     }
 }
 
@@ -276,7 +327,11 @@ impl Src16 {
         }
     }
     fn get_value(&self, gb:&GBState) -> u16 {
-        gb.mmu.read16(gb.cpu.get_pc()+1)
+        match self {
+            Im16() => gb.mmu.read16(gb.cpu.get_pc()+1),
+            SrcR16(r) => r.get_value(gb),
+        }
+
     }
     fn real(&self, gb: &GBState) -> String {
         match self {
@@ -478,19 +533,58 @@ fn named_addr(addr: u16, gb: &GBState) -> String {
 }
 
 impl GBState {
-    pub fn execute(&mut self) -> Op {
+    pub fn execute(&mut self)  {
         let code = self.fetch_next_opcode();
         if let Some(opx) = self.ops.ops.get(&code) {
             let op: Op = (*opx).clone();
+            if self.cpu.get_pc() == 0x28 {
+                self.debug = true;
+            }
+            if self.debug {
+                println!("BEFORE: PC {:04x}  op:{:04x} {:?}  reg:{}",
+                         self.cpu.get_pc(),
+                         code,
+                         op.to_asm(),
+                         self.cpu.reg_to_str());
+            }
             self.stuff(&op);
+            if self.debug {
+                println!("AFTER:  PC {:04x}  op:{:04x} {:?}  reg:{}",
+                         self.cpu.get_pc(),
+                         code,
+                         op.to_asm(),
+                         self.cpu.reg_to_str());
+            }
             self.clock += (op.cycles as u32);
             self.count += 1;
-            return op;
+
+
+            if self.count % 500 == 0 {
+                let mut v = self.mmu.read8_IO(IORegister::LY);
+                // println!("v is {}",v);
+                let mut v2 = v;
+                if v >= 154 {
+                    v2 = 0;
+                } else {
+                    v2 = v + 1
+                }
+                if v2 == 40 {
+                    println!("vblank flip");
+                    // gb.ppu.draw_full_screen(&gb.mmu)
+                }
+                self.mmu.write8_IO(IORegister::LY,v2);
+            }
+
         } else {
             println!("invalid op code: {:04x}",code);
+            self.dump_current_state();
             panic!("invalid op code")
         }
-
+    }
+    pub fn execute_n(&mut self, n: usize) {
+        for _ in 0..n {
+            self.execute();
+        }
     }
 }
 
@@ -502,67 +596,68 @@ impl GBState {
                 match typ {
                     Absolute(src) => {
                         let addr = src.get_addr(self);
-                        self.cpu.set_pc(addr);
+                        self.set_pc(addr);
                     }
                     RelativeCond(cond,src) => {
                         let off = src.get_value(self);
                         let e = u8_as_i8(off);
-                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                        self.set_pc(self.cpu.get_pc()+op.len);
                         if cond.get_value(self) {
                             let addr:u16 = (((self.cpu.get_pc()) as i32) + (e as i32)) as u16;
-                            self.cpu.set_pc(addr);
+                            self.set_pc(addr);
                         }
                     }
                     Relative(src) => {
                         let e = u8_as_i8(src.get_value(self));
                         //update the pc before calculating the relative address
-                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                        self.set_pc(self.cpu.get_pc()+op.len);
                         let addr:u16 = ((self.cpu.get_pc() as i32) + (e as i32)) as u16;
-                        self.cpu.set_pc(addr);
+                        self.set_pc(addr);
                     }
-                    JumpType::Restart(n) => {
+                    Restart(n) => {
                         let addr = self.mmu.read16(self.cpu.get_pc()+1);
                         self.cpu.dec_sp();
                         self.cpu.dec_sp();
-                        self.cpu.set_pc(*n as u16);
+                        self.set_pc(*n as u16);
                     }
                 }
             }
-            OpType::Call(typ) => {
+            Call(typ) => {
                 match typ {
-                    CallType::CallU16() => {
+                    CallU16() => {
                         let addr = self.mmu.read16(self.cpu.get_pc()+1);
                         self.cpu.dec_sp();
                         self.cpu.dec_sp();
                         self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc()+3);
-                        self.cpu.set_pc(addr);
+                        self.set_pc(addr);
                     }
-                    CallType::Push(src) => {
+                    Push(src) => {
                         let value = src.get_value(self);
                         self.cpu.dec_sp();
                         self.cpu.dec_sp();
                         self.mmu.write16(self.cpu.get_sp(), value);
-                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                        self.set_pc(self.cpu.get_pc()+op.len);
                     }
-                    CallType::Pop(src) => {
+                    Pop(src) => {
                         let value = self.mmu.read16(self.cpu.get_sp());
                         self.cpu.inc_sp();
                         self.cpu.inc_sp();
                         src.set_value(self,value);
-                        self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                        // println!("PC:{:04x}  POP {:?}, now HL is, {}", self.cpu.get_pc(), src, self.cpu.reg_to_str());
+                        self.set_pc(self.cpu.get_pc()+op.len);
                     }
                     CallType::RET() => {
                         let addr = self.mmu.read16(self.cpu.get_sp());
                         self.cpu.inc_sp();
                         self.cpu.inc_sp();
-                        self.cpu.set_pc(addr);
+                        self.set_pc(addr);
                     }
                 }
             }
             Load16(dst,src) => {
                 let val = src.get_value(self);
                 dst.set_value(self,val);
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Load8(dst,src) => {
                 // println!("executing Load8 dst = {:?} src = {:?}",dst,src);
@@ -590,15 +685,15 @@ impl GBState {
                     r2.set_value(self,v2);
                 }
                 // println!("Len is {}",self.len);
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             OpType::DisableInterrupts() => {
                 println!("pretending to disable interrupts");
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             OpType::EnableInterrupts() => {
                 println!("pretending to enable interrupts");
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             OpType::Compare(dst, src) => {
                 let src_v = src.get_value(self);
@@ -612,13 +707,13 @@ impl GBState {
                 self.cpu.r.carry = (dst_v as u16) < (src_v as u16);
 
 
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Inc16(dst) => {
                 let v1 = dst.get_value(self);
                 let v2 = v1.wrapping_add(1);
                 dst.set_value(self, v2);
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Inc8(dst) => {
                 let v1 = dst.get_value(self);
@@ -627,14 +722,14 @@ impl GBState {
                 self.cpu.r.zero = result == 0;
                 self.cpu.r.half = (result & 0x0F) + 1 > 0x0F;
                 self.cpu.r.subn = false;
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Dec16(dst) => {
                 let v1 = dst.get_value(self);
                 let v2 = v1.wrapping_sub(1);
                 // println!(" ### DEC {:04x}",v2);
                 dst.set_value(self, v2);
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Dec8(dst) => {
                 let v1 = dst.get_value(self);
@@ -644,7 +739,7 @@ impl GBState {
                 self.cpu.r.subn = true;
                 self.cpu.r.half = (result & 0x0F) == 0;
                 // carry not modified
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Math(binop, dst,src) => {
                 let b = src.get_value(self);
@@ -680,7 +775,7 @@ impl GBState {
                 self.cpu.r.half = half;
                 self.cpu.r.carry = carry;
                 dst.set_value(self,res);
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             Math16(binop, dst, src) => {
                 let b = src.get_value(self);
@@ -691,15 +786,18 @@ impl GBState {
                     And => {}
                     SUB => {}
                     Add => {
+                        // println!("adding {:?},{:?}",dst,src);
+                        // println!("values are {:04x} {:04x}",a,b);
                         let r = a.wrapping_add(b);
                         self.cpu.r.subn = false;
                         self.cpu.r.half = (a & 0x07FF) + (b & 0x07FF) > 0x07FF;
                         self.cpu.r.carry = (a) > (0xFFFF - b);
+                        // println!("final add value is {:04x}",r);
                         dst.set_value(self,r);
                     }
                     BinOp::ADC => {}
                 };
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
             BitOp(bop) => {
                 match bop {
@@ -805,7 +903,7 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
                     }
-                    BitOps::SWAP(r8) => {
+                    SWAP(r8) => {
                         let a = r8.get_value(self);
                         let r = ((a & 0x0f) << 4) | ((a & 0xf0) >> 4);
                         r8.set_value(self, r);
@@ -825,7 +923,7 @@ impl GBState {
                         self.cpu.r.carry = c;
                     }
                 }
-                self.cpu.set_pc(self.cpu.get_pc()+op.len);
+                self.set_pc(self.cpu.get_pc()+op.len);
             }
         }
 
@@ -844,7 +942,7 @@ impl Op {
                     Absolute(src) => "XXXXX".to_string(),
                     RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
                     Relative(src) => format!("JR i{}",src.name()),
-                    JumpType::Restart(n) => format!("RST n{:02x}",n),
+                    Restart(n) => format!("RST n{:02x}",n),
                 }
             },
             Load16(dst,src) => format!("LD {} {}", dst.name(), src.name()),
@@ -871,11 +969,11 @@ impl Op {
             BitOp(SWAP(src)) => format!("RLC {}", src.name()),
             BitOp(BitOps::RLA()) => format!("RLA"),
             BitOp(BitOps::CPL()) => format!("CPL"),
-            OpType::Call(ct) => {
+            Call(ct) => {
                 match ct {
-                    CallType::CallU16() => format!("CALL u16"),
-                    CallType::Push(src) => format!("PUSH {}", src.name()),
-                    CallType::Pop(src) => format!("POP {}", src.name()),
+                    CallU16() => format!("CALL u16"),
+                    Push(src) => format!("PUSH {}", src.name()),
+                    Pop(src) => format!("POP {}", src.name()),
                     CallType::RET() => format!("RET"),
                 }
             }
@@ -889,7 +987,7 @@ impl Op {
                     Absolute(src) => format!("JP {:04x}",src.get_addr(gb)),
                     RelativeCond(cond, src) =>  format!("JR {}, {}", cond.real(gb), src.real(gb)),
                     Relative(src) => format!("JR +/-{}", src.real(gb)),
-                    JumpType::Restart(n) => format!("RST {:02x}",n),
+                    Restart(n) => format!("RST {:02x}",n),
                 }
             },
             Load8(dst,src) => format!("LD {} <- {}",dst.real(gb), src.real(gb)),
@@ -916,11 +1014,11 @@ impl Op {
             BitOp(SWAP(src)) => format!("SWAP {}",src.get_value(gb)),
             BitOp(BitOps::RLA()) => format!("RLA {}", A.get_value(gb)),
             BitOp(BitOps::CPL()) => format!("CPL {}", A.get_value(gb)),
-            OpType::Call(ct) => {
+            Call(ct) => {
                 match ct {
-                    CallType::CallU16() => format!("CALL {}",gb.mmu.read16(gb.cpu.get_pc())),
-                    CallType::Push(src) => format!("PUSH {}", src.get_value(gb)),
-                    CallType::Pop(src) => format!("POP {}", src.get_value(gb)),
+                    CallU16() => format!("CALL {}",gb.mmu.read16(gb.cpu.get_pc())),
+                    Push(src) => format!("PUSH {}", src.get_value(gb)),
+                    Pop(src) => format!("POP {}", src.get_value(gb)),
                     CallType::RET() => format!("RET  back to {:04X}", gb.mmu.read16(gb.cpu.get_sp())),
                 }
             }
@@ -1214,22 +1312,22 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_F8 + col,SET(7, *r8));
     }
 
-    op_table.add(Op{ code: 0xCB_37,len:2, cycles:8,   typ:OpType::BitOp(BitOps::SWAP(A))});
+    op_table.add(Op{ code: 0xCB_37,len:2, cycles:8,   typ: BitOp(SWAP(A))});
 
-    op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: OpType::Call(CallType::CallU16())});
-    op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: OpType::Call(CallType::RET())});
-    op_table.add(Op{ code: 0x00CF, len:1, cycles: 16, typ:OpType::Jump(JumpType::Restart(0x08))});
-    op_table.add(Op{ code: 0x00DF, len:1, cycles: 16, typ:OpType::Jump(JumpType::Restart(0x18))});
-    op_table.add(Op{ code: 0x00EF, len:1, cycles: 16, typ:OpType::Jump(JumpType::Restart(0x28))});
-    op_table.add(Op{ code: 0x00FF, len:1, cycles: 16, typ:OpType::Jump(JumpType::Restart(0x38))});
+    op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: Call(CallU16())});
+    op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: Call(CallType::RET())});
+    op_table.add(Op{ code: 0x00CF, len:1, cycles: 16, typ: Jump(Restart(0x08))});
+    op_table.add(Op{ code: 0x00DF, len:1, cycles: 16, typ: Jump(Restart(0x18))});
+    op_table.add(Op{ code: 0x00EF, len:1, cycles: 16, typ: Jump(Restart(0x28))});
+    op_table.add(Op{ code: 0x00FF, len:1, cycles: 16, typ: Jump(Restart(0x38))});
 
 
-    op_table.add(Op{ code: 0x00C1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(BC))});
-    op_table.add(Op{ code: 0x00C5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(BC))});
-    op_table.add(Op{ code: 0x00D1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(DE))});
-    op_table.add(Op{ code: 0x00D5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(DE))});
-    op_table.add(Op{ code: 0x00E1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(HL))});
-    op_table.add(Op{ code: 0x00E5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(HL))});
+    op_table.add(Op{ code: 0x00C1, len:1, cycles: 12, typ: Call(Pop(BC))});
+    op_table.add(Op{ code: 0x00C5, len:1, cycles: 16, typ: Call(Push(BC))});
+    op_table.add(Op{ code: 0x00D1, len:1, cycles: 12, typ: Call(Pop(DE))});
+    op_table.add(Op{ code: 0x00D5, len:1, cycles: 16, typ: Call(Push(DE))});
+    op_table.add(Op{ code: 0x00E1, len:1, cycles: 12, typ: Call(Pop(HL))});
+    op_table.add(Op{ code: 0x00E5, len:1, cycles: 16, typ: Call(Push(HL))});
     // op_table.add(Op{ code: 0x00F1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(AF))});
     // op_table.add(Op{ code: 0x00F5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(AF))});
 
@@ -1246,8 +1344,9 @@ pub fn setup_test_rom(fname: &str) -> Option<GBState> {
                 clock: 0,
                 count: 0,
                 ops: make_op_table(),
+                debug: false
             };
-            gb.cpu.set_pc(0x100);
+            gb.set_pc(0x100);
             return Some(gb);
         }
         Err(_) => return None
@@ -1278,7 +1377,7 @@ fn test_cpuins() {
 fn test_hellogithub() {
     let mut gb = setup_test_rom("./resources/testroms/hello-world.gb").unwrap();
     let goal = 20_000;
-    gb.cpu.set_pc(0);
+    gb.set_pc(0);
 
     let mut debug = false;
     loop {
@@ -1353,7 +1452,7 @@ fn test_bootrom() {
     gb.mmu.enable_bootrom();
 
     let goal = 3_250_000;
-    gb.cpu.set_pc(0);
+    gb.set_pc(0);
 
     let mut debug = false;
     loop {
@@ -1461,7 +1560,7 @@ fn test_tetris() {
     // gb.mmu.enable_bootrom();
 
     let goal = 120_100;
-    gb.cpu.set_pc(0x100);
+    gb.set_pc(0x100);
 
     let mut debug = false;
     loop {
@@ -1621,7 +1720,7 @@ fn op_tests() {
         let pc = 0x200;
 
         //set pc to x200
-        gb.cpu.set_pc(pc);
+        gb.set_pc(pc);
 
         //put x99 as the i8
         gb.mmu.write8(pc+0,0x36);
@@ -1634,7 +1733,7 @@ fn op_tests() {
         assert_eq!(gb.mmu.read8(addr),0xDE);
 
         //execute instruction
-        let op = gb.execute();
+        gb.execute();
 
         //confirm x8000 now has x99 in it
         assert_eq!(gb.mmu.read8(addr),payload);

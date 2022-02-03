@@ -2,7 +2,7 @@ use crate::common::{Bitmap, get_bit, get_bit_as_bool};
 use crate::mmu2::{IORegister, MMU2};
 
 pub struct PPU2 {
-    backbuffer: Bitmap,//::init(256,256),
+    pub backbuffer: Bitmap,//::init(256,256),
     vramdump: Bitmap,//::init(128,256),
 }
 
@@ -37,14 +37,15 @@ impl PPU2 {
             td1_start = 0x8000;
             td1_end = 0x8FFF;
         }
+        println!("LCDC is {:02x}",mmu.read8_IO(IORegister::LCDC));
         println!("tile data base address {:04x}", td1_start);
         let td1 = mmu.borrow_slice(td1_start,td1_end + 1);
-        // for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
-        //     let line_str:String = row.iter()
-        //         .map(|b|format!("{:02x}",b))
-        //         .collect();
-        //     println!("{:04x} {}",bg_tilemap_start+n*32, line_str);
-        // }
+        for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
+            let line_str:String = row.iter()
+                .map(|b|format!("{:02x}",b))
+                .collect();
+            println!("{:04x} {}",bg_tilemap_start+n*32, line_str);
+        }
 
         println!("signed mode = {}", !unsigned_mode);
         if bg_enabled {

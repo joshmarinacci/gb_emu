@@ -202,7 +202,7 @@ impl MMU2 {
 }
 
 impl MMU2 {
-    pub(crate) fn borrow_slice(&self, start: usize, end: usize) -> &[u8] {
+    pub fn borrow_slice(&self, start: usize, end: usize) -> &[u8] {
         &self.mem[start..end]
     }
 }
@@ -306,7 +306,7 @@ impl MMU2 {
     }
     pub fn write8(&mut self, addr:u16, val:u8) {
         if let Some(en) = IORegister::match_address(addr) {
-            println!("setting reg {:?} to {:02x}",en,val);
+            println!("reg {:?} <- {:02x}",en,val);
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
@@ -332,9 +332,6 @@ impl MMU2 {
                 //writing to div resets it
                 IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
-                IORegister::LCDC => {
-                    println!("set LCDC");
-                }
                 IORegister::IE => {
                     println!("turnning interrupts back on?");
                 }

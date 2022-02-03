@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use crate::optest::R16;
 
 pub struct Flags {
@@ -7,7 +8,7 @@ pub struct Flags {
     pub subn:bool,
 }
 pub struct CPU {
-    pc:u16,
+    pub(crate) pc:u16,
     sp:u16,
     a:u8,
     b:u8,
@@ -17,6 +18,24 @@ pub struct CPU {
     h:u8,
     l:u8,
     pub r:Flags,
+    pub recent_pcs: VecDeque<u16>,
+}
+
+impl CPU {
+    pub fn reg_to_str(&self) -> String {
+        format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x}    BC:{:04x}  DE:{:04x}  HL:{:04x} ",
+                self.get_r8(CPUR8::R8A),
+                self.get_r8(CPUR8::R8B),
+                self.get_r8(CPUR8::R8C),
+                self.get_r8(CPUR8::R8D),
+                self.get_r8(CPUR8::R8E),
+                self.get_r8(CPUR8::R8H),
+                self.get_r8(CPUR8::R8L),
+                self.get_r16(CPUR16::BC),
+                self.get_r16(CPUR16::DE),
+                self.get_r16(CPUR16::HL),
+        )
+    }
 }
 
 
@@ -101,19 +120,24 @@ impl CPU {
                 carry: false,
                 half: false,
                 subn: false
-            }
+            },
+            recent_pcs:VecDeque::new(),
         }
     }
     pub fn get_pc(&self) -> u16 {
         self.pc
     }
-    pub fn set_pc(&mut self, pc: u16) {
+    pub fn real_set_pc(&mut self, pc: u16) {
+        self.recent_pcs.push_front(pc);
+        if self.recent_pcs.len() > 30 {
+            self.recent_pcs.pop_back();
+        }
         self.pc = pc;
     }
     pub(crate) fn inc_pc(&mut self) {
         self.pc += 1;
     }
-    pub(crate) fn get_sp(&self) -> u16 {
+    pub fn get_sp(&self) -> u16 {
         self.sp
     }
     pub(crate) fn dec_sp(&mut self) {

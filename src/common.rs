@@ -68,7 +68,7 @@ impl Bitmap {
 }
 
 impl Bitmap {
-    pub(crate) fn write_to_file(&self, filename: &str) {
+    pub fn write_to_file(&self, filename: &str) {
         let path = Path::new(filename);
         let file = File::create(path).unwrap();
         let w = BufWriter::new(file);
