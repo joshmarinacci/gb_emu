@@ -189,8 +189,17 @@ pub struct GBState {
 }
 
 impl GBState {
+    pub fn lookup_op(&self, code: &u16) -> Option<&Op> {
+        self.ops.ops.get(code)
+    }
+}
+
+impl GBState {
     pub fn draw_full_screen(&mut self) {
         self.ppu.draw_full_screen(&self.mmu);
+    }
+    pub fn get_pc(&self) -> u16 {
+        self.cpu.get_pc()
     }
     pub fn set_pc(&mut self, pc: u16) {
         // if pc == 0x29b3 {
@@ -220,7 +229,7 @@ impl GBState {
 }
 
 impl GBState {
-    fn fetch_opcode_at(&self, pc: u16) -> u16 {
+    pub fn fetch_opcode_at(&self, pc: u16) -> u16 {
         let fb: u8 = self.mmu.read8(pc);
         if fb == 0xcb {
             let sb: u8 = self.mmu.read8(pc + 1);
@@ -235,7 +244,7 @@ impl GBState {
 }
 
 impl GBState {
-    fn make_test_context(rom: &Vec<u8>) -> GBState {
+    pub(crate) fn make_test_context(rom: &Vec<u8>) -> GBState {
         let mut gb = GBState {
             cpu: CPU::init(),
             mmu: MMU2::init(rom),
@@ -1032,7 +1041,7 @@ impl GBState {
 }
 
 impl Op {
-    pub(crate) fn to_asm(&self) -> String {
+    pub fn to_asm(&self) -> String {
         match &self.typ {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => match typ {
@@ -1077,7 +1086,7 @@ impl Op {
             },
         }
     }
-    pub(crate) fn real(&self, gb: &GBState) -> String {
+    pub fn real(&self, gb: &GBState) -> String {
         match &self.typ {
             OpType::Noop() => "NOOP".to_string(),
             Jump(typ) => match typ {

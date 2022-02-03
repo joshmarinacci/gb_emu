@@ -1,7 +1,7 @@
 use console::Color::White;
 use console::{Color, Style, Term};
 use dialoguer::theme::ColorfulTheme;
-use gb_emu::optest::{setup_test_rom, GBState};
+use gb_emu::optest::{setup_test_rom, GBState, Op};
 use log::{info, LevelFilter};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Root};
@@ -60,6 +60,8 @@ fn main() -> Result<()> {
                 .to_string(),
         )?;
 
+
+        // status
         term.write_line(&format!(
             "PC: {:04x}  SP:{:04x}    clock={}  cycles={}",
             gb.cpu.get_pc(),
@@ -79,7 +81,16 @@ fn main() -> Result<()> {
             flag_style.apply_to(gb.cpu.r.carry)
         ))?;
 
-        let commands = Style::new().reverse();
+        //current instruction
+        let code = gb.fetch_opcode_at(gb.get_pc());
+        println!("current op {:04x}", code);
+        if let Some(opx) = gb.lookup_op(&code) {
+            let op: Op = (*opx).clone();
+            println!("instr {:02x}  ->  {}  ->  {}",code, op.to_asm(), op.real(&gb));
+        }
+
+
+            let commands = Style::new().reverse();
         term.write_line(
             &commands
                 .apply_to(&format!("j=step J=16 u=256 U=4096 "))

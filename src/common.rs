@@ -228,3 +228,11 @@ pub fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
     }
     Ok(RomFile { data, path: pth2 })
 }
+
+
+pub fn print_ram(base:u16, ram: &Vec<u8>)  {
+    for (n, chunk) in ram.chunks(16).enumerate() {
+        let line_str: String = chunk.iter().map(|b| format!("{:02x} ", b)).collect();
+        println!("{:04X} {}", ((n * 16) as u16 + base), line_str);
+    }
+}

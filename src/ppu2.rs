@@ -1,5 +1,8 @@
-use crate::common::{get_bit, get_bit_as_bool, Bitmap};
+use std::fs::OpenOptions;
+use std::io::Write;
+use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram};
 use crate::mmu2::{IORegister, MMU2};
+use crate::optest::GBState;
 
 pub struct PPU2 {
     pub backbuffer: Bitmap,
@@ -140,3 +143,83 @@ fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {
     }
     colors
 }
+
+#[test]
+fn test_vblank() {
+    //init empty arram
+    let mut rom:Vec<u8> = vec![0xd3; 0x200];
+    // start at 0000.
+    // SP <- fffe            LD SP u16     31 fe ff
+    let arr = [0x31, 0xfe, 0xff].to_vec();
+    let n = copy_at(&mut rom, 0x0000, arr);
+
+    // put 40 into memory
+    // A <- 40               LD A,n        3E 40
+    // (hi + 60) <- A        LDH (n), A    E0 60
+    let arr = [0x3E, 0x40, 0xE0, 0x60].to_vec();
+    let n = copy_at(&mut rom, n, arr);
+
+
+    // spin loop that waits for value to become 41
+    // A <- (hi + 60)        LDH A,n       F0 60
+    // A ==? 41              CP 41         FE 41
+    // if not zero, jump back 5   JR NZ e  20 Fc
+    // jump absolute to 20   JP 20      C3 20 00
+    let arr = [
+        0xF0, 0x60, // LDH A, n
+        0xFE, 0x41, // CP A, 41
+        0x20, 0xFC, // JR NZ e
+        0xC3, 0x20, 0x00
+    ].to_vec();
+    let n = copy_at(&mut rom,n,arr);
+
+
+
+    // at 0x40
+    // A <- 41            LD A,n        3E 41
+    // (hi + 60) <- A     LDH (n),A     E0 60
+    // return             RETI          D9
+    copy_at(&mut rom, 0x40, [
+        0x3E, 0x41, // LD A, 41
+        0xE0, 0x60,  //LDH (hi+60),A
+        0xD9,  // RETI
+    ].to_vec());
+
+
+    // at 100 do absolute jump to 0000
+    // PC <- 0     JP nn          C3 00 00
+    let n = copy_at(&mut rom, 0x100,[0xC3, 0x00, 0x00].to_vec());
+
+    print_ram(0x0000,&rom);
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open("./vblank_unit_test.gb").unwrap();
+    file.write_all(&rom).unwrap();
+    println!("wrote out file");
+    // let mut gb: GBState = GBState::make_test_context(&rom.to_vec());
+    // gb.set_pc(0x0000); // start at 00000
+    // while gb.get_pc() != 0x20 {
+    //     println!("running");
+    //     gb.execute();
+    // }
+}
+
+fn copy_at(rom: &mut Vec<u8>, start: usize, data: Vec<u8>) -> usize {
+    println!("copying to {}  n{}", start, data.len());
+    for n in 0..data.len() {
+        rom[start + n] = data[n];
+    }
+    return start + data.len();
+}
+
+
+
+
+
+
+
+
+
+
