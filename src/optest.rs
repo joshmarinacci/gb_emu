@@ -60,9 +60,9 @@ enum BinOp {
 }
 #[derive(Debug, Copy, Clone)]
 enum BitOps {
-    BIT(u8, R8),
-    RES(u8, R8),
-    SET(u8, R8),
+    BIT(u8, Src8),
+    RES(u8, Dst8),
+    SET(u8, Dst8),
     RLC(R8),
     RRC(R8),
     RL(R8),
@@ -1385,36 +1385,39 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_28 + col,SRA(*r8));
         op_table.bitop(0xCB_30 + col,SWAP(*r8));
         op_table.bitop(0xCB_38 + col,SRL(*r8));
-        op_table.bitop(0xCB_40 + col,BIT(0,*r8));
-        op_table.bitop(0xCB_48 + col,BIT(1,*r8));
-        op_table.bitop(0xCB_50 + col,BIT(2,*r8));
-        op_table.bitop(0xCB_58 + col,BIT(3,*r8));
-        op_table.bitop(0xCB_60 + col,BIT(4,*r8));
-        op_table.bitop(0xCB_68 + col,BIT(5,*r8));
-        op_table.bitop(0xCB_70 + col,BIT(6,*r8));
-        op_table.bitop(0xCB_78 + col,BIT(7,*r8));
+        op_table.bitop(0xCB_40 + col,BIT(0,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_48 + col,BIT(1,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_50 + col,BIT(2,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_58 + col,BIT(3,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_60 + col,BIT(4,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_68 + col,BIT(5,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_70 + col,BIT(6,Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_78 + col,BIT(7,Src8::SrcR8(*r8)));
 
-        op_table.bitop(0xCB_80 + col,RES(0, *r8));
-        op_table.bitop(0xCB_88 + col,RES(1, *r8));
-        op_table.bitop(0xCB_90 + col,RES(2, *r8));
-        op_table.bitop(0xCB_98 + col,RES(3, *r8));
-        op_table.bitop(0xCB_A0 + col,RES(4, *r8));
-        op_table.bitop(0xCB_A8 + col,RES(5, *r8));
-        op_table.bitop(0xCB_B0 + col,RES(6, *r8));
-        op_table.bitop(0xCB_B8 + col,RES(7, *r8));
+        op_table.bitop(0xCB_80 + col,RES(0, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_88 + col,RES(1, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_90 + col,RES(2, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_98 + col,RES(3, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_A0 + col,RES(4, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_A8 + col,RES(5, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_B0 + col,RES(6, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_B8 + col,RES(7, Dst8::DstR8(*r8)));
 
-        op_table.bitop(0xCB_C0 + col,SET(0, *r8));
-        op_table.bitop(0xCB_C8 + col,SET(1, *r8));
-        op_table.bitop(0xCB_D0 + col,SET(2, *r8));
-        op_table.bitop(0xCB_D8 + col,SET(3, *r8));
-        op_table.bitop(0xCB_E0 + col,SET(4, *r8));
-        op_table.bitop(0xCB_E8 + col,SET(5, *r8));
-        op_table.bitop(0xCB_F0 + col,SET(6, *r8));
-        op_table.bitop(0xCB_F8 + col,SET(7, *r8));
+        op_table.bitop(0xCB_C0 + col,SET(0, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_C8 + col,SET(1, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_D0 + col,SET(2, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_D8 + col,SET(3, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_E0 + col,SET(4, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_E8 + col,SET(5, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_F0 + col,SET(6, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_F8 + col,SET(7, Dst8::DstR8(*r8)));
     }
 
-    op_table.add(Op{ code: 0xCB_37,len:2, cycles:8,   typ: BitOp(SWAP(A))});
-    op_table.add(Op{ code: 0xCB_87,len:2, cycles:8,   typ: BitOp(RES(0,A))});
+    op_table.add(Op{ code: 0xCB_37, len:2, cycles:8,  typ: BitOp(SWAP(A))});
+    op_table.add(Op{ code: 0xCB_87, len:2, cycles:8,  typ: BitOp(RES(0,Dst8::DstR8(A)))});
+    op_table.add(Op{ code: 0xCB_7E, len:2, cycles:12, typ: BitOp(BIT(7,Src8::Mem(HL)))});
+    op_table.add(Op{ code: 0xCB_7F, len:2, cycles:8,  typ: BitOp(BIT(7,Src8::SrcR8(A)))});
+    op_table.add(Op{ code: 0xCB_BE, len:2, cycles:16, typ: BitOp(RES(7,Dst8::AddrDst(HL)))});
 
     op_table.add(Op{ code: 0x00C0, len:1, cycles: 20, typ: Call(RetCond(NotZero()))});
     op_table.add(Op{ code: 0x00C4, len:3, cycles: 24, typ: Call(CallCondU16(NotZero()))});
