@@ -58,7 +58,7 @@ fn main() -> Result<()>{
         term.write_line(&commands.apply_to("========================================").to_string())?;
 
 
-        term.write_line(&format!("PC: {:04x}  SP:{:04x}    clock={}  cycles={}", gb.cpu.get_pc(), gb.cpu.get_sp(), gb.count, gb.clock))?;
+        term.write_line(&format!("PC: {:04x}  SP:{:04x}    clock={}  cycles={}", gb.cpu.get_pc(), gb.cpu.get_sp(), gb.clock, gb.count))?;
         let reg_style = Style::new().bg(Color::White).red().underlined();
         let regs = gb.cpu.reg_to_str();
         term.write_line(&reg_style.apply_to(regs).to_string())?;

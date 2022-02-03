@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use crate::common::{get_bit_as_bool, set_bit};
 use crate::optest::R16;
 
 pub struct Flags {
@@ -40,10 +41,10 @@ impl CPU {
 
 
 pub enum CPUR8 {
-    R8A,R8B,R8C,R8D,R8E,R8H,R8L
+    R8A,R8B,R8C,R8D,R8E,R8H,R8L, R8F,
 }
 pub enum CPUR16 {
-    BC, PC, SP, DE, HL
+    BC, PC, SP, DE, HL, AF
 }
 pub enum CPURegister {
     CpuR8(CPUR8),
@@ -60,6 +61,14 @@ impl CPU {
             CPUR8::R8E => self.e,
             CPUR8::R8H => self.h,
             CPUR8::R8L => self.l,
+            CPUR8::R8F => {
+                let mut v = 0x00;
+                v = set_bit(v,7,self.r.zero);
+                v = set_bit(v,6,self.r.subn);
+                v = set_bit(v,5,self.r.half);
+                v = set_bit(v,4,self.r.carry);
+                v
+            }
         }
     }
     pub(crate) fn set_r8(&mut self, reg: CPUR8, val: u8) {
@@ -71,6 +80,12 @@ impl CPU {
             CPUR8::R8E => self.e = val,
             CPUR8::R8H => self.h = val,
             CPUR8::R8L => self.l = val,
+            CPUR8::R8F => {
+                self.r.zero = get_bit_as_bool(val,7);
+                self.r.subn = get_bit_as_bool(val,6);
+                self.r.half = get_bit_as_bool(val,5);
+                self.r.carry = get_bit_as_bool(val,4);
+            },
         }
     }
 
@@ -81,6 +96,11 @@ impl CPU {
             CPUR16::BC => (self.c as u16) + ((self.b as u16) << 8),
             CPUR16::DE => (self.e as u16) + ((self.d as u16) << 8),
             CPUR16::HL => (self.l as u16) + ((self.h as u16) << 8),
+            CPUR16::AF => {
+                let a = self.get_r8(CPUR8::R8A);
+                let f = self.get_r8(CPUR8::R8F);
+                (f as u16) + ((a as u16) << 8)
+            }
         }
     }
     pub(crate) fn set_r16(&mut self, reg:CPUR16, val:u16) {
@@ -98,6 +118,10 @@ impl CPU {
             CPUR16::HL => {
                 self.h = (val >> 8) as u8;
                 self.l = (0x00FF & val) as u8;
+            }
+            CPUR16::AF => {
+                self.set_r8(CPUR8::R8A, (val >> 8) as u8);
+                self.set_r8(CPUR8::R8F, (0x00ff & val) as u8);
             }
         }
     }

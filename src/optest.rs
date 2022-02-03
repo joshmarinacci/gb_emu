@@ -23,18 +23,19 @@ use crate::opcodes::{DoubleRegister, RegisterName, u8_as_i8};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::BinOp::Add;
 use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
+use crate::optest::CallType::CallCondU16;
 use crate::optest::Dst8::DstR8;
-use crate::optest::JumpType::{Relative, RelativeCond};
+use crate::optest::JumpType::{AbsoluteCond, Relative, RelativeCond};
 use crate::optest::OpType::{Load8, Math16};
 use crate::optest::R8::{A, B, C, D, E, H, L};
-use crate::optest::R16::{BC, DE, HL, SP};
+use crate::optest::R16::{AF, BC, DE, HL, SP};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 use crate::ppu2::PPU2;
 
 #[derive(Debug, Copy, Clone)]
 pub enum R8  { A, B, C, D, E, H, L,}
 #[derive(Debug, Copy, Clone)]
-pub enum R16 { BC, HL, DE, SP,}
+pub enum R16 { BC, HL, DE, SP, AF}
 #[derive(Debug, Copy, Clone)]
 pub enum Src8  {  SrcR8(R8), Mem(R16), MemWithInc(R16), MemWithDec(R16), Im8(), HiMemIm8(), MemIm16() }
 #[derive(Debug, Copy, Clone)]
@@ -84,6 +85,7 @@ pub enum Cond {
 #[derive(Debug, Copy, Clone)]
 enum JumpType {
     Absolute(AddrSrc),
+    AbsoluteCond(Cond,AddrSrc),
     RelativeCond(Cond,Src8),
     Relative(Src8),
     Restart(u8)
@@ -91,7 +93,9 @@ enum JumpType {
 #[derive(Debug, Copy, Clone)]
 enum CallType {
     CallU16(),
-    RET(),
+    CallCondU16(Cond),
+    Ret(),
+    RetCond(Cond),
     Push(R16),
     Pop(R16),
 }
@@ -114,7 +118,7 @@ enum OpType {
     Inc16(R16),
     Dec16(R16),
     Inc8(R8),
-    Dec8(R8),
+    Dec8(Dst8),
     BitOp(BitOps),
 }
 #[derive(Debug, Clone)]
@@ -140,28 +144,28 @@ impl GBState {
         self.ppu.draw_full_screen(&self.mmu);
     }
     pub fn set_pc(&mut self, pc:u16) {
-        if pc == 0x29b3 {
-            self.debug = true;
-        }
-        if pc == 0xbec3 {
-            println!("error error erro. bad new pc. current pc is {:04x}",self.cpu.pc);
-            println!("curren regs are: {}", self.cpu.reg_to_str());
-            self.dump_current_state();
-
-            let str:String = self.cpu.recent_pcs.iter().map(|b|format!("{:04x} ",b)).collect();
-            println!("previous pcs are {:?}",str);
-
-            for p in self.cpu.recent_pcs.iter() {
-                let opcode = self.fetch_opcode_at(*p);
-                if let Some(op) = self.ops.lookup(&opcode) {
-                    println!("PC:{:04x}  op:{:02x} {:?}", p, opcode, op);
-                } else {
-                    println!("PC:{:04x}  op:{:02x} unknown opcode", p, opcode);
-                }
-            }
-
-            panic!("jumpoing to no mans land");
-        }
+        // if pc == 0x29b3 {
+        //     self.debug = true;
+        // }
+        // if pc == 0xbec3 {
+        //     println!("error error erro. bad new pc. current pc is {:04x}",self.cpu.pc);
+        //     println!("curren regs are: {}", self.cpu.reg_to_str());
+        //     self.dump_current_state();
+        //
+        //     let str:String = self.cpu.recent_pcs.iter().map(|b|format!("{:04x} ",b)).collect();
+        //     println!("previous pcs are {:?}",str);
+        //
+        //     for p in self.cpu.recent_pcs.iter() {
+        //         let opcode = self.fetch_opcode_at(*p);
+        //         if let Some(op) = self.ops.lookup(&opcode) {
+        //             println!("PC:{:04x}  op:{:02x} {:?}", p, opcode, op);
+        //         } else {
+        //             println!("PC:{:04x}  op:{:02x} unknown opcode", p, opcode);
+        //         }
+        //     }
+        //
+        //     panic!("jumpoing to no mans land");
+        // }
         self.cpu.real_set_pc(pc);
     }
 }
@@ -285,6 +289,7 @@ impl R16 {
             HL => gb.cpu.get_r16(CPUR16::HL),
             DE => gb.cpu.get_r16(CPUR16::DE),
             SP => gb.cpu.get_r16(CPUR16::SP),
+            AF => gb.cpu.get_r16(CPUR16::AF),
         }
     }
     fn set_value(&self, gb: &mut GBState, val:u16) {
@@ -293,6 +298,7 @@ impl R16 {
             HL => gb.cpu.set_r16(CPUR16::HL, val),
             DE => gb.cpu.set_r16(CPUR16::DE, val),
             SP => gb.cpu.set_r16(CPUR16::SP, val),
+            AF => gb.cpu.set_r16(CPUR16::AF, val),
         }
     }
     fn name(&self) -> &'static str{
@@ -301,6 +307,7 @@ impl R16 {
             HL => "HL",
             DE => "DE",
             SP => "SP",
+            AF => "AF",
         }
     }
 }
@@ -611,6 +618,13 @@ impl GBState {
                         let addr = src.get_addr(self);
                         self.set_pc(addr);
                     }
+                    AbsoluteCond(cond,src) => {
+                        let addr = src.get_addr(self);
+                        self.set_pc(self.cpu.get_pc()+op.len);
+                        if cond.get_value(self) {
+                            self.set_pc(addr);
+                        }
+                    }
                     RelativeCond(cond,src) => {
                         let off = src.get_value(self);
                         let e = u8_as_i8(off);
@@ -644,6 +658,17 @@ impl GBState {
                         self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc()+3);
                         self.set_pc(addr);
                     }
+                    CallCondU16(cond) => {
+                        let addr = self.mmu.read16(self.cpu.get_pc()+1);
+                        if cond.get_value(self) {
+                            self.cpu.dec_sp();
+                            self.cpu.dec_sp();
+                            self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc()+3);
+                            self.set_pc(addr);
+                        } else {
+                            self.set_pc(self.cpu.get_pc()+op.len);
+                        }
+                    }
                     Push(src) => {
                         self.cpu.dec_sp();
                         self.cpu.dec_sp();
@@ -659,11 +684,21 @@ impl GBState {
                         // println!("PC:{:04x}  POP {:?}, now HL is, {}", self.cpu.get_pc(), src, self.cpu.reg_to_str());
                         self.set_pc(self.cpu.get_pc()+op.len);
                     }
-                    CallType::RET() => {
+                    CallType::Ret() => {
                         let addr = self.mmu.read16(self.cpu.get_sp());
                         self.cpu.inc_sp();
                         self.cpu.inc_sp();
                         self.set_pc(addr);
+                    }
+                    CallType::RetCond(cond) => {
+                        if cond.get_value(self) {
+                            let addr = self.mmu.read16(self.cpu.get_sp());
+                            self.cpu.inc_sp();
+                            self.cpu.inc_sp();
+                            self.set_pc(addr);
+                        } else {
+                            self.set_pc(self.cpu.get_pc()+op.len);
+                        }
                     }
                 }
             }
@@ -956,6 +991,7 @@ impl Op {
                     RelativeCond(cond,src) => format!("JP {},{}",cond.name(),src.name()),
                     Relative(src) => format!("JR i{}",src.name()),
                     Restart(n) => format!("RST n{:02x}",n),
+                    AbsoluteCond(cond,src) => format!("CALL {},{}",cond.name(),src.name()),
                 }
             },
             Load16(dst,src) => format!("LD {} {}", dst.name(), src.name()),
@@ -987,7 +1023,9 @@ impl Op {
                     CallU16() => format!("CALL u16"),
                     Push(src) => format!("PUSH {}", src.name()),
                     Pop(src) => format!("POP {}", src.name()),
-                    CallType::RET() => format!("RET"),
+                    CallType::Ret() => format!("RET"),
+                    CallCondU16(cond) => format!("CALL {},u16",cond.name()),
+                    CallType::RetCond(cond) => format!("RET {}",cond.name()),
                 }
             }
         }
@@ -1001,6 +1039,7 @@ impl Op {
                     RelativeCond(cond, src) =>  format!("JR {}, {}", cond.real(gb), src.real(gb)),
                     Relative(src) => format!("JR +/-{}", src.real(gb)),
                     Restart(n) => format!("RST {:02x}",n),
+                    AbsoluteCond(cond, src) => format!("CALL {}, {}", cond.real(gb), src.real(gb)),
                 }
             },
             Load8(dst,src) => format!("LD {} <- {}",dst.real(gb), src.real(gb)),
@@ -1030,9 +1069,11 @@ impl Op {
             Call(ct) => {
                 match ct {
                     CallU16() => format!("CALL {}",gb.mmu.read16(gb.cpu.get_pc())),
+                    CallCondU16(cond) => format!("CALL {}, {}",cond.real(gb),gb.mmu.read16(gb.cpu.get_pc())),
                     Push(src) => format!("PUSH {}", src.get_value(gb)),
                     Pop(src) => format!("POP {}", src.get_value(gb)),
-                    CallType::RET() => format!("RET  back to {:04X}", gb.mmu.read16(gb.cpu.get_sp())),
+                    CallType::Ret() => format!("RET  back to {:04X}", gb.mmu.read16(gb.cpu.get_sp())),
+                    CallType::RetCond(cond) => format!("RET Z: if {} then back to {:04x}",cond.get_value(gb),gb.mmu.read16(gb.cpu.get_sp())),
                 }
             }
         }
@@ -1225,21 +1266,22 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code:0x3B, len: 1, cycles: 8, typ: Dec16(SP)  });
 
     op_table.add(Op { code:0x04, len: 1, cycles: 4, typ: Inc8(B)   });
-    op_table.add(Op { code:0x05, len: 1, cycles: 4, typ: Dec8(B)   });
+    op_table.add(Op { code:0x05, len: 1, cycles: 4, typ: Dec8(DstR8(B))   });
     op_table.add(Op { code:0x0C, len: 1, cycles: 4, typ: Inc8(C)   });
-    op_table.add(Op { code:0x0D, len: 1, cycles: 4, typ: Dec8(C)   });
+    op_table.add(Op { code:0x0D, len: 1, cycles: 4, typ: Dec8(DstR8(C))   });
     op_table.add(Op { code:0x14, len: 1, cycles: 4, typ: Inc8(D)   });
-    op_table.add(Op { code:0x15, len: 1, cycles: 4, typ: Dec8(D)   });
+    op_table.add(Op { code:0x15, len: 1, cycles: 4, typ: Dec8(DstR8(D))   });
     op_table.add(Op { code:0x1C, len: 1, cycles: 4, typ: Inc8(E)   });
-    op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: Dec8(E)   });
+    op_table.add(Op { code:0x1D, len: 1, cycles: 4, typ: Dec8(DstR8(E))   });
 
     op_table.add(Op { code:0x24, len: 1, cycles: 4, typ: Inc8(H)   });
-    op_table.add(Op { code:0x25, len: 1, cycles: 4, typ: Dec8(H)   });
+    op_table.add(Op { code:0x25, len: 1, cycles: 4, typ: Dec8(DstR8(H))   });
+    op_table.add(Op { code:0x35, len: 1, cycles: 12,typ: Dec8(AddrDst(HL))   });
     op_table.add(Op { code:0x2C, len: 1, cycles: 4, typ: Inc8(L)   });
-    op_table.add(Op { code:0x2D, len: 1, cycles: 4, typ: Dec8(L)   });
+    op_table.add(Op { code:0x2D, len: 1, cycles: 4, typ: Dec8(DstR8(L))   });
 
-    op_table.add(Op { code:0x3C, len: 1, cycles: 4, typ: Dec8(A)   });
-    op_table.add(Op { code:0x3D, len: 1, cycles: 4, typ: Dec8(A)   });
+    op_table.add(Op { code:0x3C, len: 1, cycles: 4, typ: Inc8(A)   });
+    op_table.add(Op { code:0x3D, len: 1, cycles: 4, typ: Dec8(DstR8(A))   });
 
 
     op_table.add(Op { code: 0xA0, len: 1, cycles: 4, typ: Math(And,DstR8(A),SrcR8(B)) });
@@ -1280,6 +1322,7 @@ fn make_op_table() -> OpTable {
     op_table.add(Op { code: 0x28, len: 2, cycles: 12, typ: Jump(RelativeCond(Zero(),    Im8())) });
     op_table.add(Op { code: 0x18, len: 2, cycles: 12, typ: Jump(Relative(Im8())) });
     op_table.add(Op { code: 0xE9, len: 1, cycles:  4, typ: Jump(Absolute(AddrSrc::Src16(HL)))});
+    op_table.add(Op { code: 0xCA, len: 3, cycles: 12, typ: Jump(AbsoluteCond(Zero(),AddrSrc::Imu16()) )});
 
 
     op_table.add(Op{code:0x17, len:1, cycles:4, typ: BitOp(BitOps::RLA())});
@@ -1326,9 +1369,12 @@ fn make_op_table() -> OpTable {
     }
 
     op_table.add(Op{ code: 0xCB_37,len:2, cycles:8,   typ: BitOp(SWAP(A))});
+    op_table.add(Op{ code: 0xCB_87,len:2, cycles:8,   typ: BitOp(RES(0,A))});
 
     op_table.add(Op{ code: 0x00CD, len:3, cycles: 24, typ: Call(CallU16())});
-    op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: Call(CallType::RET())});
+    op_table.add(Op{ code: 0x00CC, len: 3, cycles: 24, typ: Call(CallCondU16(Zero()))});
+    op_table.add(Op{ code: 0x00C8, len:1, cycles: 20, typ: Call(CallType::RetCond(Zero()))});
+    op_table.add(Op{ code: 0x00C9, len:1, cycles: 16, typ: Call(CallType::Ret())});
     op_table.add(Op{ code: 0x00CF, len:1, cycles: 16, typ: Jump(Restart(0x08))});
     op_table.add(Op{ code: 0x00DF, len:1, cycles: 16, typ: Jump(Restart(0x18))});
     op_table.add(Op{ code: 0x00EF, len:1, cycles: 16, typ: Jump(Restart(0x28))});
@@ -1341,6 +1387,9 @@ fn make_op_table() -> OpTable {
     op_table.add(Op{ code: 0x00D5, len:1, cycles: 16, typ: Call(Push(DE))});
     op_table.add(Op{ code: 0x00E1, len:1, cycles: 12, typ: Call(Pop(HL))});
     op_table.add(Op{ code: 0x00E5, len:1, cycles: 16, typ: Call(Push(HL))});
+    op_table.add(Op{ code: 0x00F1, len:1, cycles: 16, typ: Call(Pop(AF))});
+    op_table.add(Op{ code: 0x00F5, len:1, cycles: 16, typ: Call(Push(AF))});
+
     // op_table.add(Op{ code: 0x00F1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(AF))});
     // op_table.add(Op{ code: 0x00F5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(AF))});
 
