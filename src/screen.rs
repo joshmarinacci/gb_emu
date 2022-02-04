@@ -233,7 +233,7 @@ fn copy_texture(
     scale: f32,
     x: i32,
     y: i32,
-) {
+) -> Result<(),String>{
     canvas
         .with_texture_canvas(texture, |can| {
             for i in 0..bitmap.w {
@@ -254,5 +254,5 @@ fn copy_texture(
     let h = (scale * bitmap.h as f32).floor() as u32;
     let xx = (scale * x as f32).floor() as i32;
     let yy = (scale * y as f32).floor() as i32;
-    canvas.copy(texture, None, Rect::new(xx, yy, w, h));
+    canvas.copy(texture, None, Rect::new(xx, yy, w, h))
 }

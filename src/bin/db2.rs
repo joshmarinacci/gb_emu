@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
     gb.mmu.write8_IO(IORegister::LY,0x00);
     gb.mmu.write8_IO(IORegister::LYC,0x00);
-    let mut term = Term::stdout();
+    let term = Term::stdout();
 
 
     // fast forward by however much is specified
@@ -200,15 +200,15 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
         .interact()
         .unwrap();
     let range = &ranges[selection];
-    println!(
+    term.write_line(&format!(
         "chose range {} {:04x} len{:04x}",
         range.name, range.start, range.len
-    );
+    ))?;
     // println!("total memory len {}",gb.mmu.data.len());
     let data = gb.mmu.borrow_slice(range.start, (range.start + range.len));
     for (n, chunk) in data.chunks(32 * 2).enumerate() {
         let line_str: String = chunk.iter().map(|b| format!("{:02x}", b)).collect();
-        println!("{:04X} {}", (n * 32 * 2) + range.start, line_str);
+        term.write_line(&format!("{:04X} {}", (n * 32 * 2) + range.start, line_str))?;
     }
     Ok(())
 }
@@ -221,7 +221,7 @@ fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
         .items(&selections[..])
         .interact()
         .unwrap();
-    let sel = &selections[selection];
+    // let sel = &selections[selection];
     if selection == 0 {
         term.write_line("requesting a vblank interrupt")?;
         let mut val = gb.mmu.read8_IO(IORegister::IE);
@@ -232,7 +232,7 @@ fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
         val2 = val2 | 0b0000_0001;
         gb.mmu.write8_IO(IORegister::IF,val2);
 
-        term.write_line("will fire after the next instruction");
+        term.write_line("will fire after the next instruction")?;
     }
     Ok(())
 }
@@ -293,7 +293,7 @@ fn init_setup() -> Cli {
 
     thread::sleep(Duration::from_millis(100));
     println!("logging to log/output.log");
-    for i in 0..5 {
+    for _ in 0..5 {
         info!("        ");
     }
     info!("==============");

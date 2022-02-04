@@ -6,8 +6,7 @@ use crate::optest::GBState;
 
 pub struct PPU2 {
     pub backbuffer: Bitmap,
-    //::init(256,256),
-    vramdump: Bitmap, //::init(128,256),
+    vramdump: Bitmap,
     pub count:u32,
     pub entered_vram:bool,
 }
@@ -212,7 +211,7 @@ fn test_vblank() {
         0x20, 0xFC, // JR NZ e
         0xC3, 0x20, 0x00  // JP nn  Jump to x0020
     ].to_vec();
-    let n = copy_at(&mut rom,n,arr);
+    copy_at(&mut rom,n,arr);
 
     copy_at(&mut rom, 0x20,[
         0x00, //NO OP
@@ -233,7 +232,7 @@ fn test_vblank() {
 
     // at 100 do absolute jump to 0000
     // PC <- 0     JP nn          C3 00 00
-    let n = copy_at(&mut rom, 0x100,[0xC3, 0x00, 0x00].to_vec());
+    copy_at(&mut rom, 0x100,[0xC3, 0x00, 0x00].to_vec());
 
     print_ram(0x0000,&rom);
 

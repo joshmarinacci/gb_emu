@@ -1,8 +1,6 @@
 use crate::common::{get_bit_as_bool, set_bit};
 use log::info;
-use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 
 /*
 IO registers
@@ -192,7 +190,7 @@ pub struct MMU2 {
 
 impl MMU2 {
     pub(crate) fn init_empty(val: u8) -> MMU2 {
-        let mut data: Vec<u8> = vec![0x00; (0xFFFF + 1)];
+        let mut data: Vec<u8> = vec![0x00; 0xFFFF + 1];
         data.fill(val);
         MMU2 {
             cart_rom: vec![],
@@ -245,7 +243,7 @@ impl Joypad {
 
 impl MMU2 {
     pub fn init(rom: &[u8]) -> MMU2 {
-        let mut data: Vec<u8> = vec![0xD3; (0xFFFF + 1)];
+        let mut data: Vec<u8> = vec![0xD3; 0xFFFF + 1];
         data.fill(0xD3);
         //copy over the cart rom
         for i in 0..rom.len() {
@@ -383,7 +381,7 @@ impl MMU2 {
     }
     fn dma_transfer(&mut self, val: u8) {
         info!("DMA requested!");
-        let src_addr = ((val as u16) << 8);
+        let src_addr = (val as u16) << 8;
         let src_addr_end = src_addr + 0xA0;
         println!("transferring from src address {:04x}", src_addr);
         let dst_addr = 0xFE00;

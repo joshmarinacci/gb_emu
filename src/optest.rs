@@ -1,11 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::format;
 use std::fs;
 use std::path::{Path, PathBuf};
-
 use BinOp::{And, Or, Xor, SUB};
 use BitOps::{BIT, RES, SET};
-use CPURegister::CpuR8;
 use CallType::{CallU16, Pop, Push, Ret, RetCond};
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
@@ -14,15 +11,11 @@ use JumpType::{Absolute, Restart};
 use OpType::{BitOp, Call, Dec16, Dec8, DisableInterrupts, Inc16, Inc8, Jump, Load16, Math};
 use Src16::{Im16, SrcR16};
 use CPUR8::{R8A, R8B, R8C};
-
 use crate::common::{get_bit_as_bool, load_romfile, set_bit};
-use crate::cpu::Z80;
 use crate::cpu2::CPUR8::{R8D, R8E, R8H, R8L};
-use crate::cpu2::{CPURegister, CPU, CPUR16, CPUR8};
-use crate::mmu::{BGP, LCDC_LCDCONTROL, NR50_SOUND, NR52_SOUND};
+use crate::cpu2::{CPU, CPUR16, CPUR8};
 use crate::mmu2::{IORegister, MMU2};
-use crate::opcodes::{u8_as_i8, DoubleRegister, RegisterName};
-use crate::optest::AddrSrc::Imu16;
+use crate::opcodes::{u8_as_i8};
 use crate::optest::BinOp::Add;
 use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::CallType::{CallCondU16, RetI};
@@ -511,7 +504,7 @@ impl Src8 {
         match self {
             HiMemIm8() => {
                 let im = gb.mmu.read8(gb.cpu.get_pc() + 1);
-                let addr = (0xFF00 + im as u16);
+                let addr = 0xFF00 + im as u16;
                 let name = named_addr(addr, gb);
                 return format!("({}) is {:02x}", name, self.get_value(gb));
             }
@@ -647,7 +640,7 @@ impl GBState {
             //              op.to_asm(),
             //              self.cpu.reg_to_str());
             // }
-            self.clock += (op.cycles as u32);
+            self.clock += op.cycles as u32;
             self.count += 1;
         } else {
             println!("invalid op code: {:04x}", code);
@@ -914,7 +907,7 @@ impl GBState {
                     BinOp::SUB => {
                         let c = 0;
                         let r = a.wrapping_sub(b).wrapping_sub(c);
-                        let half = ((a & 0x0F) < (b & 0x0F) + c);
+                        let half = (a & 0x0F) < (b & 0x0F) + c;
                         let carry = (a as u16) < (b as u16) + (c as u16);
                         (r, true, half, carry)
                     }
@@ -2068,7 +2061,6 @@ fn test_hellogithub() {
             println!("stuck in an infinite loop. pc = {:04x}", gb.cpu.get_pc());
             gb.dump_current_state();
             panic!("stuck in an infinite loop");
-            break;
         }
 
         if gb.count % 20 == 0 {
@@ -2111,7 +2103,7 @@ fn test_bootrom() {
     let goal = 3_250_000;
     gb.set_pc(0);
 
-    let mut debug = false;
+    let debug = false;
     loop {
         if debug {
             println!("==========");
@@ -2343,7 +2335,7 @@ fn test_tetris() {
         // gb.clock += (op.cycles as u32);
         gb.count += 1;
         if gb.count % 500 == 0 {
-            let mut v = gb.mmu.read8_IO(IORegister::LY);
+            let v = gb.mmu.read8_IO(IORegister::LY);
             // println!("v is {}",v);
             let mut v2 = v;
             if v >= 154 {
