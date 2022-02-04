@@ -11,7 +11,7 @@ use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
 use Dst8::AddrDst;
 use JumpType::{Absolute, Restart};
-use OpType::{BitOp, Call, Dec16, Dec8, Inc16, Inc8, Jump, Load16, Math};
+use OpType::{BitOp, Call, Dec16, Dec8, DisableInterrupts, Inc16, Inc8, Jump, Load16, Math};
 use Src16::{Im16, SrcR16};
 use CPUR8::{R8A, R8B, R8C};
 
@@ -28,7 +28,7 @@ use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::CallType::{CallCondU16, RetI};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{AbsoluteCond, Relative, RelativeCond};
-use crate::optest::OpType::{Load8, Math16};
+use crate::optest::OpType::{Compare, EnableInterrupts, Load8, Math16};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 use crate::optest::R16::{AF, BC, DE, HL, SP};
 use crate::optest::R8::{A, B, C, D, E, H, L};
@@ -835,13 +835,13 @@ impl GBState {
                 // println!("Len is {}",self.len);
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
-            OpType::DisableInterrupts() => {
-                println!("disabling interrupts");
+            DisableInterrupts() => {
+                // println!("disabling interrupts");
                 self.cpu.IME = false;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             OpType::EnableInterrupts() => {
-                println!("enabling interrupts");
+                // println!("enabling interrupts");
                 self.cpu.IME = true;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
@@ -1101,7 +1101,7 @@ impl Op {
             },
             Load16(dst, src) => format!("LD {} {}", dst.name(), src.name()),
             OpType::Load8(dst, src) => format!("LD {}, {}", dst.name(), src.name()),
-            OpType::DisableInterrupts() => "DI".to_string(),
+            DisableInterrupts() => "DI".to_string(),
             OpType::EnableInterrupts() => "EI".to_string(),
             OpType::Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
             Inc16(dst) => format!("INC {}", dst.name()),
@@ -1147,7 +1147,7 @@ impl Op {
             },
             Load8(dst, src) => format!("LD {} <- {}", dst.real(gb), src.real(gb)),
             Load16(dst, src) => format!("LD {} <- {}", dst.real(gb), src.real(gb)),
-            OpType::DisableInterrupts() => format!("DI"),
+            DisableInterrupts() => format!("DI"),
             OpType::EnableInterrupts() => format!("EI"),
             OpType::Compare(dst, src) => format!("CP {}, {}", dst.real(gb), src.real(gb)),
             Inc16(dst) => format!("INC {}", dst.get_value(gb)),
@@ -1222,6 +1222,10 @@ impl OpTable {
     fn add(&mut self, op: Op) {
         self.inserto(op.code, op);
     }
+    pub(crate) fn add_op(&mut self, code: u16, len: u16, cycles: u16, typ: OpType) {
+        self.inserto(code,Op{ code, len, cycles, typ });
+    }
+
     fn load8(&mut self, code: u16, dst: Dst8, src: Src8) {
         let (mut len, mut cycles) = match src {
             SrcR8(_) => (1, 4),
@@ -1380,179 +1384,40 @@ fn make_op_table() -> OpTable {
     op_table.load8(0x22, Dst8::MemWithInc(HL), SrcR8(A));
     op_table.load8(0x32, Dst8::MemWithDec(HL), SrcR8(A));
 
-    op_table.add(Op {
-        code: 0xF3,
-        len: 1,
-        cycles: 4,
-        typ: OpType::DisableInterrupts(),
-    });
-    op_table.add(Op {
-        code: 0xFE,
-        len: 2,
-        cycles: 8,
-        typ: OpType::Compare(DstR8(A), Im8()),
-    });
-    op_table.add(Op {
-        code: 0xBE,
-        len: 1,
-        cycles: 8,
-        typ: OpType::Compare(DstR8(A), Mem(HL)),
-    });
-    op_table.add(Op {
-        code: 0xFB,
-        len: 1,
-        cycles: 4,
-        typ: OpType::EnableInterrupts(),
-    });
+    op_table.add_op(0xF3,1,4,DisableInterrupts());
+    op_table.add_op(0xFE,2,8,Compare(DstR8(A), Im8()));
+    op_table.add_op(0xBE,1,8,Compare(DstR8(A), Mem(HL)));
+    op_table.add_op(0xFB,1,4,EnableInterrupts());
 
-    op_table.add(Op {
-        code: 0x03,
-        len: 1,
-        cycles: 8,
-        typ: Inc16(BC),
-    });
-    op_table.add(Op {
-        code: 0x13,
-        len: 1,
-        cycles: 8,
-        typ: Inc16(DE),
-    });
-    op_table.add(Op {
-        code: 0x23,
-        len: 1,
-        cycles: 8,
-        typ: Inc16(HL),
-    });
-    op_table.add(Op {
-        code: 0x33,
-        len: 1,
-        cycles: 8,
-        typ: Inc16(SP),
-    });
+    op_table.add_op(0x03,1,8,Inc16(BC));
+    op_table.add_op(0x13,1,8,Inc16(DE));
+    op_table.add_op(0x23,1,8,Inc16(HL));
+    op_table.add_op(0x33,1,8,Inc16(SP));
 
-    op_table.add(Op {
-        code: 0x0B,
-        len: 1,
-        cycles: 8,
-        typ: Dec16(BC),
-    });
-    op_table.add(Op {
-        code: 0x1B,
-        len: 1,
-        cycles: 8,
-        typ: Dec16(DE),
-    });
-    op_table.add(Op {
-        code: 0x2B,
-        len: 1,
-        cycles: 8,
-        typ: Dec16(HL),
-    });
-    op_table.add(Op {
-        code: 0x3B,
-        len: 1,
-        cycles: 8,
-        typ: Dec16(SP),
-    });
+    op_table.add_op(0x0B,1,8,Dec16(BC));
+    op_table.add_op(0x1B,1,8,Dec16(DE));
+    op_table.add_op(0x2B,1,8,Dec16(HL));
+    op_table.add_op(0x3B,1,8,Dec16(SP));
 
-    op_table.add(Op {
-        code: 0x04,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(B)),
-    });
-    op_table.add(Op {
-        code: 0x05,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(B)),
-    });
-    op_table.add(Op {
-        code: 0x0C,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(C)),
-    });
-    op_table.add(Op {
-        code: 0x0D,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(C)),
-    });
-    op_table.add(Op {
-        code: 0x14,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(D)),
-    });
-    op_table.add(Op {
-        code: 0x15,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(D)),
-    });
-    op_table.add(Op {
-        code: 0x1C,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(E)),
-    });
-    op_table.add(Op {
-        code: 0x1D,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(E)),
-    });
+    op_table.add_op(0x04,1,4,Inc8(DstR8(B)));
+    op_table.add_op(0x05,1,4,Dec8(DstR8(B)));
+    op_table.add_op(0x0C,1,4,Inc8(DstR8(C)));
+    op_table.add_op(0x0D,1,4,Dec8(DstR8(C)));
 
-    op_table.add(Op {
-        code: 0x24,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(H)),
-    });
-    op_table.add(Op {
-        code: 0x25,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(H)),
-    });
-    op_table.add(Op {
-        code: 0x34,
-        len: 1,
-        cycles: 12,
-        typ: Inc8(AddrDst(HL)),
-    });
-    op_table.add(Op {
-        code: 0x35,
-        len: 1,
-        cycles: 12,
-        typ: Dec8(AddrDst(HL)),
-    });
-    op_table.add(Op {
-        code: 0x2C,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(L)),
-    });
-    op_table.add(Op {
-        code: 0x2D,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(L)),
-    });
+    op_table.add_op(0x14,1,4,Inc8(DstR8(D)));
+    op_table.add_op(0x15,1,4,Dec8(DstR8(D)));
+    op_table.add_op(0x1C,1,4,Inc8(DstR8(E)));
+    op_table.add_op(0x1D,1,4,Dec8(DstR8(E)));
 
-    op_table.add(Op {
-        code: 0x3C,
-        len: 1,
-        cycles: 4,
-        typ: Inc8(DstR8(A)),
-    });
-    op_table.add(Op {
-        code: 0x3D,
-        len: 1,
-        cycles: 4,
-        typ: Dec8(DstR8(A)),
-    });
+    op_table.add_op(0x24,1,4,Inc8(DstR8(H)));
+    op_table.add_op(0x25,1,4,Dec8(DstR8(H)));
+    op_table.add_op(0x2C,1,4,Inc8(DstR8(L)));
+    op_table.add_op(0x2D,1,4,Dec8(DstR8(L)));
+
+    op_table.add_op(0x34,1,12,Inc8(AddrDst(HL)));
+    op_table.add_op(0x35,1,12,Dec8(AddrDst(HL)));
+    op_table.add_op(0x3C,1,4,Inc8(DstR8(A)));
+    op_table.add_op(0x3D,1,4,Dec8(DstR8(A)));
 
     op_table.add(Op {
         code: 0x80,
@@ -2502,7 +2367,7 @@ fn test_tetris() {
         "hopefully we reached count = {}  really = {} ",
         goal, gb.count
     );
-    assert_eq!(gb.mmu.read8(0x0100), 0xF3);
+    assert_eq!(gb.mmu.read8(0x0101), 0xC3);
     // assert_eq!(gb.count>=goal,true);
 }
 
