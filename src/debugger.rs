@@ -294,16 +294,16 @@ pub fn start_debugger(
         }
     });
     if screen_settings.enabled {
-        let mut screen_obj = Screen::init(screen_settings);
-        loop {
-            if !screen_obj.process_input(&to_cpu) {
-                break;
-            }
-            if let Ok(str) = receive_screen.try_recv() {
-                screen_obj.update_screen(&shared_screen_state);
-                to_cpu.send(InputEvent::Stop());
-            }
-        }
+        // let mut screen_obj = Screen::init(screen_settings, );
+        // loop {
+        //     if !screen_obj.process_input(&to_cpu) {
+        //         break;
+        //     }
+        //     if let Ok(str) = receive_screen.try_recv() {
+        //         // screen_obj.update_screen(&shared_screen_state);
+        //         to_cpu.send(InputEvent::Stop());
+        //     }
+        // }
     } else {
         hand.join();
     }

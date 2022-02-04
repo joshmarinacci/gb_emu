@@ -1,12 +1,18 @@
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::sync::{Arc, Mutex};
 use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram, set_bit};
 use crate::mmu2::{IORegister, MMU2};
 use crate::optest::GBState;
 
-pub struct PPU2 {
+pub struct SSS {
+    pub SCX: u8,
+    pub SCY: u8,
     pub backbuffer: Bitmap,
-    vramdump: Bitmap,
+    pub vramdump: Bitmap,
+}
+pub struct PPU2 {
+    pub sss: Arc<Mutex<SSS>>,
     pub count:u32,
     pub entered_vram:bool,
 }
@@ -47,13 +53,20 @@ impl PPU2 {
 impl PPU2 {
     pub fn init() -> PPU2 {
         PPU2 {
-            backbuffer: Bitmap::init(256, 256),
-            vramdump: Bitmap::init(128, 256),
+            sss: Arc::new(Mutex::new(SSS {
+                SCX: 0,
+                SCY: 0,
+                backbuffer: Bitmap::init(256, 256),
+                vramdump: Bitmap::init(128, 256),
+            })),
             count: 0,
             entered_vram: false
         }
     }
     pub fn draw_full_screen(&mut self, mmu: &MMU2) {
+        let mut sss = self.sss.lock().unwrap();
+        sss.SCX = mmu.read8_IO(IORegister::SCX);
+        sss.SCY = mmu.read8_IO(IORegister::SCY);
         // let window_enabled = get_bit_as_bool(lcdc, 5);
         let sprites_enabled = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 1);
         // let sprites_enabled = true;
@@ -87,7 +100,7 @@ impl PPU2 {
         //
         // println!("signed mode = {}", !unsigned_mode);
         if bg_enabled {
-            let img = &mut self.backbuffer;
+            let img = &mut sss.backbuffer;
             let sx = 0; //mmu.hardware.SCX.value as usize;
             let sy = 0; //mmu.hardware.SCY.value as usize;
             let spacing = 8;
@@ -138,6 +151,31 @@ impl PPU2 {
         //     }
         // }
         // }
+
+        {
+            // self.draw_vram_tiledata(mmu);
+            let tile_data = mmu.borrow_slice(0x8000,0x9800);
+            // let tile_data = &mmu.data[0x8000..0x97FF];
+            let img = &mut sss.vramdump;
+            // println!("drawing tile data {}",tile_data.len());
+            for (n, tile) in tile_data.chunks_exact(16).enumerate() {
+                // println!("tile num {}",n);
+                let x = (n % 16) * 8;
+                let y = (n / 16) * 8;
+                for (line, row) in tile.chunks_exact(2).enumerate() {
+                    for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
+                        let (r, g, b) = match color {
+                            0 => (255, 255, 255),
+                            1 => (220, 220, 220),
+                            2 => (170, 170, 170),
+                            3 => (50, 50, 50),
+                            _ => (255, 0, 255),
+                        };
+                        img.set_pixel_rgb((x + 7 - n) as i32, (y + line) as i32, r, g, b);
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -10,6 +10,7 @@ use sdl2::Sdl;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use crate::ppu2::SSS;
 
 #[derive(Debug)]
 pub struct ScreenSettings {
@@ -24,10 +25,11 @@ pub struct Screen {
     context: Sdl,
     pub scale: f32,
     pub tex2: Texture,
+    pub sss: Arc<Mutex<SSS>>,
 }
 
 impl Screen {
-    pub(crate) fn process_input(&self, to_cpu: &Sender<InputEvent>) -> bool {
+    pub fn process_input(&self, to_cpu: &Sender<InputEvent>) -> bool {
         // println!("screen: processsing input");
         loop {
             if let Some(event) = self.context.event_pump().unwrap().poll_event() {
@@ -163,7 +165,7 @@ impl Screen {
 }
 
 impl Screen {
-    pub fn init(settings: &ScreenSettings) -> Screen {
+    pub fn init(settings: &ScreenSettings, sss: Arc<Mutex<SSS>>) -> Screen {
         println!("using scale {}", settings.scale);
         let win_w: u32 = (settings.scale * (256.0 + 128.0)).floor() as u32;
         let win_h: u32 = (settings.scale * 256.0).floor() as u32;
@@ -197,17 +199,17 @@ impl Screen {
             texture: tex,
             tex2: tex2,
             scale: settings.scale,
+            sss,
         }
     }
-    pub fn update_screen(&mut self, screenstate_mutex: &Arc<Mutex<ScreenState>>) {
-        //handle any pending inputs
+    pub fn update_screen(&mut self,) {
         {
-            let screenstate = screenstate_mutex.lock().unwrap();
-            // println!("current scanline {}", screenstate.current_scanline);
+            let sss = self.sss.lock().unwrap();
+            println!("drawing at {}",sss.SCY);
             copy_texture(
                 &mut self.canvas,
                 &mut self.texture,
-                &screenstate.backbuffer,
+                &sss.backbuffer,
                 self.scale,
                 0,
                 0,
@@ -215,7 +217,7 @@ impl Screen {
             copy_texture(
                 &mut self.canvas,
                 &mut self.tex2,
-                &screenstate.vramdump,
+                &sss.vramdump,
                 self.scale,
                 256,
                 0,

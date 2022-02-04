@@ -8,10 +8,13 @@ use log4rs::config::{Appender, Root};
 use log4rs::Config;
 use std::io::Result;
 use std::path::PathBuf;
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
+use gb_emu::common::InputEvent;
 use gb_emu::mmu2::IORegister;
+use gb_emu::screen::{Screen, ScreenSettings};
 
 /*
 
@@ -41,7 +44,7 @@ always show the status of the current registers:
     IO regs: LCDC, STAT, BGP, LY, SCX, SCY, IE, IME,
 
  */
-fn main() -> Result<()> {
+fn main() -> Result<()>{
     let args = init_setup();
     if let None = args.romfile {
         println!("you must specify a rom file");
@@ -51,6 +54,44 @@ fn main() -> Result<()> {
     println!("loading the romfile {:?}", pth.as_path());
     let str = pth.to_str().unwrap().to_string();
     let mut gb = setup_test_rom(&str).unwrap();
+    let sss = gb.ppu.sss.clone();
+
+
+    let settings = ScreenSettings {
+        x: args.x,
+        y: args.y,
+        scale: args.scale,
+        enabled: args.screen,
+    };
+
+    let (to_screen, receive_screen) = channel::<String>();
+    let (to_cpu, receive_cpu) = channel::<InputEvent>();
+
+    let hand = thread::spawn(move || {
+        start(&mut gb, args.fastforward, to_screen).unwrap();
+    });
+
+    if settings.enabled {
+        let mut screen_obj = Screen::init(&settings,sss);
+        screen_obj.update_screen();
+        loop {
+            if !screen_obj.process_input(&to_cpu) {
+                break;
+            }
+            // screen_obj.update_screen();
+            if let Ok(str) = receive_screen.try_recv() {
+                println!("screen got message {}",str);
+                screen_obj.update_screen();
+            }
+        }
+    } else {
+        hand.join().unwrap();
+    }
+
+    Ok(())
+}
+
+fn start(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(IORegister::LCDC,0x00);
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
@@ -60,7 +101,7 @@ fn main() -> Result<()> {
 
 
     // fast forward by however much is specified
-    gb.execute_n(args.fastforward as usize);
+    gb.execute_n(fastforward as usize);
 
     loop {
         let commands = Style::new().reverse();
@@ -126,13 +167,17 @@ fn main() -> Result<()> {
             'u' => gb.execute_n(256),
             'U' => gb.execute_n(256 * 16),
             'm' => dump_memory(&gb, &term)?,
-            'i' => request_interrupt(&mut gb, &term)?,
-            'v' => dump_vram_png(&mut gb, &term)?,
+            'i' => request_interrupt(gb, &term)?,
+            'v' => dump_vram_png(gb, &term)?,
             'g' => gb.execute_n(100_000_000),
             'V' => gb.run_to_vblank(),
             'q' => break,
             _ => println!("??"),
         };
+
+        if gb.ppu.entered_vram {
+            to_screen.send(String::from("redraw"));
+        }
     }
     Ok(())
 }
@@ -140,7 +185,10 @@ fn main() -> Result<()> {
 fn dump_vram_png(gb: &mut GBState, term: &Term) -> Result<()> {
     term.write_line("drawing to vram.png")?;
     gb.draw_full_screen();
-    gb.ppu.backbuffer.write_to_file("vram.png");
+    {
+        let sss = gb.ppu.sss.lock().unwrap();
+        sss.backbuffer.write_to_file("vram.png");
+    }
     Ok(())
 }
 
@@ -254,14 +302,14 @@ struct Cli {
     // verbose:bool,
     // #[structopt(long, parse(try_from_str = parse_hex), default_value="0")]
     // breakpoint:u16,
-    // #[structopt(long)]
-    // screen:bool,
-    // #[structopt(long, default_value="100")]
-    // x:i32,
-    // #[structopt(long, default_value="100")]
-    // y:i32,
-    // #[structopt(long, default_value="1")]
-    // scale:f32,
+    #[structopt(long)]
+    screen:bool,
+    #[structopt(long, default_value="100")]
+    x:i32,
+    #[structopt(long, default_value="100")]
+    y:i32,
+    #[structopt(long, default_value="1")]
+    scale:f32,
 }
 
 fn init_setup() -> Cli {
