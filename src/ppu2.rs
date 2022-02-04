@@ -155,21 +155,25 @@ fn test_vblank() {
 
     // put 40 into memory
     // A <- 40               LD A,n        3E 40
-    // (hi + 60) <- A        LDH (n), A    E0 60
-    let arr = [0x3E, 0x40, 0xE0, 0x60].to_vec();
+    // (hi + 80) <- A        LDH (n), A    E0 80
+    let arr = [
+        0x3E, 0x40,  // LD A,n
+        0xE0, 0x80,  // LDH (n), A
+        0xFB,
+    ].to_vec();
     let n = copy_at(&mut rom, n, arr);
 
 
     // spin loop that waits for value to become 41
-    // A <- (hi + 60)        LDH A,n       F0 60
+    // A <- (hi + 80)        LDH A,n       F0 80
     // A ==? 41              CP 41         FE 41
     // if not zero, jump back 5   JR NZ e  20 Fc
     // jump absolute to 20   JP 20      C3 20 00
     let arr = [
-        0xF0, 0x60, // LDH A, n
+        0xF0, 0x80, // LDH A, n
         0xFE, 0x41, // CP A, 41
         0x20, 0xFC, // JR NZ e
-        0xC3, 0x20, 0x00
+        0xC3, 0x20, 0x00  // JP nn  Jump to x0020
     ].to_vec();
     let n = copy_at(&mut rom,n,arr);
 
@@ -177,11 +181,11 @@ fn test_vblank() {
 
     // at 0x40
     // A <- 41            LD A,n        3E 41
-    // (hi + 60) <- A     LDH (n),A     E0 60
+    // (hi + 80) <- A     LDH (n),A     E0 80
     // return             RETI          D9
     copy_at(&mut rom, 0x40, [
         0x3E, 0x41, // LD A, 41
-        0xE0, 0x60,  //LDH (hi+60),A
+        0xE0, 0x80,  //LDH (hi+80),A
         0xD9,  // RETI
     ].to_vec());
 

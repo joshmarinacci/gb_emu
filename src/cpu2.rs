@@ -20,6 +20,7 @@ pub struct CPU {
     l: u8,
     pub r: Flags,
     pub recent_pcs: VecDeque<u16>,
+    pub IME:bool,
 }
 
 impl CPU {
@@ -158,6 +159,7 @@ impl CPU {
                 subn: false,
             },
             recent_pcs: VecDeque::new(),
+            IME: false
         }
     }
     pub fn get_pc(&self) -> u16 {

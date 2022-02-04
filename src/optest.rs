@@ -25,7 +25,7 @@ use crate::opcodes::{u8_as_i8, DoubleRegister, RegisterName};
 use crate::optest::AddrSrc::Imu16;
 use crate::optest::BinOp::Add;
 use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
-use crate::optest::CallType::CallCondU16;
+use crate::optest::CallType::{CallCondU16, RetI};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{AbsoluteCond, Relative, RelativeCond};
 use crate::optest::OpType::{Load8, Math16};
@@ -143,6 +143,7 @@ enum CallType {
     CallU16(),
     CallCondU16(Cond),
     Ret(),
+    RetI(),
     RetCond(Cond),
     Push(R16),
     Pop(R16),
@@ -623,7 +624,20 @@ impl GBState {
                          self.mmu.read8(pc + 0), self.mmu.read8(pc + 1), self.mmu.read8(pc + 2)
                 );
             }
+
+            // perform the actual operation
             self.stuff(&op);
+
+            //check for interrupts
+            if self.cpu.IME {
+                let vblank_enabled = get_bit_as_bool(self.mmu.read8_IO(IORegister::IE),0);
+                let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(IORegister::IF),0);
+                println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
+                if vblank_requested && vblank_enabled {
+                    self.service_interrupt();
+                }
+            }
+
             // if self.debug {
             //     println!("AFTER:  PC {:04x}  op:{:04x} {:?}  reg:{}",
             //              self.cpu.get_pc(),
@@ -660,7 +674,33 @@ impl GBState {
             self.execute();
         }
     }
+    fn service_interrupt(&mut self) {
+        //if IME is set and IE flags are set
+        //reset the IEM flag to prevent other interrupts
+        self.cpu.IME = false;
+        //push PC onto stack
+        self.cpu.dec_sp();
+        self.cpu.dec_sp();
+        self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
+
+        //jump to start of interrupt
+        self.set_pc(VBLANK_HANDLER_ADDRESS);
+
+        //reset the IF register
+        let mut val2 = self.mmu.read8_IO(IORegister::IF);
+        val2 = set_bit(val2,0,false);
+        self.mmu.write8_IO(IORegister::IF,val2);
+
+        //the RET routine pops the PC back off the stack
+        //RETI does the same but with enabling interrupts again
+        println!("jumping to vertical blank interrupt;");
+    }
 }
+
+
+const VBLANK_HANDLER_ADDRESS:u16 = 0x40;
+
+
 
 impl GBState {
     pub(crate) fn stuff(&mut self, op: &Op) {
@@ -744,6 +784,13 @@ impl GBState {
                         self.cpu.inc_sp();
                         self.set_pc(addr);
                     }
+                    RetI() => {
+                        let addr = self.mmu.read16(self.cpu.get_sp());
+                        self.cpu.inc_sp();
+                        self.cpu.inc_sp();
+                        self.set_pc(addr);
+                        self.cpu.IME = true;
+                    }
                     RetCond(cond) => {
                         if cond.get_value(self) {
                             let addr = self.mmu.read16(self.cpu.get_sp());
@@ -790,11 +837,13 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             OpType::DisableInterrupts() => {
-                println!("pretending to disable interrupts");
+                println!("disabling interrupts");
+                self.cpu.IME = false;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             OpType::EnableInterrupts() => {
-                println!("pretending to enable interrupts");
+                println!("enabling interrupts");
+                self.cpu.IME = true;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             OpType::Compare(dst, src) => {
@@ -1083,6 +1132,7 @@ impl Op {
                 Ret() => format!("RET"),
                 CallCondU16(cond) => format!("CALL {},u16", cond.name()),
                 RetCond(cond) => format!("RET {}", cond.name()),
+                RetI() => format!("RETI"),
             },
         }
     }
@@ -1136,6 +1186,7 @@ impl Op {
                     cond.get_value(gb),
                     gb.mmu.read16(gb.cpu.get_sp())
                 ),
+                RetI() => format!("RET back to {:04X}", gb.mmu.read16(gb.cpu.get_sp())),
             },
         }
     }
@@ -1954,6 +2005,12 @@ fn make_op_table() -> OpTable {
         len: 1,
         cycles: 16,
         typ: Call(Ret()),
+    });
+    op_table.add(Op {
+        code: 0x00D9,
+        len: 1,
+        cycles: 16,
+        typ: Call(RetI()),
     });
     op_table.add(Op {
         code: 0x00CC,

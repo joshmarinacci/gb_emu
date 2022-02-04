@@ -23,7 +23,6 @@ pub enum IORegister {
     TIMA,
     TMA,
     TAC,
-    IF,
     NR10,
     NR11,
     NR12,
@@ -57,7 +56,8 @@ pub enum IORegister {
     OBP1,
     WY,
     WX,
-    IE,
+    IE, // Interrupt Enable R/W
+    IF, // Interrupt Flag   R/W
     DISABLE_BOOTROM,
 }
 
@@ -79,6 +79,7 @@ impl IORegister {
             // IORegister::OBP1 => 0xFF49,
             // IORegister::WY   => 0xFF4A,
             // IORegister::WX   => 0xFF4B,
+            OxFF0F => Some(IORegister::IF),
             0xFFFF => Some(IORegister::IE),
             _ => None,
         }
@@ -304,7 +305,7 @@ impl MMU2 {
             self.mem[addr as usize]
         }
     }
-    pub(crate) fn read8_IO(&self, reg: IORegister) -> u8 {
+    pub fn read8_IO(&self, reg: IORegister) -> u8 {
         self.read8(reg.get_addr())
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
@@ -351,7 +352,7 @@ impl MMU2 {
             self.mem[addr as usize] = val;
         }
     }
-    pub(crate) fn write8_IO(&mut self, reg: IORegister, value: u8) {
+    pub fn write8_IO(&mut self, reg: IORegister, value: u8) {
         self.mem[reg.get_addr() as usize] = value;
     }
     pub fn read16(&self, addr: u16) -> u16 {

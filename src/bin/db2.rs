@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
+use gb_emu::mmu2::IORegister;
 
 /*
 
@@ -69,9 +70,11 @@ fn main() -> Result<()> {
             gb.clock,
             gb.count
         ))?;
+        //registers
         let reg_style = Style::new().bg(Color::White).red().underlined();
         let regs = gb.cpu.reg_to_str();
         term.write_line(&reg_style.apply_to(regs).to_string())?;
+        //flags
         let flag_style = Style::new().blue();
         term.write_line(&format!(
             "flags Z:{}   N:{}  H:{}  C:{}",
@@ -79,6 +82,11 @@ fn main() -> Result<()> {
             flag_style.apply_to(gb.cpu.r.subn),
             flag_style.apply_to(gb.cpu.r.half),
             flag_style.apply_to(gb.cpu.r.carry)
+        ))?;
+        //IO status bits
+        term.write_line(&format!(
+            "IME = {}",
+            gb.cpu.IME,
         ))?;
 
         //current instruction
@@ -105,6 +113,7 @@ fn main() -> Result<()> {
             'u' => gb.execute_n(256),
             'U' => gb.execute_n(256 * 16),
             'm' => dump_memory(&gb, &term)?,
+            'i' => request_interrupt(&mut gb, &term)?,
             'v' => dump_vram_png(&mut gb, &term)?,
             'g' => gb.execute_n(100_000_000),
             'q' => break,
@@ -186,6 +195,30 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
     for (n, chunk) in data.chunks(32 * 2).enumerate() {
         let line_str: String = chunk.iter().map(|b| format!("{:02x}", b)).collect();
         println!("{:04X} {}", (n * 32 * 2) + range.start, line_str);
+    }
+    Ok(())
+}
+
+fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
+    let selections = ["vblank"].to_vec();
+    let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("request interrupt")
+        .default(0)
+        .items(&selections[..])
+        .interact()
+        .unwrap();
+    let sel = &selections[selection];
+    if selection == 0 {
+        term.write_line("requesting a vblank interrupt")?;
+        let mut val = gb.mmu.read8_IO(IORegister::IE);
+        val = val | 0b0000_0001; //turn on the vblank interrupt
+        gb.mmu.write8_IO(IORegister::IE,val);
+
+        let mut val2 = gb.mmu.read8_IO(IORegister::IF);
+        val2 = val2 | 0b0000_0001;
+        gb.mmu.write8_IO(IORegister::IF,val2);
+
+        term.write_line("will fire after the next instruction");
     }
     Ok(())
 }
