@@ -21,7 +21,7 @@ use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::CallType::{CallCondU16, RetI};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{AbsoluteCond, Relative, RelativeCond};
-use crate::optest::OpType::{Compare, EnableInterrupts, Load8, Math16};
+use crate::optest::OpType::{Compare, EnableInterrupts, Halt, Load8, Math16};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 use crate::optest::R16::{AF, BC, DE, HL, SP};
 use crate::optest::R8::{A, B, C, D, E, H, L};
@@ -151,6 +151,7 @@ enum OpType {
     Load8(Dst8, Src8),
     DisableInterrupts(),
     EnableInterrupts(),
+    Halt(),
     Compare(Dst8, Src8),
     // Xor(Dst8, Src8),
     // Or(Dst8, Src8),
@@ -833,12 +834,15 @@ impl GBState {
                 self.cpu.IME = false;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
-            OpType::EnableInterrupts() => {
+            EnableInterrupts() => {
                 // println!("enabling interrupts");
                 self.cpu.IME = true;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
-            OpType::Compare(dst, src) => {
+            Halt() => {
+                println!("pretending to halt");
+            }
+            Compare(dst, src) => {
                 let src_v = src.get_value(self);
                 let dst_v = dst.get_value(self);
 
@@ -1095,8 +1099,9 @@ impl Op {
             Load16(dst, src) => format!("LD {} {}", dst.name(), src.name()),
             OpType::Load8(dst, src) => format!("LD {}, {}", dst.name(), src.name()),
             DisableInterrupts() => "DI".to_string(),
-            OpType::EnableInterrupts() => "EI".to_string(),
-            OpType::Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
+            EnableInterrupts() => "EI".to_string(),
+            Halt() => "HALT".to_string(),
+            Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
             Inc16(dst) => format!("INC {}", dst.name()),
             Dec16(dst) => format!("DEC {}", dst.name()),
             Inc8(dst) => format!("INC {}", dst.name()),
@@ -1141,8 +1146,9 @@ impl Op {
             Load8(dst, src) => format!("LD {} <- {}", dst.real(gb), src.real(gb)),
             Load16(dst, src) => format!("LD {} <- {}", dst.real(gb), src.real(gb)),
             DisableInterrupts() => format!("DI"),
-            OpType::EnableInterrupts() => format!("EI"),
-            OpType::Compare(dst, src) => format!("CP {}, {}", dst.real(gb), src.real(gb)),
+            EnableInterrupts() => format!("EI"),
+            Halt() => format!("HALT"),
+            Compare(dst, src) => format!("CP {}, {}", dst.real(gb), src.real(gb)),
             Inc16(dst) => format!("INC {}", dst.get_value(gb)),
             Dec16(dst) => format!("DEC {}", dst.get_value(gb)),
             Inc8(dst) => format!("INC {}", dst.get_value(gb)),
@@ -1381,6 +1387,7 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0xFE,2,8,Compare(DstR8(A), Im8()));
     op_table.add_op(0xBE,1,8,Compare(DstR8(A), Mem(HL)));
     op_table.add_op(0xFB,1,4,EnableInterrupts());
+    op_table.add_op(0x76,1,16, Halt());
 
     op_table.add_op(0x03,1,8,Inc16(BC));
     op_table.add_op(0x13,1,8,Inc16(DE));
