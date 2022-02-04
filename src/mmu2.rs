@@ -79,7 +79,7 @@ impl IORegister {
             // IORegister::OBP1 => 0xFF49,
             // IORegister::WY   => 0xFF4A,
             // IORegister::WX   => 0xFF4B,
-            OxFF0F => Some(IORegister::IF),
+            0xFF0F => Some(IORegister::IF),
             0xFFFF => Some(IORegister::IE),
             _ => None,
         }
@@ -285,7 +285,7 @@ impl MMU2 {
                             val = set_bit(val, 1, !self.joypad.b);
                             val = set_bit(val, 2, !self.joypad.select);
                             val = set_bit(val, 3, !self.joypad.start);
-                            println!("reading joypad: {:02x}", val);
+                            // println!("reading joypad: {:02x}", val);
                             val
                         }
                         JoypadReadMode::Direction() => {
@@ -294,7 +294,7 @@ impl MMU2 {
                             val = set_bit(val, 1, !self.joypad.left);
                             val = set_bit(val, 2, !self.joypad.up);
                             val = set_bit(val, 3, !self.joypad.down);
-                            println!("reading joypad: {:02x}", val);
+                            // println!("reading joypad: {:02x}", val);
                             val
                         }
                     }
@@ -310,7 +310,7 @@ impl MMU2 {
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
         if let Some(en) = IORegister::match_address(addr) {
-            println!("reg {:?} <- {:02x}", en, val);
+            // println!("reg {:?} <- {:02x}", en, val);
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
@@ -341,7 +341,11 @@ impl MMU2 {
                 IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
                 IORegister::IE => {
-                    println!("turnning interrupts back on?");
+                    // println!("changing interrupts: {:08b}",val);
+                    // let mut val2 = gb.mmu.read8_IO(IORegister::IF);
+                    // val2 = val2 | 0b0000_0001;
+                    // gb.mmu.write8_IO(IORegister::IF,val2);
+                    self.mem[addr as usize] = val;
                 }
                 _ => {
                     //for registers we don't handle yet, just write as normal
@@ -352,7 +356,18 @@ impl MMU2 {
             self.mem[addr as usize] = val;
         }
     }
+    pub(crate) fn write8_IO_raw(&mut self, reg: IORegister, value: u8) {
+        self.mem[reg.get_addr() as usize] = value;
+    }
     pub fn write8_IO(&mut self, reg: IORegister, value: u8) {
+        match reg {
+            IORegister::IE => {
+                // println!("changing interrupts: {:08b}", value);
+                self.mem[reg.get_addr() as usize] = value;
+                return;
+            }
+            _ => {}
+        };
         self.mem[reg.get_addr() as usize] = value;
     }
     pub fn read16(&self, addr: u16) -> u16 {

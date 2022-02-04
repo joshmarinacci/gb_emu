@@ -1,6 +1,6 @@
 use std::fs::OpenOptions;
 use std::io::Write;
-use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram};
+use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram, set_bit};
 use crate::mmu2::{IORegister, MMU2};
 use crate::optest::GBState;
 
@@ -8,6 +8,41 @@ pub struct PPU2 {
     pub backbuffer: Bitmap,
     //::init(256,256),
     vramdump: Bitmap, //::init(128,256),
+    pub count:u32,
+    pub entered_vram:bool,
+}
+
+impl PPU2 {
+    pub(crate) fn update(&mut self, mmu:&mut MMU2) {
+        self.entered_vram = false;
+        self.count += 1;
+        if self.count % 500 == 0 {
+            // update the scanline
+            let  ly1 = mmu.read8_IO(IORegister::LY);
+            // println!("v is {}",v);
+            let mut ly2 = ly1+1;
+            if ly1 >= 154 {
+                ly2 = 0;
+            }
+            // println!("updating the scan line {} -> {}",ly1, ly2);
+
+            // if entering vblank
+            if ly1 == 143 && ly2 == 144 {
+                // println!("Just entered vblank. start mode 1. fire interrupt.");
+                let val = mmu.read8_IO(IORegister::IF);
+                let val2 = set_bit(val,0,true);
+                mmu.write8_IO(IORegister::IF,val2);
+                mmu.write8_IO(IORegister::IE,0xFF);
+                self.entered_vram = true;
+            }
+            // if exiting vblank
+            if ly1 == 154 && ly2 == 0 {
+                // println!("Just finished vblank. go back to mode 2. drawing screen.");
+                self.draw_full_screen(mmu);
+            }
+            mmu.write8_IO(IORegister::LY,ly2);
+        }
+    }
 }
 
 impl PPU2 {
@@ -15,6 +50,8 @@ impl PPU2 {
         PPU2 {
             backbuffer: Bitmap::init(256, 256),
             vramdump: Bitmap::init(128, 256),
+            count: 0,
+            entered_vram: false
         }
     }
     pub fn draw_full_screen(&mut self, mmu: &MMU2) {
@@ -29,7 +66,7 @@ impl PPU2 {
             bg_tilemap_start = 0x9C00;
             bg_tilemap_end = 0x9FFF;
         }
-        println!("tilemap base address {:04x}", bg_tilemap_start);
+        // println!("tilemap base address {:04x}", bg_tilemap_start);
         let bg_tilemap = mmu.borrow_slice(bg_tilemap_start, bg_tilemap_end + 1);
         // let bg_tilemap = &mmu.data[bg_tilemap_start..(bg_tilemap_end + 1)];
         // let oam_table = &mmu.data[0xFE00..0xFEA0];
@@ -41,15 +78,15 @@ impl PPU2 {
             td1_start = 0x8000;
             td1_end = 0x8FFF;
         }
-        println!("LCDC is {:02x}", mmu.read8_IO(IORegister::LCDC));
-        println!("tile data base address {:04x}", td1_start);
+        // println!("LCDC is {:02x}", mmu.read8_IO(IORegister::LCDC));
+        // println!("tile data base address {:04x}", td1_start);
         let td1 = mmu.borrow_slice(td1_start, td1_end + 1);
-        for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
-            let line_str: String = row.iter().map(|b| format!("{:02x}", b)).collect();
-            println!("{:04x} {}", bg_tilemap_start + n * 32, line_str);
-        }
-
-        println!("signed mode = {}", !unsigned_mode);
+        // for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
+        //     let line_str: String = row.iter().map(|b| format!("{:02x}", b)).collect();
+        //     println!("{:04x} {}", bg_tilemap_start + n * 32, line_str);
+        // }
+        //
+        // println!("signed mode = {}", !unsigned_mode);
         if bg_enabled {
             let img = &mut self.backbuffer;
             let sx = 0; //mmu.hardware.SCX.value as usize;
@@ -177,6 +214,10 @@ fn test_vblank() {
     ].to_vec();
     let n = copy_at(&mut rom,n,arr);
 
+    copy_at(&mut rom, 0x20,[
+        0x00, //NO OP
+        0x18, 0xFd, // JR e
+    ].to_vec());
 
 
     // at 0x40

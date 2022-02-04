@@ -52,7 +52,16 @@ fn main() -> Result<()> {
     let str = pth.to_str().unwrap().to_string();
     let mut gb = setup_test_rom(&str).unwrap();
     gb.set_pc(0x100);
+    gb.mmu.write8_IO(IORegister::LCDC,0x00);
+    gb.mmu.write8_IO(IORegister::STAT, 0x00);
+    gb.mmu.write8_IO(IORegister::LY,0x00);
+    gb.mmu.write8_IO(IORegister::LYC,0x00);
     let mut term = Term::stdout();
+
+
+    // fast forward by however much is specified
+    gb.execute_n(args.fastforward as usize);
+
     loop {
         let commands = Style::new().reverse();
         term.write_line(
@@ -85,13 +94,17 @@ fn main() -> Result<()> {
         ))?;
         //IO status bits
         term.write_line(&format!(
-            "IME = {}",
+            "IME = {}   LCDC: {:08b}   STAT: {:08b}  LY:{},  PPU clock={}",
             gb.cpu.IME,
+            gb.mmu.read8_IO(IORegister::LCDC),
+            gb.mmu.read8_IO(IORegister::STAT),
+            gb.mmu.read8_IO(IORegister::LY),
+            gb.ppu.count,
         ))?;
 
         //current instruction
         let code = gb.fetch_opcode_at(gb.get_pc());
-        println!("current op {:04x}", code);
+        // println!("current op {:04x}", code);
         if let Some(opx) = gb.lookup_op(&code) {
             let op: Op = (*opx).clone();
             println!("instr {:02x}  ->  {}  ->  {}",code, op.to_asm(), op.real(&gb));
@@ -116,6 +129,7 @@ fn main() -> Result<()> {
             'i' => request_interrupt(&mut gb, &term)?,
             'v' => dump_vram_png(&mut gb, &term)?,
             'g' => gb.execute_n(100_000_000),
+            'V' => gb.run_to_vblank(),
             'q' => break,
             _ => println!("??"),
         };
@@ -234,8 +248,8 @@ struct Cli {
     // boot:bool,
     // #[structopt(long)]
     // interactive:bool,
-    // #[structopt(long, default_value="0")]
-    // fastforward:u32,
+    #[structopt(long, default_value="0")]
+    fastforward:u32,
     // #[structopt(long)]
     // verbose:bool,
     // #[structopt(long, parse(try_from_str = parse_hex), default_value="0")]

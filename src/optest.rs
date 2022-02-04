@@ -627,12 +627,14 @@ impl GBState {
 
             // perform the actual operation
             self.stuff(&op);
+            self.ppu.update(&mut self.mmu);
 
             //check for interrupts
             if self.cpu.IME {
+                // println!("registers are {:02x}  {:02x}",self.mmu.read8_IO(IORegister::IE), self.mmu.read8_IO(IORegister::IF));
                 let vblank_enabled = get_bit_as_bool(self.mmu.read8_IO(IORegister::IE),0);
                 let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(IORegister::IF),0);
-                println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
+                // println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
                 if vblank_requested && vblank_enabled {
                     self.service_interrupt();
                 }
@@ -647,22 +649,6 @@ impl GBState {
             // }
             self.clock += (op.cycles as u32);
             self.count += 1;
-
-            if self.count % 500 == 0 {
-                let mut v = self.mmu.read8_IO(IORegister::LY);
-                // println!("v is {}",v);
-                let mut v2 = v;
-                if v >= 154 {
-                    v2 = 0;
-                } else {
-                    v2 = v + 1
-                }
-                if v2 == 40 {
-                    println!("vblank flip");
-                    // gb.ppu.draw_full_screen(&gb.mmu)
-                }
-                self.mmu.write8_IO(IORegister::LY, v2);
-            }
         } else {
             println!("invalid op code: {:04x}", code);
             self.dump_current_state();
@@ -671,9 +657,22 @@ impl GBState {
     }
     pub fn execute_n(&mut self, n: usize) {
         for _ in 0..n {
+            if self.count % 1_000_000 == 0{
+                println!("{}",self.count/1_000_000);
+            }
             self.execute();
         }
     }
+    pub fn run_to_vblank(&mut self)  {
+        self.ppu.entered_vram = false;
+        loop {
+            if self.ppu.entered_vram {
+                break;
+            }
+            self.execute();
+        }
+    }
+
     fn service_interrupt(&mut self) {
         //if IME is set and IE flags are set
         //reset the IEM flag to prevent other interrupts
@@ -693,7 +692,7 @@ impl GBState {
 
         //the RET routine pops the PC back off the stack
         //RETI does the same but with enabling interrupts again
-        println!("jumping to vertical blank interrupt;");
+        // println!("jumping to vertical blank interrupt;");
     }
 }
 
@@ -1341,6 +1340,13 @@ fn make_op_table() -> OpTable {
     op_table.load8(0x6E, DstR8(L), Mem(HL));
     op_table.load8(0x6F, DstR8(L), SrcR8(A));
 
+    op_table.load8(0x70, AddrDst(HL), SrcR8(B));
+    op_table.load8(0x71, AddrDst(HL), SrcR8(C));
+    op_table.load8(0x72, AddrDst(HL), SrcR8(D));
+    op_table.load8(0x73, AddrDst(HL), SrcR8(E));
+    op_table.load8(0x74, AddrDst(HL), SrcR8(H));
+    op_table.load8(0x75, AddrDst(HL), SrcR8(H));
+    //76
     op_table.load8(0x77, AddrDst(HL), SrcR8(A)); // LD L,A
     op_table.load8(0x78, DstR8(A), SrcR8(B));
     op_table.load8(0x79, DstR8(A), SrcR8(C));
@@ -1815,26 +1821,23 @@ fn make_op_table() -> OpTable {
         code: 0xC6,
         len: 2,
         cycles: 8,
-        typ: Math(Add, DstR8(A), Src8::Im8()),
+        typ: Math(Add, DstR8(A), Im8()),
     });
     op_table.add(Op {
         code: 0xD6,
         len: 2,
         cycles: 8,
-        typ: Math(SUB, DstR8(A), Src8::Im8()),
+        typ: Math(SUB, DstR8(A), Im8()),
     });
 
-    op_table.add(Op {
-        code: 0xE6,
-        len: 2,
-        cycles: 8,
-        typ: Math(And, DstR8(A), Im8()),
-    });
+    op_table.add(Op { code: 0xE6, len: 2, cycles: 8,typ: Math(And, DstR8(A), Im8()) });
+    op_table.add(Op { code: 0xF6, len: 2, cycles: 8,typ: Math(Or,  DstR8(A), Im8()) });
+
     op_table.add(Op {
         code: 0xEE,
         len: 1,
         cycles: 8,
-        typ: Math(Xor, DstR8(A), Src8::Im8()),
+        typ: Math(Xor, DstR8(A), Im8()),
     });
 
     op_table.add(Op {
@@ -1923,34 +1926,36 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_28 + col, SRA(*r8));
         op_table.bitop(0xCB_30 + col, SWAP(*r8));
         op_table.bitop(0xCB_38 + col, SRL(*r8));
-        op_table.bitop(0xCB_40 + col, BIT(0, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_48 + col, BIT(1, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_50 + col, BIT(2, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_58 + col, BIT(3, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_60 + col, BIT(4, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_68 + col, BIT(5, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_70 + col, BIT(6, Src8::SrcR8(*r8)));
-        op_table.bitop(0xCB_78 + col, BIT(7, Src8::SrcR8(*r8)));
+        op_table.bitop(0xCB_40 + col, BIT(0, SrcR8(*r8)));
+        op_table.bitop(0xCB_48 + col, BIT(1, SrcR8(*r8)));
+        op_table.bitop(0xCB_50 + col, BIT(2, SrcR8(*r8)));
+        op_table.bitop(0xCB_58 + col, BIT(3, SrcR8(*r8)));
+        op_table.bitop(0xCB_60 + col, BIT(4, SrcR8(*r8)));
+        op_table.bitop(0xCB_68 + col, BIT(5, SrcR8(*r8)));
+        op_table.bitop(0xCB_70 + col, BIT(6, SrcR8(*r8)));
+        op_table.bitop(0xCB_78 + col, BIT(7, SrcR8(*r8)));
 
-        op_table.bitop(0xCB_80 + col, RES(0, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_88 + col, RES(1, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_90 + col, RES(2, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_98 + col, RES(3, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_A0 + col, RES(4, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_A8 + col, RES(5, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_B0 + col, RES(6, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_B8 + col, RES(7, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_80 + col, RES(0, DstR8(*r8)));
+        op_table.bitop(0xCB_88 + col, RES(1, DstR8(*r8)));
+        op_table.bitop(0xCB_90 + col, RES(2, DstR8(*r8)));
+        op_table.bitop(0xCB_98 + col, RES(3, DstR8(*r8)));
+        op_table.bitop(0xCB_A0 + col, RES(4, DstR8(*r8)));
+        op_table.bitop(0xCB_A8 + col, RES(5, DstR8(*r8)));
+        op_table.bitop(0xCB_B0 + col, RES(6, DstR8(*r8)));
+        op_table.bitop(0xCB_B8 + col, RES(7, DstR8(*r8)));
 
-        op_table.bitop(0xCB_C0 + col, SET(0, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_C8 + col, SET(1, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_D0 + col, SET(2, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_D8 + col, SET(3, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_E0 + col, SET(4, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_E8 + col, SET(5, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_F0 + col, SET(6, Dst8::DstR8(*r8)));
-        op_table.bitop(0xCB_F8 + col, SET(7, Dst8::DstR8(*r8)));
+        op_table.bitop(0xCB_C0 + col, SET(0, DstR8(*r8)));
+        op_table.bitop(0xCB_C8 + col, SET(1, DstR8(*r8)));
+        op_table.bitop(0xCB_D0 + col, SET(2, DstR8(*r8)));
+        op_table.bitop(0xCB_D8 + col, SET(3, DstR8(*r8)));
+        op_table.bitop(0xCB_E0 + col, SET(4, DstR8(*r8)));
+        op_table.bitop(0xCB_E8 + col, SET(5, DstR8(*r8)));
+        op_table.bitop(0xCB_F0 + col, SET(6, DstR8(*r8)));
+        op_table.bitop(0xCB_F8 + col, SET(7, DstR8(*r8)));
     }
 
+    op_table.bitop(0xCB_86, RES(0,Dst8::AddrDst(HL)));
+    op_table.bitop(0xCB_27,SLA(A));
     op_table.add(Op {
         code: 0xCB_37,
         len: 2,
@@ -1961,7 +1966,7 @@ fn make_op_table() -> OpTable {
         code: 0xCB_87,
         len: 2,
         cycles: 8,
-        typ: BitOp(RES(0, Dst8::DstR8(A))),
+        typ: BitOp(RES(0, DstR8(A))),
     });
     op_table.add(Op {
         code: 0xCB_7E,
@@ -1973,7 +1978,7 @@ fn make_op_table() -> OpTable {
         code: 0xCB_7F,
         len: 2,
         cycles: 8,
-        typ: BitOp(BIT(7, Src8::SrcR8(A))),
+        typ: BitOp(BIT(7, SrcR8(A))),
     });
     op_table.add(Op {
         code: 0xCB_BE,
@@ -2118,6 +2123,8 @@ pub fn setup_test_rom(fname: &str) -> Option<GBState> {
                 debug: false,
             };
             gb.set_pc(0x100);
+            gb.mmu.write8_IO_raw(IORegister::IF,0);
+            gb.mmu.write8_IO_raw(IORegister::IE,0);
             return Some(gb);
         }
         Err(_) => return None,
