@@ -68,7 +68,11 @@ fn main() -> Result<()>{
     let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
     let hand = thread::spawn(move || {
-        start(&mut gb, args.fastforward, to_screen).unwrap();
+        if args.run {
+            start_run(&mut gb, to_screen).unwrap();
+        } else {
+            start_debugger(&mut gb, args.fastforward, to_screen).unwrap();
+        }
     });
 
     if settings.enabled {
@@ -91,7 +95,22 @@ fn main() -> Result<()>{
     Ok(())
 }
 
-fn start(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>) -> Result<()> {
+fn start_run(gb: &mut GBState, to_screen: Sender<String>) -> Result<()> {
+    gb.set_pc(0x100);
+    gb.mmu.write8_IO(IORegister::LCDC,0x00);
+    gb.mmu.write8_IO(IORegister::STAT, 0x00);
+    gb.mmu.write8_IO(IORegister::LY,0x00);
+    gb.mmu.write8_IO(IORegister::LYC,0x00);
+
+    loop {
+        gb.execute();
+        if gb.ppu.entered_vram {
+            to_screen.send(String::from("redraw"));
+        }
+    }
+}
+
+fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(IORegister::LCDC,0x00);
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
@@ -294,8 +313,8 @@ struct Cli {
     romfile: Option<PathBuf>,
     // #[structopt(long)]
     // boot:bool,
-    // #[structopt(long)]
-    // interactive:bool,
+    #[structopt(long)]
+    run:bool,
     #[structopt(long, default_value="0")]
     fastforward:u32,
     // #[structopt(long)]

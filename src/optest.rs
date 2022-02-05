@@ -601,12 +601,6 @@ impl GBState {
         let code = self.fetch_next_opcode();
         if let Some(opx) = self.ops.ops.get(&code) {
             let op: Op = (*opx).clone();
-            // if self.cpu.get_pc() == 0x28 {
-            //     self.debug = true;
-            // }
-            // if self.cpu.get_pc() == 0x29a6 {
-            //     self.debug = true;
-            // }
             if self.debug {
                 let pc = self.cpu.get_pc();
                 println!("BEFORE: PC:{:04x} SP:{:04x}  op:{:04x} {:?}  reg:{}   next mem = {:02x}  {:02x}  {:02x}",
@@ -620,7 +614,7 @@ impl GBState {
             }
 
             // perform the actual operation
-            self.stuff(&op);
+            self.execute_op(&op);
             self.ppu.update(&mut self.mmu);
 
             //check for interrupts
@@ -696,7 +690,7 @@ const VBLANK_HANDLER_ADDRESS:u16 = 0x40;
 
 
 impl GBState {
-    pub(crate) fn stuff(&mut self, op: &Op) {
+    pub(crate) fn execute_op(&mut self, op: &Op) {
         match &op.typ {
             OpType::Noop() => self.cpu.inc_pc(),
             Jump(typ) => {
@@ -840,7 +834,7 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             Halt() => {
-                println!("pretending to halt");
+                // println!("pretending to halt");
             }
             Compare(dst, src) => {
                 let src_v = src.get_value(self);

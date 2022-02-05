@@ -99,10 +99,10 @@ impl PPU2 {
         // }
         //
         // println!("signed mode = {}", !unsigned_mode);
+        let sx = sss.SCX as usize;
+        let sy = sss.SCY as usize;
         if bg_enabled {
             let img = &mut sss.backbuffer;
-            let sx = 0; //mmu.hardware.SCX.value as usize;
-            let sy = 0; //mmu.hardware.SCY.value as usize;
             let spacing = 8;
             for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
                 if y > 0x10 {

@@ -308,7 +308,7 @@ impl MMU2 {
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
         if let Some(en) = IORegister::match_address(addr) {
-            // println!("reg {:?} <- {:02x}", en, val);
+            println!("reg {:?} <- {:02x}", en, val);
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {

@@ -205,7 +205,6 @@ impl Screen {
     pub fn update_screen(&mut self,) {
         {
             let sss = self.sss.lock().unwrap();
-            println!("drawing at {}",sss.SCY);
             copy_texture(
                 &mut self.canvas,
                 &mut self.texture,
