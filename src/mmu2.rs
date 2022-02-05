@@ -322,9 +322,9 @@ impl MMU2 {
                         self.joypad.readmode = JoypadReadMode::Direction();
                     }
                 }
-                // IORegister::SB => {
-                //     info!("wrote to the SB register {:08b} {:02x}", val, val)
-                // },
+                IORegister::SB => {
+                    println!("wrote to the SB register {:08b} {:02x}", val, val)
+                },
                 IORegister::SC => {
                     if val == 0x81 {
                         let sbv = self.read8_IO(IORegister::SB);

@@ -178,6 +178,9 @@ impl CPU {
     pub fn get_sp(&self) -> u16 {
         self.sp
     }
+    pub fn real_set_sp(&mut self, sp:u16)  {
+        self.sp = sp;
+    }
     pub(crate) fn dec_sp(&mut self) {
         self.sp -= 1;
     }

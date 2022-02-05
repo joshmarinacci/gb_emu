@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::format;
 use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{ADC, And, Or, SUB, Xor};
@@ -10,7 +9,7 @@ use Dst16::DstR16;
 use Dst8::AddrDst;
 use JumpType::{Absolute, Restart};
 use OpType::{BitOp, Call, Dec8, DisableInterrupts, Inc8, Jump, Load16, Math, Noop};
-use Src16::{Im16, SrcR16};
+use Src16::{SrcR16};
 use CPUR8::{R8A, R8B, R8C};
 use crate::common::{get_bit_as_bool, load_romfile, set_bit, u8_as_i8};
 use crate::cpu2::CPUR8::{R8D, R8E, R8H, R8L};
@@ -63,6 +62,7 @@ pub enum Src8 {
 #[derive(Debug, Copy, Clone)]
 pub enum Src16 {
     SrcR16(R16),
+    SrcR16WithOffset(R16),
     Im16(),
 }
 
@@ -80,6 +80,7 @@ pub enum Dst8 {
 #[derive(Debug, Copy, Clone)]
 pub enum Dst16 {
     DstR16(R16),
+    MemIm16(),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -409,20 +410,26 @@ impl AddrSrc {
 impl Src16 {
     fn name(&self) -> String {
         match self {
-            Im16() => "nn".to_string(),
+            Src16::Im16() => "nn".to_string(),
             SrcR16(r) => r.name().to_string(),
+            Src16::SrcR16WithOffset(r) => r.name().to_string(),
         }
     }
     fn get_value(&self, gb: &GBState) -> u16 {
         match self {
-            Im16() => gb.mmu.read16(gb.cpu.get_pc() + 1),
+            Src16::Im16() => gb.mmu.read16(gb.cpu.get_pc() + 1),
             SrcR16(r) => r.get_value(gb),
+            Src16::SrcR16WithOffset(r) => {
+                let e = u8_as_i8(gb.mmu.read8(gb.cpu.get_pc()+1));
+                ((r.get_value(gb) as i32) + e as i32) as u16
+            }
         }
     }
     fn real(&self, gb: &GBState) -> String {
         match self {
-            Im16() => format!("{:04x}", gb.mmu.read16(gb.cpu.get_pc() + 1)),
+            Src16::Im16() => format!("{:04x}", gb.mmu.read16(gb.cpu.get_pc() + 1)),
             SrcR16(r) => format!("{:04x}", r.get_value(gb)),
+            Src16::SrcR16WithOffset(r) => todo!(),
         }
     }
 }
@@ -431,21 +438,31 @@ impl Dst16 {
     fn name(&self) -> String {
         match self {
             DstR16(r2) => r2.name().to_string(),
+            Dst16::MemIm16() => "(nn)".to_string(),
         }
     }
     fn set_value(&self, gb: &mut GBState, val: u16) {
         match self {
             DstR16(r2) => r2.set_value(gb, val),
+            Dst16::MemIm16() => {
+                let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
+                gb.mmu.write16(addr,val);
+            }
         }
     }
     fn real(&self, gb: &GBState) -> String {
         match self {
             DstR16(rr) => format!("{:04x}", rr.get_value(gb)),
+            Dst16::MemIm16() => format!("({:04x})", gb.mmu.read16(gb.cpu.get_pc()+1)),
         }
     }
     fn get_value(&self, gb: &GBState) -> u16 {
         match self {
             DstR16(rr) => rr.get_value(gb),
+            Dst16::MemIm16() => {
+                let addr = gb.mmu.read16(gb.cpu.get_pc()+1);
+                gb.mmu.read16(addr)
+            }
         }
     }
 }
@@ -1364,8 +1381,9 @@ impl OpTable {
     }
     fn load16(&mut self, code: u16, dst: Dst16, src: Src16) {
         let (len, cycles) = match src {
-            Im16() => (3, 12),
-            SrcR16(_) => (1, 8),
+            Src16::Im16() => (3, 12),
+            SrcR16(r) => (1, 8),
+            Src16::SrcR16WithOffset(r) => (2,12),
         };
         self.add(Op {
             code,
@@ -1478,10 +1496,10 @@ fn make_op_table() -> OpTable {
     op_table.load8(0x7E, DstR8(A), Mem(HL));
     op_table.load8(0x7F, DstR8(A), SrcR8(A));
 
-    op_table.load16(0x01, DstR16(BC), Im16()); // LD DE, nn
-    op_table.load16(0x11, DstR16(DE), Im16()); // LD DE, nn
-    op_table.load16(0x21, DstR16(HL), Im16()); // LD HL, nn
-    op_table.load16(0x31, DstR16(SP), Im16()); // LD HL, nn
+    op_table.load16(0x01, DstR16(BC), Src16::Im16()); // LD DE, nn
+    op_table.load16(0x11, DstR16(DE), Src16::Im16()); // LD DE, nn
+    op_table.load16(0x21, DstR16(HL), Src16::Im16()); // LD HL, nn
+    op_table.load16(0x31, DstR16(SP), Src16::Im16()); // LD HL, nn
 
     op_table.load8(0x16, DstR8(D), Im8()); // LD D,n
     op_table.load8(0x1E, DstR8(E), Im8()); // LD E,n
@@ -1489,6 +1507,9 @@ fn make_op_table() -> OpTable {
     op_table.load8(0x2E, DstR8(L), Im8()); // LD L,n
                                            // 0x36 => Some(LoadInstr(Load_addr_R2_u8(HL))),
     op_table.load8(0x36, AddrDst(HL), Im8()); // LD (HL),u8
+    op_table.add_op(0x08, 3,20,Load16(Dst16::MemIm16(),Src16::SrcR16(SP)));
+    op_table.add_op(0xF8, 3,12,Load16(Dst16::DstR16(HL),Src16::SrcR16WithOffset(SP)));
+    op_table.load16(0xF9, DstR16(SP), Src16::SrcR16(HL)); // LD HL, nn
 
     op_table.load8(0x12, AddrDst(DE), SrcR8(A)); // LD L,A
     op_table.load8(0xEA, Dst8::MemIm16(), SrcR8(A)); // LD L,A
@@ -1665,6 +1686,10 @@ fn make_op_table() -> OpTable {
         op_table.bitop( 0xCB_C7 + (j*8), SET(j as u8, DstR8(A)));
     }
 
+    op_table.bitop( 0xCB_0F, RRC(A));
+    op_table.bitop( 0xCB_1F, RR(A));
+    op_table.bitop( 0xCB_2F, SRA(A));
+    op_table.bitop( 0xCB_3F, SRL(A));
 
     op_table.add_op(0x00C0, 1, 20, Call(RetCond(NotZero())));
     op_table.add_op(0x00C4, 3, 24, Call(CallCondU16(NotZero())));
@@ -2225,6 +2250,29 @@ fn test_write_register_DE() {
     assert_eq!(gb.cpu.get_r8(CPUR8::R8D), 0x05);
 }
 
+#[test]
+fn test_op_08() {
+    let rom = [0x08, 0x42, 0x00]; // LD D, 0x05
+    let mut gb: GBState = GBState::make_test_context(&rom.to_vec());
+    gb.set_pc(0);
+    gb.cpu.real_set_sp(0x66);
+    assert_eq!(gb.mmu.read8(0x42),0xD3);
+    gb.execute();
+    assert_eq!(gb.mmu.read8(0x42),0x66);
+
+}
+
+#[test]
+fn test_op_f8() {
+    let rom: [u8; 2] = [0xF8, 0x02]; // LD D, 0x05
+    let mut gb: GBState = GBState::make_test_context(&rom.to_vec());
+    gb.set_pc(0);
+    gb.cpu.real_set_sp(0x40);
+    assert_eq!(gb.cpu.get_r16(CPUR16::HL),0);
+    gb.execute();
+    assert_eq!(gb.cpu.get_r16(CPUR16::HL),0x42);
+
+}
 // #[test]
 // fn test_push_pop() {
 //     let rom:[u8;10] = [
