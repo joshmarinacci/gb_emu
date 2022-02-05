@@ -56,6 +56,7 @@ pub enum Src8 {
     MemWithDec(R16),
     Im8(),
     HiMemIm8(),
+    HiMemR8(R8),
     MemIm16(),
 }
 
@@ -525,6 +526,7 @@ impl Src8 {
             Src8::MemIm16() => "(nn)".to_string(),
             Src8::MemWithInc(r2) => format!("({}+)", r2.name()),
             Src8::MemWithDec(r2) => format!("({}-)", r2.name()),
+            Src8::HiMemR8(r) => format!("($FF00+{}",r.name()).to_string(),
         }
     }
     fn get_value(&self, gb: &GBState) -> u8 {
@@ -544,6 +546,10 @@ impl Src8 {
             Src8::MemIm16() => {
                 let addr = gb.mmu.read16(gb.cpu.get_pc() + 1);
                 gb.mmu.read8(addr)
+            }
+            Src8::HiMemR8(r) => {
+                let im = r.get_value(gb);
+                gb.mmu.read8(0xFF00 + im as u16)
             }
         }
     }
@@ -1362,6 +1368,7 @@ impl OpTable {
             Src8::MemIm16() => (3, 16),
             Src8::MemWithInc(_) => (1, 8),
             Src8::MemWithDec(_) => (1, 8),
+            Src8::HiMemR8(_) => (1,8),
         };
         match dst {
             DstR8(_) => {}
@@ -1514,6 +1521,7 @@ fn make_op_table() -> OpTable {
     op_table.load8(0x12, AddrDst(DE), SrcR8(A)); // LD L,A
     op_table.load8(0xEA, Dst8::MemIm16(), SrcR8(A)); // LD L,A
     op_table.load8(0xF0, DstR8(A), Src8::HiMemIm8());
+    op_table.load8(0xF2, DstR8(A), Src8::HiMemR8(C));
     op_table.load8(0xFA, DstR8(A), Src8::MemIm16());
     op_table.load8(0xE0, Dst8::HiMemIm8(), SrcR8(A));
     op_table.load8(0xE2, Dst8::HiMemR8(C), SrcR8(A));
@@ -1638,6 +1646,7 @@ fn make_op_table() -> OpTable {
 
 
     op_table.add_op(0xC2,3,12,Jump(AbsoluteCond(NotZero(), AddrSrc::Imu16())));
+    op_table.add_op(0xD2,3,12,Jump(AbsoluteCond(NotCarry(), AddrSrc::Imu16())));
     op_table.add_op(0xC3,3,12,Jump(Absolute(AddrSrc::Imu16())));
     op_table.add_op(0x20,2,12,Jump(RelativeCond(NotZero(), Im8())));
     op_table.add_op(0x30,2,12,Jump(RelativeCond(NotCarry(), Im8())));
@@ -1646,6 +1655,7 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0x38,2,8, Jump(RelativeCond(Carry(), Im8())));
     op_table.add_op(0xE9,1,4, Jump(Absolute(AddrSrc::Src16(HL))));
     op_table.add_op(0xCA,3,12,Jump(AbsoluteCond(Zero(), AddrSrc::Imu16())));
+    op_table.add_op(0xDA,3,12,Jump(AbsoluteCond(Carry(), AddrSrc::Imu16())));
 
     op_table.add_op(0x07,1,4,BitOp(RLCA()));
     op_table.add_op(0x0F,1,4,BitOp(RRCA()));
@@ -1691,15 +1701,19 @@ fn make_op_table() -> OpTable {
     op_table.bitop( 0xCB_2F, SRA(A));
     op_table.bitop( 0xCB_3F, SRL(A));
 
-    op_table.add_op(0x00C0, 1, 20, Call(RetCond(NotZero())));
-    op_table.add_op(0x00C4, 3, 24, Call(CallCondU16(NotZero())));
-    op_table.add_op(0x00C8, 1, 20, Call(RetCond(Zero())));
-    op_table.add_op(0x00C9, 1, 16, Call(Ret()));
-    op_table.add_op(0x00CC, 3, 24, Call(CallCondU16(Zero())));
     op_table.add_op(0x00CD, 3, 24, Call(CallU16()));
 
+    op_table.add_op(0x00C4, 3, 24, Call(CallCondU16(NotZero())));
+    op_table.add_op(0x00D4, 3, 24, Call(CallCondU16(NotCarry())));
+    op_table.add_op(0x00CC, 3, 24, Call(CallCondU16(Zero())));
+    op_table.add_op(0x00DC, 3, 24, Call(CallCondU16(Carry())));
+
+    op_table.add_op(0x00C0, 1, 20, Call(RetCond(NotZero())));
+    op_table.add_op(0x00C8, 1, 20, Call(RetCond(Zero())));
     op_table.add_op(0x00D0, 1, 20, Call(RetCond(NotCarry())));
     op_table.add_op(0x00D8, 1, 20, Call(RetCond(Carry())));
+
+    op_table.add_op(0x00C9, 1, 16, Call(Ret()));
     op_table.add_op(0x00D9, 1, 16, Call(RetI()));
 
 
@@ -1712,54 +1726,15 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0x00F7, 1, 16, Jump(Restart(0x30)));
     op_table.add_op(0x00FF, 1, 16, Jump(Restart(0x38)));
 
-    op_table.add(Op {
-        code: 0x00C1,
-        len: 1,
-        cycles: 12,
-        typ: Call(Pop(BC)),
-    });
-    op_table.add(Op {
-        code: 0x00C5,
-        len: 1,
-        cycles: 16,
-        typ: Call(Push(BC)),
-    });
-    op_table.add(Op {
-        code: 0x00D1,
-        len: 1,
-        cycles: 12,
-        typ: Call(Pop(DE)),
-    });
-    op_table.add(Op {
-        code: 0x00D5,
-        len: 1,
-        cycles: 16,
-        typ: Call(Push(DE)),
-    });
-    op_table.add(Op {
-        code: 0x00E1,
-        len: 1,
-        cycles: 12,
-        typ: Call(Pop(HL)),
-    });
-    op_table.add(Op {
-        code: 0x00E5,
-        len: 1,
-        cycles: 16,
-        typ: Call(Push(HL)),
-    });
-    op_table.add(Op {
-        code: 0x00F1,
-        len: 1,
-        cycles: 16,
-        typ: Call(Pop(AF)),
-    });
-    op_table.add(Op {
-        code: 0x00F5,
-        len: 1,
-        cycles: 16,
-        typ: Call(Push(AF)),
-    });
+    op_table.add_op(0x00C1,1,12,Call(Pop(BC)));
+    op_table.add_op(0x00D1,1,12,Call(Pop(DE)));
+    op_table.add_op(0x00E1,1,12,Call(Pop(HL)));
+    op_table.add_op(0x00F1,1,16,Call(Pop(AF)));
+
+    op_table.add_op(0x00C5,1,16,Call(Push(BC)));
+    op_table.add_op(0x00D5,1,16,Call(Push(DE)));
+    op_table.add_op(0x00E5,1,16,Call(Push(HL)));
+    op_table.add_op(0x00F5,1,16,Call(Push(AF)));
 
 
     op_table
