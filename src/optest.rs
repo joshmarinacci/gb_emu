@@ -1591,7 +1591,15 @@ fn make_op_table() -> OpTable {
     op_table.math(0x95,SUB, DstR8(A), SrcR8(L));
     op_table.add_op(0x96, 1, 8,Math(SUB, DstR8(A), Mem(HL)));
     op_table.math(0x97,SUB, DstR8(A), SrcR8(A));
+
+    op_table.math(0x98,SBC, DstR8(A), SrcR8(B));
+    op_table.math(0x99,SBC, DstR8(A), SrcR8(C));
+    op_table.math(0x9A,SBC, DstR8(A), SrcR8(D));
+    op_table.math(0x9B,SBC, DstR8(A), SrcR8(E));
+    op_table.math(0x9C,SBC, DstR8(A), SrcR8(H));
+    op_table.math(0x9D,SBC, DstR8(A), SrcR8(L));
     op_table.add_op(0x9E,1,8,Math(SBC, DstR8(A), Mem(HL)));
+    op_table.math(0x9F,SBC, DstR8(A), SrcR8(A));
 
     op_table.math(0xA0,And, DstR8(A), SrcR8(B));
     op_table.math(0xA1,And, DstR8(A), SrcR8(C));
@@ -1601,6 +1609,7 @@ fn make_op_table() -> OpTable {
     op_table.math(0xA5,And, DstR8(A), SrcR8(L));
     op_table.add_op(0xA6,1,8,Math(And, DstR8(A), Mem(HL)));
     op_table.math(0xA7,And, DstR8(A), SrcR8(A));
+
     op_table.math(0xA8,Xor, DstR8(A), SrcR8(B));
     op_table.math(0xA9,Xor, DstR8(A), SrcR8(C));
     op_table.math(0xAA,Xor, DstR8(A), SrcR8(D));
