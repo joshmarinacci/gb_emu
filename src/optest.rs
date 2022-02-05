@@ -717,7 +717,7 @@ impl GBState {
     fn service_interrupt(&mut self) {
         //if IME is set and IE flags are set
         //reset the IEM flag to prevent other interrupts
-        println!("disabling interrupts to do an interrupt");
+        // println!("disabling interrupts to do an interrupt");
         self.cpu.IME = false;
         //push PC onto stack
         self.cpu.dec_sp();
@@ -826,6 +826,7 @@ impl GBState {
                         self.set_pc(addr);
                     }
                     RetI() => {
+                        // println!("reti   enabling interrupts again");
                         let addr = self.mmu.read16(self.cpu.get_sp());
                         self.cpu.inc_sp();
                         self.cpu.inc_sp();
