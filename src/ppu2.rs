@@ -71,7 +71,7 @@ impl PPU2 {
         let sprites_enabled = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 1);
         // let sprites_enabled = true;
         let bg_enabled = true; //bg is always enabled
-                               // let sprite_big = get_bit_as_bool(screenstate.LCDC, 2);
+        let sprite_big = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 2);
         let mut bg_tilemap_start = 0x9800;
         let mut bg_tilemap_end = 0x9BFF;
         if get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 3) {
@@ -81,7 +81,7 @@ impl PPU2 {
         // println!("tilemap base address {:04x}", bg_tilemap_start);
         let bg_tilemap = mmu.borrow_slice(bg_tilemap_start, bg_tilemap_end + 1);
         // let bg_tilemap = &mmu.data[bg_tilemap_start..(bg_tilemap_end + 1)];
-        // let oam_table = &mmu.data[0xFE00..0xFEA0];
+        let oam_table = &mmu.borrow_slice(0xFE00,0xFEA0);
 
         let mut td1_start = 0x8800;
         let mut td1_end = 0x97FF;
@@ -98,7 +98,7 @@ impl PPU2 {
         //     println!("{:04x} {}", bg_tilemap_start + n * 32, line_str);
         // }
         //
-        // println!("signed mode = {}", !unsigned_mode);
+        println!("signed mode = {}", !unsigned_mode);
         let sx = sss.SCX as usize;
         let sy = sss.SCY as usize;
         if bg_enabled {
@@ -123,34 +123,35 @@ impl PPU2 {
                             td1,
                             false,
                         );
-                        // if (id == 0x56) {
-                        //     println!("56  tile data = {:04x} - {:04x}", td1_start, td1_end);
-                        //     draw_tile_at(img, x * spacing + sx, y * spacing + sy, id2 as u8, td1, true);
-                        // }
                     } else {
                         draw_tile_at(img, x * spacing + sx, y * spacing + sy, id, td1, false);
                     }
                 }
             }
         }
-        // if sprites_enabled {
-        //     for (i, atts) in oam_table.chunks_exact(4).enumerate() {
-        //         let y = atts[0];
-        //         let x = atts[1];
-        //         let tile_id = atts[2];
-        //         let flags = atts[3];
-        //         if tile_id >= 0 && tile_id < 0xFF {
-        //             // println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
-        //             if sprite_big {
-        //                 println!("skipping big sprites");
-        //             } else {
-        //                 // println!("drawing sprite");
-        //                 draw_tile_at(&mut screenstate.backbuffer, x as usize, y as usize, tile_id, td1, false);
-        //             }
-        //         }
-        //     }
-        // }
-        // }
+        if sprites_enabled {
+            let img = &mut sss.backbuffer;
+            for (i, atts) in oam_table.chunks_exact(4).enumerate() {
+                let y = atts[0];
+                let x = atts[1];
+                // println!("{} {} {}",i,y,x);
+                let tile_id = atts[2];
+                let flags = atts[3];
+                if tile_id >= 0 && tile_id < 0xFF {
+                    // println!("drawing sprite {}",tile_id);
+                    // println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
+                    if sprite_big {
+                        println!("skipping big sprites");
+                    } else {
+                        // println!("drawing sprite at {},{}",x,y);
+                        // img.set_pixel_rgb(x as i32,y as i32,0,0,0);
+                        // img.set_pixel_rgb((x+1) as i32,y as i32,0,0,0);
+                        // img.set_pixel_rgb((x+1) as i32,(y+1) as i32,0,0,0);
+                        draw_tile_at(img, x as usize, y as usize, tile_id, td1, false);
+                    }
+                }
+            }
+        }
 
         {
             // self.draw_vram_tiledata(mmu);
@@ -182,15 +183,15 @@ impl PPU2 {
 fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8], print: bool) {
     let start: usize = ((tile_id as u16) * 16) as usize;
     let stop: usize = start + 16;
-    if print {
-        println!(
-            "id {:02x} maps to addr {:04x} - {:04x}  final {:04x}",
-            tile_id,
-            start,
-            stop,
-            ((start as u16) + 0x8800)
-        );
-    }
+    // if print {
+    //     println!(
+    //         "id {:02x} maps to addr {:04x} - {:04x}  final {:04x}",
+    //         tile_id,
+    //         start,
+    //         stop,
+    //         ((start as u16) + 0x8800)
+    //     );
+    // }
     let tile = &tiledata[start..stop];
     for (line, row) in tile.chunks_exact(2).enumerate() {
         for (n, color) in pixel_row_to_colors(row).iter().enumerate() {

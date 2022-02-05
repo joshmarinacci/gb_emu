@@ -21,7 +21,7 @@ use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::CallType::{CallCondU16, RetI};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{AbsoluteCond, Relative, RelativeCond};
-use crate::optest::OpType::{Compare, EnableInterrupts, Halt, Load8, Math16};
+use crate::optest::OpType::{AddSP, Compare, EnableInterrupts, Halt, Load8, Math16};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 use crate::optest::R16::{AF, BC, DE, HL, SP};
 use crate::optest::R8::{A, B, C, D, E, H, L};
@@ -110,6 +110,7 @@ enum BitOps {
     SRL(R8),
     SWAP(R8),
     RLA(),
+    RLCA(),
     RRA(),
     CPL(),
 }
@@ -153,11 +154,9 @@ enum OpType {
     EnableInterrupts(),
     Halt(),
     Compare(Dst8, Src8),
-    // Xor(Dst8, Src8),
-    // Or(Dst8, Src8),
     Math(BinOp, Dst8, Src8),
+    AddSP(Dst16,Src8),
     Math16(BinOp, Dst16, Src16),
-    // And(Dst8, Src8),
     Inc16(R16),
     Dec16(R16),
     Inc8(Dst8),
@@ -1062,6 +1061,17 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
                     }
+                    BitOps::RLCA() => {
+                        let a:u8 = A.get_value(self);
+                        let c = a & 0x80 == 0x80;
+                        let r = (a << 1) | if c { 1 } else { 0 };
+                        A.set_value(self, r);
+                        self.cpu.r.zero = r == 0;
+                        self.cpu.r.subn = false;
+                        self.cpu.r.half = false;
+                        self.cpu.r.carry = c;
+                        // set_sr_flags(cpu, r,c);
+                    }
                     BitOps::RRA() => {
                         let a: u8 = A.get_value(self);
                         let c = a & 0x01 == 0x01;
@@ -1074,6 +1084,18 @@ impl GBState {
                     }
                 }
                 self.set_pc(self.cpu.get_pc() + op.len);
+            }
+            AddSP(dst, src) => {
+                let b = u8_as_i8(src.get_value(self)) as i16 as u16;
+                let a = dst.get_value(self);
+
+                let r: u16 = a.wrapping_add(b);
+                dst.set_value(self,r);
+                self.set_pc(self.cpu.get_pc() + op.len);
+                self.cpu.r.zero = false;
+                self.cpu.r.subn = false;
+                self.cpu.r.half  = ((a & 0x000F) + (b & 0x000F) > 0x000F);
+                self.cpu.r.carry = ((a & 0x00FF) + (b & 0x00FF) > 0x00FF);
             }
         }
     }
@@ -1114,6 +1136,7 @@ impl Op {
             BitOp(SRL(src)) => format!("RLC {}", src.name()),
             BitOp(SWAP(src)) => format!("RLC {}", src.name()),
             BitOp(BitOps::RLA()) => format!("RLA"),
+            BitOp(BitOps::RLCA()) => format!("RLCA"),
             BitOp(BitOps::RRA()) => format!("RRA"),
             BitOp(BitOps::CPL()) => format!("CPL"),
             Call(ct) => match ct {
@@ -1125,6 +1148,7 @@ impl Op {
                 RetCond(cond) => format!("RET {}", cond.name()),
                 RetI() => format!("RETI"),
             },
+            AddSP(dst, src) => format!("{} {}",dst.name(),src.name()),
         }
     }
     pub fn real(&self, gb: &GBState) -> String {
@@ -1163,6 +1187,7 @@ impl Op {
             BitOp(SRL(src)) => format!("SRL  {}", src.get_value(gb)),
             BitOp(SWAP(src)) => format!("SWAP {}", src.get_value(gb)),
             BitOp(BitOps::RLA()) => format!("RLA {}", A.get_value(gb)),
+            BitOp(BitOps::RLCA()) => format!("RLCA {}", A.get_value(gb)),
             BitOp(BitOps::RRA()) => format!("RRA {}", A.get_value(gb)),
             BitOp(BitOps::CPL()) => format!("CPL {}", A.get_value(gb)),
             Call(ct) => match ct {
@@ -1180,6 +1205,7 @@ impl Op {
                 ),
                 RetI() => format!("RET back to {:04X}", gb.mmu.read16(gb.cpu.get_sp())),
             },
+            AddSP(dst, src) => format!("ADD {}, {}", dst.get_value(gb), src.get_value(gb)),
         }
     }
 }
@@ -1266,6 +1292,14 @@ impl OpTable {
             len: 2,
             cycles: 8,
             typ: BitOp(bop),
+        });
+    }
+    fn math(&mut self, code: u16, binop: BinOp, dst8: Dst8, src8: Src8) {
+        self.add(Op {
+            code,
+            len: 1,
+            cycles: 4,
+            typ: Math(binop,dst8,src8),
         });
     }
 }
@@ -1413,103 +1447,24 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0x3C,1,4,Inc8(DstR8(A)));
     op_table.add_op(0x3D,1,4,Dec8(DstR8(A)));
 
-    op_table.add(Op {
-        code: 0x80,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(B)),
-    });
-    op_table.add(Op {
-        code: 0x81,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(C)),
-    });
-    op_table.add(Op {
-        code: 0x82,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(D)),
-    });
-    op_table.add(Op {
-        code: 0x83,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(E)),
-    });
-    op_table.add(Op {
-        code: 0x84,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(H)),
-    });
-    op_table.add(Op {
-        code: 0x85,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(L)),
-    });
-    op_table.add(Op {
-        code: 0x86,
-        len: 1,
-        cycles: 8,
-        typ: Math(Add, DstR8(A), Mem(HL)),
-    });
-    op_table.add(Op {
-        code: 0x87,
-        len: 1,
-        cycles: 4,
-        typ: Math(Add, DstR8(A), SrcR8(A)),
-    });
+    op_table.math(0x80,Add, DstR8(A), SrcR8(B));
+    op_table.math(0x81,Add, DstR8(A), SrcR8(C));
+    op_table.math(0x82,Add, DstR8(A), SrcR8(D));
+    op_table.math(0x83,Add, DstR8(A), SrcR8(E));
+    op_table.math(0x84,Add, DstR8(A), SrcR8(H));
+    op_table.math(0x85,Add, DstR8(A), SrcR8(L));
+    op_table.add_op(0x86,1,8,Math(Add,DstR8(A), Mem(HL)));
+    op_table.math(0x87,Add, DstR8(A), SrcR8(A));
 
-    op_table.add(Op {
-        code: 0x90,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(B)),
-    });
-    op_table.add(Op {
-        code: 0x91,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(C)),
-    });
-    op_table.add(Op {
-        code: 0x92,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(D)),
-    });
-    op_table.add(Op {
-        code: 0x93,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(E)),
-    });
-    op_table.add(Op {
-        code: 0x94,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(H)),
-    });
-    op_table.add(Op {
-        code: 0x95,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(L)),
-    });
-    op_table.add(Op {
-        code: 0x96,
-        len: 1,
-        cycles: 8,
-        typ: Math(SUB, DstR8(A), Mem(HL)),
-    });
-    op_table.add(Op {
-        code: 0x97,
-        len: 1,
-        cycles: 4,
-        typ: Math(SUB, DstR8(A), SrcR8(A)),
-    });
+
+    op_table.math(0x90,SUB, DstR8(A), SrcR8(B));
+    op_table.math(0x91,SUB, DstR8(A), SrcR8(C));
+    op_table.math(0x92,SUB, DstR8(A), SrcR8(D));
+    op_table.math(0x93,SUB, DstR8(A), SrcR8(E));
+    op_table.math(0x94,SUB, DstR8(A), SrcR8(H));
+    op_table.math(0x95,SUB, DstR8(A), SrcR8(L));
+    op_table.add_op(0x96, 1, 8,Math(SUB, DstR8(A), Mem(HL)));
+    op_table.math(0x97,SUB, DstR8(A), SrcR8(A));
 
     op_table.add(Op {
         code: 0xA0,
@@ -1595,61 +1550,23 @@ fn make_op_table() -> OpTable {
         cycles: 8,
         typ: Math(Xor, DstR8(A), Src8::Mem(HL)),
     });
-    op_table.add(Op {
-        code: 0xAF,
-        len: 1,
-        cycles: 4,
-        typ: Math(Xor, DstR8(A), SrcR8(A)),
-    });
+    op_table.math(0xAF,Xor, DstR8(A), SrcR8(A));
 
-    op_table.add(Op {
-        code: 0xB0,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(B)),
-    });
-    op_table.add(Op {
-        code: 0xB1,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(C)),
-    });
-    op_table.add(Op {
-        code: 0xB2,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(D)),
-    });
-    op_table.add(Op {
-        code: 0xB3,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(E)),
-    });
-    op_table.add(Op {
-        code: 0xB4,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(H)),
-    });
-    op_table.add(Op {
-        code: 0xB5,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(L)),
-    });
-    op_table.add(Op {
-        code: 0xB6,
-        len: 1,
-        cycles: 8,
-        typ: Math(Or, DstR8(A), Src8::Mem(HL)),
-    });
-    op_table.add(Op {
-        code: 0xB7,
-        len: 1,
-        cycles: 4,
-        typ: Math(Or, DstR8(A), SrcR8(A)),
-    });
+    op_table.math(0xB0, Or, DstR8(A), SrcR8(B));
+    op_table.math(0xB1, Or, DstR8(A), SrcR8(C));
+    op_table.math(0xB2, Or, DstR8(A), SrcR8(D));
+    op_table.math(0xB3, Or, DstR8(A), SrcR8(E));
+    op_table.math(0xB4, Or, DstR8(A), SrcR8(H));
+    op_table.math(0xB5, Or, DstR8(A), SrcR8(L));
+    op_table.add_op(0xB6,1,8,Math(Or, DstR8(A), Src8::Mem(HL)));
+    op_table.math(0xB7,Or, DstR8(A), SrcR8(A));
+    op_table.add_op(0xB8,1,4,Compare(DstR8(A), SrcR8(B)));
+    op_table.add_op(0xB9,1,4,Compare(DstR8(A), SrcR8(C)));
+    op_table.add_op(0xBA,1,4,Compare(DstR8(A), SrcR8(D)));
+    op_table.add_op(0xBB,1,4,Compare(DstR8(A), SrcR8(E)));
+    op_table.add_op(0xBC,1,4,Compare(DstR8(A), SrcR8(H)));
+    op_table.add_op(0xBD,1,4,Compare(DstR8(A), SrcR8(L)));
+    op_table.add_op(0xBF,1,4,Compare(DstR8(A), SrcR8(A)));
 
     op_table.add(Op {
         code: 0x09,
@@ -1690,6 +1607,7 @@ fn make_op_table() -> OpTable {
     });
 
     op_table.add(Op { code: 0xE6, len: 2, cycles: 8,typ: Math(And, DstR8(A), Im8()) });
+    op_table.add(Op { code: 0xE8, len: 2, cycles: 8,typ: AddSP(DstR16(SP), Im8()) });
     op_table.add(Op { code: 0xF6, len: 2, cycles: 8,typ: Math(Or,  DstR8(A), Im8()) });
 
     op_table.add(Op {
@@ -1754,24 +1672,10 @@ fn make_op_table() -> OpTable {
         typ: Jump(AbsoluteCond(Zero(), AddrSrc::Imu16())),
     });
 
-    op_table.add(Op {
-        code: 0x17,
-        len: 1,
-        cycles: 4,
-        typ: BitOp(BitOps::RLA()),
-    });
-    op_table.add(Op {
-        code: 0x1F,
-        len: 1,
-        cycles: 4,
-        typ: BitOp(BitOps::RRA()),
-    });
-    op_table.add(Op {
-        code: 0x2F,
-        len: 1,
-        cycles: 4,
-        typ: BitOp(BitOps::CPL()),
-    });
+    op_table.add_op(0x07,1,4,BitOp(BitOps::RLCA()));
+    op_table.add_op(0x17,1,4,BitOp(BitOps::RLA()));
+    op_table.add_op(0x1F,1,4,BitOp(BitOps::RRA()));
+    op_table.add_op(0x2F,1,4,BitOp(BitOps::CPL()));
 
     // almost the entire lower CB chart
     let r8list = [B, C, D, E, H, L];
@@ -1830,55 +1734,19 @@ fn make_op_table() -> OpTable {
         typ: BitOp(RES(7, Dst8::AddrDst(HL))),
     });
 
-    op_table.add(Op {
-        code: 0x00C0,
-        len: 1,
-        cycles: 20,
-        typ: Call(RetCond(NotZero())),
-    });
-    op_table.add(Op {
-        code: 0x00C4,
-        len: 3,
-        cycles: 24,
-        typ: Call(CallCondU16(NotZero())),
-    });
-    op_table.add(Op {
-        code: 0x00C8,
-        len: 1,
-        cycles: 20,
-        typ: Call(RetCond(Zero())),
-    });
-    op_table.add(Op {
-        code: 0x00C9,
-        len: 1,
-        cycles: 16,
-        typ: Call(Ret()),
-    });
-    op_table.add(Op {
-        code: 0x00D9,
-        len: 1,
-        cycles: 16,
-        typ: Call(RetI()),
-    });
-    op_table.add(Op {
-        code: 0x00CC,
-        len: 3,
-        cycles: 24,
-        typ: Call(CallCondU16(Zero())),
-    });
-    op_table.add(Op {
-        code: 0x00CD,
-        len: 3,
-        cycles: 24,
-        typ: Call(CallU16()),
-    });
+    op_table.add_op(0x00C0, 1, 20, Call(RetCond(NotZero())));
+    op_table.add_op(0x00C4, 3, 24, Call(CallCondU16(NotZero())));
+    op_table.add_op(0x00C8, 1, 20, Call(RetCond(Zero())));
+    op_table.add_op(0x00C9, 1, 16, Call(Ret()));
+    op_table.add_op(0x00CC, 3, 24, Call(CallCondU16(Zero())));
+    op_table.add_op(0x00CD, 3, 24, Call(CallU16()));
 
-    op_table.add(Op {
-        code: 0x00CF,
-        len: 1,
-        cycles: 16,
-        typ: Jump(Restart(0x08)),
-    });
+    op_table.add_op(0x00D0, 1, 20, Call(RetCond(NotCarry())));
+    op_table.add_op(0x00D8, 1, 20, Call(RetCond(Carry())));
+    op_table.add_op(0x00D9, 1, 16, Call(RetI()));
+
+
+    op_table.add_op(0x00CF, 1, 16, Jump(Restart(0x08)));
     op_table.add(Op {
         code: 0x00DF,
         len: 1,

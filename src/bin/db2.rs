@@ -8,11 +8,11 @@ use log4rs::config::{Appender, Root};
 use log4rs::Config;
 use std::io::Result;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
-use gb_emu::common::InputEvent;
+use gb_emu::common::{InputEvent, JoyPadKey};
 use gb_emu::mmu2::IORegister;
 use gb_emu::screen::{Screen, ScreenSettings};
 
@@ -69,9 +69,9 @@ fn main() -> Result<()>{
 
     let hand = thread::spawn(move || {
         if args.run {
-            start_run(&mut gb, to_screen).unwrap();
+            start_run(&mut gb, to_screen, receive_cpu).unwrap();
         } else {
-            start_debugger(&mut gb, args.fastforward, to_screen).unwrap();
+            start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu).unwrap();
         }
     });
 
@@ -95,7 +95,7 @@ fn main() -> Result<()>{
     Ok(())
 }
 
-fn start_run(gb: &mut GBState, to_screen: Sender<String>) -> Result<()> {
+fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(IORegister::LCDC,0x00);
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
@@ -107,10 +107,40 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>) -> Result<()> {
         if gb.ppu.entered_vram {
             to_screen.send(String::from("redraw"));
         }
+        if let Ok(evt) = receive_cpu.try_recv() {
+            match evt {
+                InputEvent::Press(JoyPadKey::A) => {    gb.mmu.joypad.a = true;  }
+                InputEvent::Release(JoyPadKey::A) => {  gb.mmu.joypad.a = false; }
+                InputEvent::Press(JoyPadKey::B) => {    gb.mmu.joypad.b = true;  }
+                InputEvent::Release(JoyPadKey::B) => {  gb.mmu.joypad.b = false; }
+                InputEvent::Press(JoyPadKey::Start) => { gb.mmu.joypad.start = true; }
+                InputEvent::Release(JoyPadKey::Start) => { gb.mmu.joypad.start = false; }
+                InputEvent::Press(JoyPadKey::Select) => {  gb.mmu.joypad.select = true; }
+                InputEvent::Release(JoyPadKey::Select) => { gb.mmu.joypad.select = false;  }
+                InputEvent::Press(JoyPadKey::Left) => {   gb.mmu.joypad.left = true;   }
+                InputEvent::Release(JoyPadKey::Left) => { gb.mmu.joypad.left = false;  }
+                InputEvent::Press(JoyPadKey::Right) => {  gb.mmu.joypad.right = true;  }
+                InputEvent::Release(JoyPadKey::Right) => { gb.mmu.joypad.right = false; }
+                InputEvent::Press(JoyPadKey::Up) => {      gb.mmu.joypad.up = true;     }
+                InputEvent::Release(JoyPadKey::Up) => {    gb.mmu.joypad.up = false;    }
+                InputEvent::Press(JoyPadKey::Down) => {    gb.mmu.joypad.down = true;   }
+                InputEvent::Release(JoyPadKey::Down) => {  gb.mmu.joypad.down = false;  }
+                // InputEvent::JumpNextVBlank() => {
+                //     if ctx.interactive {
+                //         println!("got a jump next vblank");
+                //         ctx.jump_to_next_vblank(&mut term, &mut ss1).unwrap();
+                //     }
+                // }
+                _ => {
+                    println!("unhandled event {:?}", evt);
+                }
+            }
+        }
+
     }
 }
 
-fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>) -> Result<()> {
+fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(IORegister::LCDC,0x00);
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
