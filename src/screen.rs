@@ -1,6 +1,5 @@
 use crate::common::InputEvent::{JumpNextVBlank, Press, Release};
 use crate::common::{Bitmap, InputEvent, JoyPadKey};
-use crate::ppu::ScreenState;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;

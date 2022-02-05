@@ -236,3 +236,7 @@ pub fn print_ram(base:u16, ram: &Vec<u8>)  {
         println!("{:04X} {}", ((n * 16) as u16 + base), line_str);
     }
 }
+
+pub fn u8_as_i8(v: u8) -> i8 {
+    v as i8
+}
