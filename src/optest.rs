@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use BinOp::{And, Or, Xor, SUB};
+use BinOp::{And, Or, Xor, SUB, ADC};
 use BitOps::{BIT, RES, SET};
 use CallType::{CallU16, Pop, Push, Ret, RetCond};
 use Cond::{Carry, NotCarry, NotZero, Zero};
@@ -436,7 +436,7 @@ impl BinOp {
             And => "AND",
             SUB => "SUB",
             Add => "ADD",
-            BinOp::ADC => "ADC",
+            ADC => "ADC",
         }
     }
 }
@@ -894,14 +894,14 @@ impl GBState {
                         let carry = (a as u16) + (b as u16) > 0xFF;
                         (r, false, half, carry)
                     }
-                    BinOp::ADC => {
+                    ADC => {
                         let c = if self.cpu.r.carry { 1 } else { 0 };
                         let r = a.wrapping_add(b).wrapping_add(c);
                         let half = (a & 0x0F) + (b & 0x0F) + c > 0xF;
                         let carry = (a as u16) + (b as u16) + (c as u16) > 0xFF;
                         (r, false, half, carry)
                     }
-                    BinOp::SUB => {
+                    SUB => {
                         let c = 0;
                         let r = a.wrapping_sub(b).wrapping_sub(c);
                         let half = (a & 0x0F) < (b & 0x0F) + c;
@@ -934,7 +934,7 @@ impl GBState {
                         // println!("final add value is {:04x}",r);
                         dst.set_value(self, r);
                     }
-                    BinOp::ADC => {}
+                    ADC => {}
                 };
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
@@ -1455,6 +1455,14 @@ fn make_op_table() -> OpTable {
     op_table.math(0x85,Add, DstR8(A), SrcR8(L));
     op_table.add_op(0x86,1,8,Math(Add,DstR8(A), Mem(HL)));
     op_table.math(0x87,Add, DstR8(A), SrcR8(A));
+    op_table.math(0x88,ADC, DstR8(A), SrcR8(B));
+    op_table.math(0x89,ADC, DstR8(A), SrcR8(C));
+    op_table.math(0x8A,ADC, DstR8(A), SrcR8(D));
+    op_table.math(0x8B,ADC, DstR8(A), SrcR8(E));
+    op_table.math(0x8C,ADC, DstR8(A), SrcR8(H));
+    op_table.math(0x8D,ADC, DstR8(A), SrcR8(L));
+
+    op_table.math(0x8F,ADC, DstR8(A), SrcR8(A));
 
 
     op_table.math(0x90,SUB, DstR8(A), SrcR8(B));
@@ -1717,22 +1725,21 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_F8 + col, SET(7, DstR8(*r8)));
     }
 
-    op_table.bitop(0xCB_86, RES(0,Dst8::AddrDst(HL)));
     op_table.bitop(0xCB_27,SLA(A));
     op_table.bitop(0xCB_37,SWAP(A));
-    op_table.bitop(0xCB_87,RES(0, DstR8(A)));
+    op_table.bitop(0xCB_4E,BIT(1, Src8::Mem(HL)));
+    op_table.bitop(0xCB_5E,BIT(3, Src8::Mem(HL)));
     op_table.bitop(0xCB_67,BIT(4, SrcR8(A)));
+    op_table.bitop(0xCB_6E,BIT(5, Src8::Mem(HL)));
+    op_table.bitop(0xCB_6F,BIT(5, SrcR8(A)));
     op_table.bitop(0xCB_77,BIT(6, SrcR8(A)));
     op_table.bitop(0xCB_7E,BIT(7, Src8::Mem(HL)));
     op_table.bitop(0xCB_7F,BIT(7, SrcR8(A)));
-    op_table.bitop(0xCB_6F,BIT(5, SrcR8(A)));
-
-    op_table.add(Op {
-        code: 0xCB_BE,
-        len: 2,
-        cycles: 16,
-        typ: BitOp(RES(7, Dst8::AddrDst(HL))),
-    });
+    op_table.bitop(0xCB_86, RES(0,Dst8::AddrDst(HL)));
+    op_table.bitop(0xCB_87,RES(0, DstR8(A)));
+    op_table.bitop(0xCB_8E,RES(1, Dst8::AddrDst(HL)));
+    op_table.bitop(0xCB_FE,SET(7, AddrDst(HL)));
+    op_table.add_op(0xCB_BE,2,16,BitOp(RES(7, Dst8::AddrDst(HL))));
 
     op_table.add_op(0x00C0, 1, 20, Call(RetCond(NotZero())));
     op_table.add_op(0x00C4, 3, 24, Call(CallCondU16(NotZero())));
