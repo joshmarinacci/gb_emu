@@ -104,8 +104,10 @@ impl PPU2 {
         sss.SCY = mmu.read8_IO(IORegister::SCY);
 
         let bg_tilemap = mmu.borrow_range(&mmu.lcdc.bg_tilemap_select);
-        let oam_table = &mmu.borrow_slice(0xFE00,0xFEA0);
+        let oam_table = mmu.borrow_slice(0xFE00,0xFEA0);
+        print_ram(0xFE00, &oam_table.to_vec());
         let tile_data = mmu.borrow_range(&mmu.lcdc.bg_window_tiledata_select);
+        let sprite_data = mmu.borrow_slice(0x8000,0x9000);
 
         let sx = sss.SCX as usize;
         let sy = sss.SCY as usize;
@@ -138,29 +140,32 @@ impl PPU2 {
             }
         }
         if mmu.lcdc.sprite_enabled {
+            // println!("drawing sprites");
             let img = &mut sss.backbuffer;
             for (i, atts) in oam_table.chunks_exact(4).enumerate() {
                 let y = atts[0];
                 let x = atts[1];
-                // println!("{} {} {}",i,y,x);
                 let tile_id = atts[2];
                 let flags = atts[3];
-                if tile_id >= 0 && tile_id < 0xFF {
+                // println!("i {} id {}",i,tile_id);
+                if tile_id >= 0 && tile_id < 0x80 {
+                    //println!("{} {} {}",tile_id,y,x);
                     // println!("drawing sprite {}",tile_id);
                     // println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
                     if mmu.lcdc.sprite_size_big {
-                        println!("skipping big sprites");
+                        // println!("skipping big sprites");
                     } else {
                         // println!("drawing sprite at {},{}",x,y);
                         // img.set_pixel_rgb(x as i32,y as i32,0,0,0);
                         // img.set_pixel_rgb((x+1) as i32,y as i32,0,0,0);
                         // img.set_pixel_rgb((x+1) as i32,(y+1) as i32,0,0,0);
-                        draw_tile_at(img, x as usize, y as usize, tile_id, tile_data, false);
+                        draw_tile_at(img, x as usize, y as usize, tile_id, sprite_data, false);
                     }
                 }
             }
         }
 
+        //draw the vram
         {
             let tile_data = mmu.borrow_slice(0x8000,0x9800);
             let img = &mut sss.vramdump;

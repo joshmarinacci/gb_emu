@@ -106,6 +106,7 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
         gb.execute();
         if gb.ppu.entered_vram {
             to_screen.send(String::from("redraw"));
+            ::std::thread::sleep(Duration::from_millis(1000 / 60));
         }
         if let Ok(evt) = receive_cpu.try_recv() {
             match evt {
@@ -169,6 +170,13 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             gb.clock,
             gb.ppu.next_clock,
         ))?;
+        //current instruction
+        let code = gb.fetch_opcode_at(gb.get_pc());
+        // println!("current op {:04x}", code);
+        if let Some(opx) = gb.lookup_op(&code) {
+            let op: Op = (*opx).clone();
+            println!("instr {:02x}  ->  {}  ->  {}",code, op.to_asm(), op.real(&gb));
+        }
         //registers
         let reg_style = Style::new().bg(Color::White).red().underlined();
         let regs = gb.cpu.reg_to_str();
@@ -192,14 +200,16 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             gb.mmu.read8_IO(IORegister::STAT),
             gb.mmu.read8_IO(IORegister::LY),
         ))?;
+        term.write_line(&format!(
+            "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
+            gb.mmu.read8_IO(IORegister::LY),
+            gb.mmu.read8_IO(IORegister::LYC),
+            gb.mmu.read8_IO(IORegister::SCY),
+            gb.mmu.read8_IO(IORegister::SCX),
+            gb.mmu.read8_IO(IORegister::WY),
+            gb.mmu.read8_IO(IORegister::WX),
+        ))?;
 
-        //current instruction
-        let code = gb.fetch_opcode_at(gb.get_pc());
-        // println!("current op {:04x}", code);
-        if let Some(opx) = gb.lookup_op(&code) {
-            let op: Op = (*opx).clone();
-            println!("instr {:02x}  ->  {}  ->  {}",code, op.to_asm(), op.real(&gb));
-        }
 
 
             let commands = Style::new().reverse();
@@ -275,6 +285,11 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
             start: 0x9C00,
             len: 0x400,
             name: "Tile Map Block 1",
+        },
+        RamChunk {
+            start:0xC000,
+            len:0x800,
+            name:"User Ram ",
         },
         RamChunk {
             start: 0xFE00,

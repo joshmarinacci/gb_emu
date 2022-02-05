@@ -879,12 +879,12 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             DisableInterrupts() => {
-                println!("disabling interrupts by DI");
+                // println!("disabling interrupts by DI");
                 self.cpu.IME = false;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             EnableInterrupts() => {
-                println!("enabling interrupts by EI");
+                // println!("enabling interrupts by EI");
                 self.cpu.IME = true;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }

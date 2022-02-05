@@ -71,9 +71,9 @@ impl IORegister {
             0xFF42 => Some(IORegister::SCY),
             0xFF43 => Some(IORegister::SCX),
             0xFF44 => Some(IORegister::LY),
-            // IORegister::LYC  => 0xFF45,
-            // IORegister::DMA  => 0xFF46,
-            // IORegister::BGP  => 0xFF47,
+            0xFF45 => Some(IORegister::LYC),
+            0xFF46 => Some(IORegister::DMA),
+            0xFF47 => Some(IORegister::BGP),
             // IORegister::OBP0 => 0xFF48,
             // IORegister::OBP1 => 0xFF49,
             // IORegister::WY   => 0xFF4A,
@@ -405,10 +405,10 @@ impl MMU2 {
         self.mem[(addr + 1) as usize] = hi;
     }
     fn dma_transfer(&mut self, val: u8) {
-        info!("DMA requested!");
+        // println!("DMA requested!");
         let src_addr = (val as u16) << 8;
         let src_addr_end = src_addr + 0xA0;
-        println!("transferring from src address {:04x}", src_addr);
+        // println!("transferring from src address {:04x}", src_addr);
         let dst_addr = 0xFE00;
         for n in 0..0xA0 {
             let byte = self.read8(src_addr + (n as u16));
