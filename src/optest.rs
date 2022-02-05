@@ -667,7 +667,7 @@ impl GBState {
 
             // perform the actual operation
             self.execute_op(&op);
-            self.ppu.update(&mut self.mmu);
+            self.ppu.update(&mut self.mmu, self.clock);
 
             //check for interrupts
             if self.cpu.IME {
@@ -676,6 +676,7 @@ impl GBState {
                 let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(IORegister::IF),0);
                 // println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
                 if vblank_requested && vblank_enabled {
+                    // println!("firing the vblank interrupt");
                     self.service_interrupt();
                 }
             }
@@ -716,6 +717,7 @@ impl GBState {
     fn service_interrupt(&mut self) {
         //if IME is set and IE flags are set
         //reset the IEM flag to prevent other interrupts
+        println!("disabling interrupts to do an interrupt");
         self.cpu.IME = false;
         //push PC onto stack
         self.cpu.dec_sp();
@@ -876,12 +878,12 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             DisableInterrupts() => {
-                // println!("disabling interrupts");
+                println!("disabling interrupts by DI");
                 self.cpu.IME = false;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             EnableInterrupts() => {
-                // println!("enabling interrupts");
+                println!("enabling interrupts by EI");
                 self.cpu.IME = true;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }

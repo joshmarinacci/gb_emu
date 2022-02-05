@@ -84,7 +84,7 @@ fn main() -> Result<()>{
             }
             // screen_obj.update_screen();
             if let Ok(str) = receive_screen.try_recv() {
-                println!("screen got message {}",str);
+                // println!("screen got message {}",str);
                 screen_obj.update_screen();
             }
         }
@@ -99,7 +99,7 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
     gb.set_pc(0x100);
     gb.mmu.write8_IO(IORegister::LCDC,0x00);
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
-    gb.mmu.write8_IO(IORegister::LY,0x00);
+    // gb.mmu.write8_IO(IORegister::LY,0x00);
     gb.mmu.write8_IO(IORegister::LYC,0x00);
 
     loop {
@@ -144,7 +144,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
     gb.set_pc(0x100);
     gb.mmu.write8_IO(IORegister::LCDC,0x00);
     gb.mmu.write8_IO(IORegister::STAT, 0x00);
-    gb.mmu.write8_IO(IORegister::LY,0x00);
+    // gb.mmu.write8_IO(IORegister::LY,0x00);
     gb.mmu.write8_IO(IORegister::LYC,0x00);
     let term = Term::stdout();
 
@@ -163,11 +163,11 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
 
         // status
         term.write_line(&format!(
-            "PC: {:04x}  SP:{:04x}    clock={}  cycles={}",
+            "PC: {:04x}  SP:{:04x}    clock={}  PPU clock={}",
             gb.cpu.get_pc(),
             gb.cpu.get_sp(),
             gb.clock,
-            gb.count
+            gb.ppu.next_clock,
         ))?;
         //registers
         let reg_style = Style::new().bg(Color::White).red().underlined();
@@ -184,12 +184,13 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         ))?;
         //IO status bits
         term.write_line(&format!(
-            "IME = {}   LCDC: {:08b}   STAT: {:08b}  LY:{},  PPU clock={}",
+            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  LY:{},  ",
             gb.cpu.IME,
+            gb.mmu.read8_IO(IORegister::IF),
+            gb.mmu.read8_IO(IORegister::IE),
             gb.mmu.read8_IO(IORegister::LCDC),
             gb.mmu.read8_IO(IORegister::STAT),
             gb.mmu.read8_IO(IORegister::LY),
-            gb.ppu.count,
         ))?;
 
         //current instruction
@@ -311,7 +312,7 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
 }
 
 fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
-    let selections = ["vblank"].to_vec();
+    let selections = ["vblank","enable all"].to_vec();
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
         .with_prompt("request interrupt")
         .default(0)
@@ -330,6 +331,10 @@ fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
         gb.mmu.write8_IO(IORegister::IF,val2);
 
         term.write_line("will fire after the next instruction")?;
+    }
+    if selection == 1 {
+        term.write_line("enabling all")?;
+        gb.cpu.IME = true;
     }
     Ok(())
 }

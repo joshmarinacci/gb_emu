@@ -66,12 +66,12 @@ impl LCDCRegister {
             false => MemRange{ start: 0x9800, end: 0x8BFF },
         };
         self.enabled = is_bit_set(byte, 7);
-        println!("set LCDC {:04x} {:?}",byte,self);
+        // println!("set LCDC {:04x} {:?}",byte,self);
     }
 }
 
 #[derive(Debug)]
-enum LCDMode {
+pub enum LCDMode {
     HBlank,
     VBlank,
     Searching,
@@ -81,7 +81,7 @@ enum LCDMode {
 #[derive(Debug)]
 pub struct STATRegister {
     value:u8,
-    mode:LCDMode, // bits 0 and 1
+    pub(crate) mode:LCDMode, // bits 0 and 1
     scanline_matching:bool, // bit 2 when LYC == LY
     hblank_interrupt_enabled:bool,
     vblank_interrupt_enabled:bool,
@@ -104,10 +104,13 @@ impl STATRegister {
         lcd
     }
     pub(crate) fn set(&mut self, byte:u8) {
+        self.value = byte;
+        self.vblank_interrupt_enabled = true;
         println!("cant set STAT register directly! {:08b}",byte);
         // panic!()
     }
-    pub(crate) fn reset(&mut self, p0: u8) {
+    pub(crate) fn reset(&mut self, val: u8) {
+        // println!("wrote to STAT {:08b}", val);
         self.value = 0;
         self.mode = LCDMode::HBlank;
         self.scanline_matching = false;

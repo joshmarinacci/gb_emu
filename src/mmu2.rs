@@ -122,7 +122,7 @@ impl IORegister {
             IORegister::STAT => 0xFF41,
             IORegister::SCY => 0xFF42,
             IORegister::SCX => 0xFF43,
-            IORegister::LY => 0xFF44,
+            IORegister::LY  => 0xFF44,
             IORegister::LYC => 0xFF45,
             IORegister::DMA => 0xFF46,
             IORegister::BGP => 0xFF47,
@@ -188,7 +188,7 @@ pub struct MMU2 {
     boot_rom_enabled: bool,
     pub joypad: Joypad,
     pub(crate) lcdc:LCDCRegister,
-    stat:STATRegister,
+    pub(crate) stat:STATRegister,
 }
 
 impl MMU2 {
@@ -320,7 +320,7 @@ impl MMU2 {
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
         if let Some(en) = IORegister::match_address(addr) {
-            println!("reg {:?} <- {:02x}", en, val);
+            // println!("reg {:?} <- {:02x}", en, val);
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
@@ -350,6 +350,10 @@ impl MMU2 {
                 //writing to div resets it
                 IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
+                // IORegister::IF => {
+                //     println!("changing IF {:08b}",val);
+                //     self.mem[addr as usize] = val;
+                // }
                 IORegister::IE => {
                     // println!("changing interrupts: {:08b}",val);
                     // let mut val2 = gb.mmu.read8_IO(IORegister::IF);
@@ -372,17 +376,22 @@ impl MMU2 {
         self.mem[reg.get_addr() as usize] = value;
     }
     pub fn write8_IO(&mut self, reg: IORegister, value: u8) {
-        match reg {
-            IORegister::IE => {
-                // println!("changing interrupts: {:08b}", value);
-                self.mem[reg.get_addr() as usize] = value;
-                return;
-            }
-            IORegister::LCDC => self.lcdc.set(value),
-            IORegister::STAT => self.stat.reset(value),
-            _ => {}
-        };
-        self.mem[reg.get_addr() as usize] = value;
+        self.write8(reg.get_addr(),value);
+        // match reg {
+        //     IORegister::IE => {
+        //         // println!("changing interrupts: {:08b}", value);
+        //         self.mem[reg.get_addr() as usize] = value;
+        //         return;
+        //     }
+        //     IORegister::IF => {
+        //         // println!("changing IF {:08b}",value);
+        //         self.mem[reg.get_addr() as usize] = value;
+        //     }
+        //     IORegister::LCDC => self.lcdc.set(value),
+        //     IORegister::STAT => self.stat.reset(value),
+        //     _ => {}
+        // };
+        // self.mem[reg.get_addr() as usize] = value;
     }
     pub fn read16(&self, addr: u16) -> u16 {
         let lo = self.mem[(addr + 0) as usize] as u16;
