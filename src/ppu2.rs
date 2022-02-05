@@ -98,7 +98,7 @@ impl PPU2 {
         //     println!("{:04x} {}", bg_tilemap_start + n * 32, line_str);
         // }
         //
-        println!("signed mode = {}", !unsigned_mode);
+        // println!("signed mode = {}", !unsigned_mode);
         let sx = sss.SCX as usize;
         let sy = sss.SCY as usize;
         if bg_enabled {
