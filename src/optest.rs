@@ -100,7 +100,7 @@ enum BinOp {
 
 #[derive(Debug, Copy, Clone)]
 enum BitOps {
-    BIT(u8, Src8),
+    BIT(u8, Dst8),
     RES(u8, Dst8),
     SET(u8, Dst8),
     RLC(R8),
@@ -1668,77 +1668,23 @@ fn make_op_table() -> OpTable {
         op_table.bitop(0xCB_28 + col, SRA(*r8));
         op_table.bitop(0xCB_30 + col, SWAP(*r8));
         op_table.bitop(0xCB_38 + col, SRL(*r8));
-        op_table.bitop(0xCB_40 + col, BIT(0, SrcR8(*r8)));
-        op_table.bitop(0xCB_48 + col, BIT(1, SrcR8(*r8)));
-        op_table.bitop(0xCB_50 + col, BIT(2, SrcR8(*r8)));
-        op_table.bitop(0xCB_58 + col, BIT(3, SrcR8(*r8)));
-        op_table.bitop(0xCB_60 + col, BIT(4, SrcR8(*r8)));
-        op_table.bitop(0xCB_68 + col, BIT(5, SrcR8(*r8)));
-        op_table.bitop(0xCB_70 + col, BIT(6, SrcR8(*r8)));
-        op_table.bitop(0xCB_78 + col, BIT(7, SrcR8(*r8)));
-
-        op_table.bitop(0xCB_80 + col, RES(0, DstR8(*r8)));
-        op_table.bitop(0xCB_88 + col, RES(1, DstR8(*r8)));
-        op_table.bitop(0xCB_90 + col, RES(2, DstR8(*r8)));
-        op_table.bitop(0xCB_98 + col, RES(3, DstR8(*r8)));
-        op_table.bitop(0xCB_A0 + col, RES(4, DstR8(*r8)));
-        op_table.bitop(0xCB_A8 + col, RES(5, DstR8(*r8)));
-        op_table.bitop(0xCB_B0 + col, RES(6, DstR8(*r8)));
-        op_table.bitop(0xCB_B8 + col, RES(7, DstR8(*r8)));
-
-        op_table.bitop(0xCB_C0 + col, SET(0, DstR8(*r8)));
-        op_table.bitop(0xCB_C8 + col, SET(1, DstR8(*r8)));
-        op_table.bitop(0xCB_D0 + col, SET(2, DstR8(*r8)));
-        op_table.bitop(0xCB_D8 + col, SET(3, DstR8(*r8)));
-        op_table.bitop(0xCB_E0 + col, SET(4, DstR8(*r8)));
-        op_table.bitop(0xCB_E8 + col, SET(5, DstR8(*r8)));
-        op_table.bitop(0xCB_F0 + col, SET(6, DstR8(*r8)));
-        op_table.bitop(0xCB_F8 + col, SET(7, DstR8(*r8)));
+        for j in 0..8 {
+            op_table.bitop(0xCB_40 + col + (j*8), BIT(j as u8, DstR8(*r8)));
+            op_table.bitop(0xCB_80 + col + (j*8), RES(j as u8, DstR8(*r8)));
+            op_table.bitop(0xCB_C0 + col + (j*8), SET(j as u8, DstR8(*r8)));
+        }
     }
 
     op_table.bitop(0xCB_27,SLA(A));
     op_table.bitop(0xCB_37,SWAP(A));
-    op_table.bitop(0xCB_47,BIT(0, SrcR8(A)));
-    op_table.bitop(0xCB_57,BIT(2, SrcR8(A)));
-    op_table.bitop(0xCB_67,BIT(4, SrcR8(A)));
-    op_table.bitop(0xCB_77,BIT(6, SrcR8(A)));
-    op_table.bitop(0xCB_87,RES(0, DstR8(A)));
-    op_table.bitop(0xCB_97,RES(2, DstR8(A)));
-    op_table.bitop(0xCB_A7,RES(4, DstR8(A)));
-    op_table.bitop(0xCB_B7,RES(6, DstR8(A)));
-    op_table.bitop(0xCB_C7,SET(0, DstR8(A)));
-    op_table.bitop(0xCB_D7,SET(2, DstR8(A)));
-    op_table.bitop(0xCB_E7,SET(4, DstR8(A)));
-    op_table.bitop(0xCB_F7,SET(6, DstR8(A)));
-
-    op_table.add_op(0xCB_4E,2,12,BitOp(BIT(1, Mem(HL))));
-    op_table.add_op(0xCB_5E,2,12,BitOp(BIT(3, Mem(HL))));
-    op_table.add_op(0xCB_6E,2,12,BitOp(BIT(5, Mem(HL))));
-    op_table.add_op(0xCB_7E,2,12,BitOp(BIT(7, Mem(HL))));
-    op_table.add_op(0xCB_8E,2,16,BitOp(RES(1, AddrDst(HL))));
-    op_table.add_op(0xCB_9E,2,16,BitOp(RES(3, AddrDst(HL))));
-    op_table.add_op(0xCB_AE,2,16,BitOp(RES(5, AddrDst(HL))));
-    op_table.add_op(0xCB_BE,2,16,BitOp(RES(7, AddrDst(HL))));
-    op_table.add_op(0xCB_CE,2,16,BitOp(SET(1, AddrDst(HL))));
-    op_table.add_op(0xCB_DE,2,16,BitOp(SET(3, AddrDst(HL))));
-    op_table.add_op(0xCB_EE,2,16,BitOp(SET(5, AddrDst(HL))));
-    op_table.add_op(0xCB_FE,2,16,BitOp(SET(7, AddrDst(HL))));
-
-    op_table.bitop(0xCB_4F,BIT(1, SrcR8(A)));
-    op_table.bitop(0xCB_5F,BIT(3, SrcR8(A)));
-    op_table.bitop(0xCB_6F,BIT(5, SrcR8(A)));
-    op_table.bitop(0xCB_7F,BIT(7, SrcR8(A)));
-    op_table.bitop(0xCB_8F,RES(1, DstR8(A)));
-    op_table.bitop(0xCB_9F,RES(3, DstR8(A)));
-    op_table.bitop(0xCB_AF,RES(5, DstR8(A)));
-    op_table.bitop(0xCB_BF,RES(7, DstR8(A)));
-    op_table.bitop(0xCB_CF,SET(1, DstR8(A)));
-    op_table.bitop(0xCB_DF,SET(3, DstR8(A)));
-    op_table.bitop(0xCB_EF,SET(5, DstR8(A)));
-    op_table.bitop(0xCB_FF,SET(7, DstR8(A)));
-
-    op_table.bitop(0xCB_86, RES(0, AddrDst(HL)));
-
+    for j in 0..8 {
+        op_table.add_op(0xCB_46 + (j*8),2,12,BitOp(BIT(j as u8, AddrDst(HL))));
+        op_table.add_op(0xCB_86 + (j*8),2,12,BitOp(RES(j as u8, AddrDst(HL))));
+        op_table.add_op(0xCB_C6 + (j*8),2,12,BitOp(SET(j as u8, AddrDst(HL))));
+        op_table.bitop( 0xCB_47 + (j*8), BIT(j as u8, DstR8(A)));
+        op_table.bitop( 0xCB_87 + (j*8), RES(j as u8, DstR8(A)));
+        op_table.bitop( 0xCB_C7 + (j*8), SET(j as u8, DstR8(A)));
+    }
 
 
     op_table.add_op(0x00C0, 1, 20, Call(RetCond(NotZero())));
