@@ -67,41 +67,14 @@ impl PPU2 {
         let mut sss = self.sss.lock().unwrap();
         sss.SCX = mmu.read8_IO(IORegister::SCX);
         sss.SCY = mmu.read8_IO(IORegister::SCY);
-        // let window_enabled = get_bit_as_bool(lcdc, 5);
-        let sprites_enabled = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 1);
-        // let sprites_enabled = true;
-        let bg_enabled = true; //bg is always enabled
-        let sprite_big = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 2);
-        let mut bg_tilemap_start = 0x9800;
-        let mut bg_tilemap_end = 0x9BFF;
-        if get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 3) {
-            bg_tilemap_start = 0x9C00;
-            bg_tilemap_end = 0x9FFF;
-        }
-        // println!("tilemap base address {:04x}", bg_tilemap_start);
-        let bg_tilemap = mmu.borrow_slice(bg_tilemap_start, bg_tilemap_end + 1);
-        // let bg_tilemap = &mmu.data[bg_tilemap_start..(bg_tilemap_end + 1)];
-        let oam_table = &mmu.borrow_slice(0xFE00,0xFEA0);
 
-        let mut td1_start = 0x8800;
-        let mut td1_end = 0x97FF;
-        let unsigned_mode = get_bit_as_bool(mmu.read8_IO(IORegister::LCDC), 4);
-        if unsigned_mode {
-            td1_start = 0x8000;
-            td1_end = 0x8FFF;
-        }
-        // println!("LCDC is {:02x}", mmu.read8_IO(IORegister::LCDC));
-        // println!("tile data base address {:04x}", td1_start);
-        let td1 = mmu.borrow_slice(td1_start, td1_end + 1);
-        // for (n, row) in bg_tilemap.chunks_exact(32).enumerate() {
-        //     let line_str: String = row.iter().map(|b| format!("{:02x}", b)).collect();
-        //     println!("{:04x} {}", bg_tilemap_start + n * 32, line_str);
-        // }
-        //
-        // println!("signed mode = {}", !unsigned_mode);
+        let bg_tilemap = mmu.borrow_range(&mmu.lcdc.bg_tilemap_select);
+        let oam_table = &mmu.borrow_slice(0xFE00,0xFEA0);
+        let tile_data = mmu.borrow_range(&mmu.lcdc.bg_window_tiledata_select);
+
         let sx = sss.SCX as usize;
         let sy = sss.SCY as usize;
-        if bg_enabled {
+        if mmu.lcdc.bg_enabled {
             let img = &mut sss.backbuffer;
             let spacing = 8;
             for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
@@ -113,23 +86,23 @@ impl PPU2 {
                         continue;
                     }
                     let id = *tile_id;
-                    if !unsigned_mode {
+                    if mmu.lcdc.signed_addressing {
                         let id2 = i16::from(id as i8) + 128;
                         draw_tile_at(
                             img,
                             x * spacing + sx,
                             y * spacing + sy,
                             id2 as u8,
-                            td1,
+                            tile_data,
                             false,
                         );
                     } else {
-                        draw_tile_at(img, x * spacing + sx, y * spacing + sy, id, td1, false);
+                        draw_tile_at(img, x * spacing + sx, y * spacing + sy, id, tile_data, false);
                     }
                 }
             }
         }
-        if sprites_enabled {
+        if mmu.lcdc.sprite_enabled {
             let img = &mut sss.backbuffer;
             for (i, atts) in oam_table.chunks_exact(4).enumerate() {
                 let y = atts[0];
@@ -140,27 +113,23 @@ impl PPU2 {
                 if tile_id >= 0 && tile_id < 0xFF {
                     // println!("drawing sprite {}",tile_id);
                     // println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
-                    if sprite_big {
+                    if mmu.lcdc.sprite_size_big {
                         println!("skipping big sprites");
                     } else {
                         // println!("drawing sprite at {},{}",x,y);
                         // img.set_pixel_rgb(x as i32,y as i32,0,0,0);
                         // img.set_pixel_rgb((x+1) as i32,y as i32,0,0,0);
                         // img.set_pixel_rgb((x+1) as i32,(y+1) as i32,0,0,0);
-                        draw_tile_at(img, x as usize, y as usize, tile_id, td1, false);
+                        draw_tile_at(img, x as usize, y as usize, tile_id, tile_data, false);
                     }
                 }
             }
         }
 
         {
-            // self.draw_vram_tiledata(mmu);
             let tile_data = mmu.borrow_slice(0x8000,0x9800);
-            // let tile_data = &mmu.data[0x8000..0x97FF];
             let img = &mut sss.vramdump;
-            // println!("drawing tile data {}",tile_data.len());
             for (n, tile) in tile_data.chunks_exact(16).enumerate() {
-                // println!("tile num {}",n);
                 let x = (n % 16) * 8;
                 let y = (n / 16) * 8;
                 for (line, row) in tile.chunks_exact(2).enumerate() {

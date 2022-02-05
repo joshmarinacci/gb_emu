@@ -1,6 +1,7 @@
 use crate::common::{get_bit_as_bool, set_bit};
 use log::info;
 use std::fs;
+use crate::hardware::{LCDCRegister, MemRange, STATRegister};
 
 /*
 IO registers
@@ -186,6 +187,8 @@ pub struct MMU2 {
     mem: Vec<u8>,
     boot_rom_enabled: bool,
     pub joypad: Joypad,
+    pub(crate) lcdc:LCDCRegister,
+    stat:STATRegister,
 }
 
 impl MMU2 {
@@ -198,6 +201,8 @@ impl MMU2 {
             mem: data,
             boot_rom_enabled: false,
             joypad: Joypad::init(),
+            lcdc:LCDCRegister::init(),
+            stat:STATRegister::init(),
         }
     }
 }
@@ -205,6 +210,9 @@ impl MMU2 {
 impl MMU2 {
     pub fn borrow_slice(&self, start: usize, end: usize) -> &[u8] {
         &self.mem[start..end]
+    }
+    pub fn borrow_range(&self, range:&MemRange) -> &[u8] {
+        &self.mem[(range.start as usize) .. (range.end as usize)]
     }
 }
 
@@ -255,6 +263,8 @@ impl MMU2 {
             mem: data,
             cart_rom: rom.to_vec(),
             joypad: Joypad::init(),
+            lcdc: LCDCRegister::init(),
+            stat: STATRegister::init(),
         }
     }
     pub fn disable_bootrom(&mut self) {
@@ -274,6 +284,8 @@ impl MMU2 {
     pub fn read8(&self, addr: u16) -> u8 {
         if let Some(reg) = IORegister::match_address(addr) {
             match reg {
+                IORegister::LCDC => self.lcdc.get(),
+                IORegister::STAT => self.stat.get(),
                 IORegister::JOYPAD_P1 => {
                     // 0 means pressed, 1 meanse released
                     match self.joypad.readmode {
@@ -345,6 +357,8 @@ impl MMU2 {
                     // gb.mmu.write8_IO(IORegister::IF,val2);
                     self.mem[addr as usize] = val;
                 }
+                IORegister::LCDC => self.lcdc.set(val),
+                IORegister::STAT => self.stat.set(val),
                 _ => {
                     //for registers we don't handle yet, just write as normal
                     self.mem[addr as usize] = val;
@@ -364,6 +378,8 @@ impl MMU2 {
                 self.mem[reg.get_addr() as usize] = value;
                 return;
             }
+            IORegister::LCDC => self.lcdc.set(value),
+            IORegister::STAT => self.stat.reset(value),
             _ => {}
         };
         self.mem[reg.get_addr() as usize] = value;
