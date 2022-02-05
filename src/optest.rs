@@ -116,14 +116,14 @@ enum BitOps {
     BIT(u8, Dst8),
     RES(u8, Dst8),
     SET(u8, Dst8),
-    RLC(R8),
-    RRC(R8),
-    RL(R8),
-    RR(R8),
-    SLA(R8),
-    SRA(R8),
-    SRL(R8),
-    SWAP(R8),
+    RLC(Dst8),
+    RRC(Dst8),
+    RL(Dst8),
+    RR(Dst8),
+    SLA(Dst8),
+    SRA(Dst8),
+    SRL(Dst8),
+    SWAP(Dst8),
     RLA(),
     RLCA(),
     RRA(),
@@ -744,7 +744,7 @@ const VBLANK_HANDLER_ADDRESS:u16 = 0x40;
 impl GBState {
     pub(crate) fn execute_op(&mut self, op: &Op) {
         match &op.typ {
-            Noop() => self.cpu.inc_pc(),
+            Noop() => self.set_pc(self.cpu.get_pc() + op.len),
             Jump(typ) => {
                 match typ {
                     Absolute(src) => {
@@ -1422,12 +1422,7 @@ impl OpTable {
 
 fn make_op_table() -> OpTable {
     let mut op_table = OpTable::new(); //:HashMap<u16,Op> = HashMap::new();
-    op_table.add(Op {
-        code: 0x00,
-        len: 1,
-        cycles: 4,
-        typ: Noop(),
-    });
+    op_table.add_op(0x00,1,4,Noop());
 
     op_table.load8(0x02, AddrDst(BC), SrcR8(A)); // LD L,A
     op_table.load8(0x06, DstR8(B), Im8()); // LD B,n
@@ -1679,14 +1674,14 @@ fn make_op_table() -> OpTable {
     let r8list = [B, C, D, E, H, L];
     for (i, r8) in r8list.iter().enumerate() {
         let col = (i as u16);
-        op_table.bitop(0xCB_00 + col, RLC(*r8));
-        op_table.bitop(0xCB_08 + col, RRC(*r8));
-        op_table.bitop(0xCB_10 + col, RL(*r8));
-        op_table.bitop(0xCB_18 + col, RR(*r8));
-        op_table.bitop(0xCB_20 + col, SLA(*r8));
-        op_table.bitop(0xCB_28 + col, SRA(*r8));
-        op_table.bitop(0xCB_30 + col, SWAP(*r8));
-        op_table.bitop(0xCB_38 + col, SRL(*r8));
+        op_table.bitop(0xCB_00 + col, RLC(DstR8(*r8)));
+        op_table.bitop(0xCB_08 + col, RRC(DstR8(*r8)));
+        op_table.bitop(0xCB_10 + col, RL(DstR8(*r8)));
+        op_table.bitop(0xCB_18 + col, RR(DstR8(*r8)));
+        op_table.bitop(0xCB_20 + col, SLA(DstR8(*r8)));
+        op_table.bitop(0xCB_28 + col, SRA(DstR8(*r8)));
+        op_table.bitop(0xCB_30 + col, SWAP(DstR8(*r8)));
+        op_table.bitop(0xCB_38 + col, SRL(DstR8(*r8)));
         for j in 0..8 {
             op_table.bitop(0xCB_40 + col + (j*8), BIT(j as u8, DstR8(*r8)));
             op_table.bitop(0xCB_80 + col + (j*8), RES(j as u8, DstR8(*r8)));
@@ -1694,8 +1689,14 @@ fn make_op_table() -> OpTable {
         }
     }
 
-    op_table.bitop(0xCB_27,SLA(A));
-    op_table.bitop(0xCB_37,SWAP(A));
+    op_table.bitop(0xCB_06,RLC(AddrDst(HL)));
+    op_table.bitop(0xCB_07,RLC(DstR8(A)));
+    op_table.bitop(0xCB_16,RL(AddrDst(HL)));
+    op_table.bitop(0xCB_17,RL(DstR8(A)));
+    op_table.bitop(0xCB_26,SLA(AddrDst(HL)));
+    op_table.bitop(0xCB_27,SLA(DstR8(A)));
+    op_table.bitop(0xCB_36,SWAP(AddrDst(HL)));
+    op_table.bitop(0xCB_37,SWAP(DstR8(A)));
     for j in 0..8 {
         op_table.add_op(0xCB_46 + (j*8),2,12,BitOp(BIT(j as u8, AddrDst(HL))));
         op_table.add_op(0xCB_86 + (j*8),2,12,BitOp(RES(j as u8, AddrDst(HL))));
@@ -1705,10 +1706,14 @@ fn make_op_table() -> OpTable {
         op_table.bitop( 0xCB_C7 + (j*8), SET(j as u8, DstR8(A)));
     }
 
-    op_table.bitop( 0xCB_0F, RRC(A));
-    op_table.bitop( 0xCB_1F, RR(A));
-    op_table.bitop( 0xCB_2F, SRA(A));
-    op_table.bitop( 0xCB_3F, SRL(A));
+    op_table.bitop( 0xCB_0E, RRC(AddrDst(HL)));
+    op_table.bitop( 0xCB_0F, RRC(DstR8(A)));
+    op_table.bitop( 0xCB_1E, RR(AddrDst(HL)));
+    op_table.bitop( 0xCB_1F, RR(DstR8(A)));
+    op_table.bitop( 0xCB_2E, SRA(AddrDst(HL)));
+    op_table.bitop( 0xCB_2F, SRA(DstR8(A)));
+    op_table.bitop( 0xCB_3E, SRL(AddrDst(HL)));
+    op_table.bitop( 0xCB_3F, SRL(DstR8(A)));
 
     op_table.add_op(0x00CD, 3, 24, Call(CallU16()));
 
