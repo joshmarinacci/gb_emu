@@ -1815,30 +1815,14 @@ fn make_op_table() -> OpTable {
 
     op_table.bitop(0xCB_86, RES(0,Dst8::AddrDst(HL)));
     op_table.bitop(0xCB_27,SLA(A));
-    op_table.add(Op {
-        code: 0xCB_37,
-        len: 2,
-        cycles: 8,
-        typ: BitOp(SWAP(A)),
-    });
-    op_table.add(Op {
-        code: 0xCB_87,
-        len: 2,
-        cycles: 8,
-        typ: BitOp(RES(0, DstR8(A))),
-    });
-    op_table.add(Op {
-        code: 0xCB_7E,
-        len: 2,
-        cycles: 12,
-        typ: BitOp(BIT(7, Src8::Mem(HL))),
-    });
-    op_table.add(Op {
-        code: 0xCB_7F,
-        len: 2,
-        cycles: 8,
-        typ: BitOp(BIT(7, SrcR8(A))),
-    });
+    op_table.bitop(0xCB_37,SWAP(A));
+    op_table.bitop(0xCB_87,RES(0, DstR8(A)));
+    op_table.bitop(0xCB_67,BIT(4, SrcR8(A)));
+    op_table.bitop(0xCB_77,BIT(6, SrcR8(A)));
+    op_table.bitop(0xCB_7E,BIT(7, Src8::Mem(HL)));
+    op_table.bitop(0xCB_7F,BIT(7, SrcR8(A)));
+    op_table.bitop(0xCB_6F,BIT(5, SrcR8(A)));
+
     op_table.add(Op {
         code: 0xCB_BE,
         len: 2,
@@ -1963,8 +1947,6 @@ fn make_op_table() -> OpTable {
         typ: Call(Push(AF)),
     });
 
-    // op_table.add(Op{ code: 0x00F1, len:1, cycles: 12, typ: OpType::Call(CallType::Pop(AF))});
-    // op_table.add(Op{ code: 0x00F5, len:1, cycles: 16, typ: OpType::Call(CallType::Push(AF))});
 
     op_table
 }
