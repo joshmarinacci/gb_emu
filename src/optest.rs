@@ -3,7 +3,7 @@ use std::fmt::format;
 use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{And, Or, Xor, SUB, ADC};
-use BitOps::{BIT, RES, SET};
+use BitOps::{BIT, CCF, CPL, DDA, RES, RLA, RLCA, RRA, RRCA, SCF, SET};
 use CallType::{CallU16, Pop, Push, Ret, RetCond};
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
@@ -977,7 +977,7 @@ impl GBState {
                         let val2 = set_bit(val, *n, true);
                         r8.set_value(self, val2);
                     }
-                    BitOps::CPL() => {
+                    CPL() => {
                         let val = A.get_value(self);
                         let val2 = !val;
                         A.set_value(self, val2);
@@ -1072,7 +1072,7 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = false;
                     }
-                    BitOps::RLA() => {
+                    RLA() => {
                         let a: u8 = A.get_value(self);
                         let c = a & 0x80 == 0x80;
                         let r = (a << 1) | (if self.cpu.r.carry { 1 } else { 0 });
@@ -1082,7 +1082,7 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
                     }
-                    BitOps::RLCA() => {
+                    RLCA() => {
                         let a:u8 = A.get_value(self);
                         let c = a & 0x80 == 0x80;
                         let r = (a << 1) | if c { 1 } else { 0 };
@@ -1093,7 +1093,7 @@ impl GBState {
                         self.cpu.r.carry = c;
                         // set_sr_flags(cpu, r,c);
                     }
-                    BitOps::RRA() => {
+                    RRA() => {
                         let a: u8 = A.get_value(self);
                         let c = a & 0x01 == 0x01;
                         let r = (a >> 1) | (if self.cpu.r.carry { 0x80 } else { 0x00 });
@@ -1103,7 +1103,7 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
                     }
-                    BitOps::RRCA() => {
+                    RRCA() => {
                         let a: u8 = A.get_value(self);
                         let c = a & 0x01 == 0x01;
                         let r = (a >> 1) | (if c { 0x80 } else { 0x00 });
@@ -1113,7 +1113,7 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
                     }
-                    BitOps::DDA() => {
+                    DDA() => {
                         let mut a: u8 = A.get_value(self);
                         let mut adjust = if self.cpu.r.carry { 0x60 } else { 0x00 };
                         if self.cpu.r.half {
@@ -1136,12 +1136,12 @@ impl GBState {
                         self.cpu.r.half = false;
                         A.set_value(self, a);
                     }
-                    BitOps::SCF() => {
+                    SCF() => {
                         self.cpu.r.subn = false;
                         self.cpu.r.half = false;
                         self.cpu.r.carry = true;
                     }
-                    BitOps::CCF() => {
+                    CCF() => {
                         self.cpu.r.subn = false;
                         self.cpu.r.half = false;
                         self.cpu.r.carry = !self.cpu.r.carry;
@@ -1199,14 +1199,14 @@ impl Op {
             BitOp(SRA(src)) => format!("RLC {}", src.name()),
             BitOp(SRL(src)) => format!("RLC {}", src.name()),
             BitOp(SWAP(src)) => format!("RLC {}", src.name()),
-            BitOp(BitOps::RLA()) => format!("RLA"),
-            BitOp(BitOps::RLCA()) => format!("RLCA"),
-            BitOp(BitOps::RRA()) => format!("RRA"),
-            BitOp(BitOps::RRCA()) => format!("RRCA"),
-            BitOp(BitOps::CPL()) => format!("CPL"),
-            BitOp(BitOps::DDA()) => format!("DDA"),
-            BitOp(BitOps::SCF()) => format!("SCF"),
-            BitOp(BitOps::CCF()) => format!("CCF"),
+            BitOp(RLA()) => format!("RLA"),
+            BitOp(RLCA()) => format!("RLCA"),
+            BitOp(RRA()) => format!("RRA"),
+            BitOp(RRCA()) => format!("RRCA"),
+            BitOp(CPL()) => format!("CPL"),
+            BitOp(DDA()) => format!("DDA"),
+            BitOp(SCF()) => format!("SCF"),
+            BitOp(CCF()) => format!("CCF"),
             Call(ct) => match ct {
                 CallU16() => format!("CALL u16"),
                 Push(src) => format!("PUSH {}", src.name()),
@@ -1254,14 +1254,14 @@ impl Op {
             BitOp(SRA(src)) => format!("SRA  {}", src.get_value(gb)),
             BitOp(SRL(src)) => format!("SRL  {}", src.get_value(gb)),
             BitOp(SWAP(src)) => format!("SWAP {}", src.get_value(gb)),
-            BitOp(BitOps::RLA()) => format!("RLA {}", A.get_value(gb)),
-            BitOp(BitOps::RLCA()) => format!("RLCA {}", A.get_value(gb)),
-            BitOp(BitOps::RRA()) => format!("RRA {}", A.get_value(gb)),
-            BitOp(BitOps::RRCA()) => format!("RRCA {}", A.get_value(gb)),
-            BitOp(BitOps::CPL()) => format!("CPL {}", A.get_value(gb)),
-            BitOp(BitOps::DDA()) => format!("DDA {}", A.get_value(gb)),
-            BitOp(BitOps::SCF()) => format!("SCF {}", A.get_value(gb)),
-            BitOp(BitOps::CCF()) => format!("CCF {}", A.get_value(gb)),
+            BitOp(RLA()) => format!("RLA {}", A.get_value(gb)),
+            BitOp(RLCA()) => format!("RLCA {}", A.get_value(gb)),
+            BitOp(RRA()) => format!("RRA {}", A.get_value(gb)),
+            BitOp(RRCA()) => format!("RRCA {}", A.get_value(gb)),
+            BitOp(CPL()) => format!("CPL {}", A.get_value(gb)),
+            BitOp(DDA()) => format!("DDA {}", A.get_value(gb)),
+            BitOp(SCF()) => format!("SCF {}", A.get_value(gb)),
+            BitOp(CCF()) => format!("CCF {}", A.get_value(gb)),
             Call(ct) => match ct {
                 CallU16() => format!("CALL {}", gb.mmu.read16(gb.cpu.get_pc())),
                 CallCondU16(cond) => {
@@ -1597,64 +1597,24 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0xFE,2,8,Compare(DstR8(A), Im8()));
 
 
-    op_table.add(Op {
-        code: 0xC2,
-        len: 3,
-        cycles: 12,
-        typ: Jump(AbsoluteCond(NotZero(), AddrSrc::Imu16())),
-    });
-    op_table.add(Op {
-        code: 0xC3,
-        len: 3,
-        cycles: 12,
-        typ: Jump(Absolute(AddrSrc::Imu16())),
-    });
-    op_table.add(Op {
-        code: 0x20,
-        len: 2,
-        cycles: 12,
-        typ: Jump(RelativeCond(NotZero(), Im8())),
-    });
-    op_table.add(Op {
-        code: 0x30,
-        len: 2,
-        cycles: 12,
-        typ: Jump(RelativeCond(NotCarry(), Im8())),
-    });
-    op_table.add(Op {
-        code: 0x38,
-        len: 2,
-        cycles: 8,
-        typ: Jump(RelativeCond(Carry(), Im8())),
-    });
-    op_table.add(Op {
-        code: 0x28,
-        len: 2,
-        cycles: 12,
-        typ: Jump(RelativeCond(Zero(), Im8())),
-    });
-    op_table.add(Op {
-        code: 0x18,
-        len: 2,
-        cycles: 12,
-        typ: Jump(Relative(Im8())),
-    });
-    op_table.add_op(0xE9,1,4,Jump(Absolute(AddrSrc::Src16(HL))));
-    op_table.add(Op {
-        code: 0xCA,
-        len: 3,
-        cycles: 12,
-        typ: Jump(AbsoluteCond(Zero(), AddrSrc::Imu16())),
-    });
+    op_table.add_op(0xC2,3,12,Jump(AbsoluteCond(NotZero(), AddrSrc::Imu16())));
+    op_table.add_op(0xC3,3,12,Jump(Absolute(AddrSrc::Imu16())));
+    op_table.add_op(0x20,2,12,Jump(RelativeCond(NotZero(), Im8())));
+    op_table.add_op(0x30,2,12,Jump(RelativeCond(NotCarry(), Im8())));
+    op_table.add_op(0x18,2,12,Jump(Relative(Im8())));
+    op_table.add_op(0x28,2,12,Jump(RelativeCond(Zero(), Im8())));
+    op_table.add_op(0x38,2,8, Jump(RelativeCond(Carry(), Im8())));
+    op_table.add_op(0xE9,1,4, Jump(Absolute(AddrSrc::Src16(HL))));
+    op_table.add_op(0xCA,3,12,Jump(AbsoluteCond(Zero(), AddrSrc::Imu16())));
 
-    op_table.add_op(0x07,1,4,BitOp(BitOps::RLCA()));
-    op_table.add_op(0x0F,1,4,BitOp(BitOps::RRCA()));
-    op_table.add_op(0x17,1,4,BitOp(BitOps::RLA()));
-    op_table.add_op(0x1F,1,4,BitOp(BitOps::RRA()));
-    op_table.add_op(0x27,1,4,BitOp(BitOps::DDA()));
-    op_table.add_op(0x2F,1,4,BitOp(BitOps::CPL()));
-    op_table.add_op(0x37,1,4,BitOp(BitOps::SCF()));
-    op_table.add_op(0x3F,1,4,BitOp(BitOps::CCF()));
+    op_table.add_op(0x07,1,4,BitOp(RLCA()));
+    op_table.add_op(0x0F,1,4,BitOp(RRCA()));
+    op_table.add_op(0x17,1,4,BitOp(RLA()));
+    op_table.add_op(0x1F,1,4,BitOp(RRA()));
+    op_table.add_op(0x27,1,4,BitOp(DDA()));
+    op_table.add_op(0x2F,1,4,BitOp(CPL()));
+    op_table.add_op(0x37,1,4,BitOp(SCF()));
+    op_table.add_op(0x3F,1,4,BitOp(CCF()));
 
     // almost the entire lower CB chart
     let r8list = [B, C, D, E, H, L];
