@@ -9,7 +9,7 @@ use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
 use Dst8::AddrDst;
 use JumpType::{Absolute, Restart};
-use OpType::{BitOp, Call, Dec16, Dec8, DisableInterrupts, Inc16, Inc8, Jump, Load16, Math};
+use OpType::{BitOp, Call, Dec8, DisableInterrupts, Inc8, Jump, Load16, Math, Noop};
 use Src16::{Im16, SrcR16};
 use CPUR8::{R8A, R8B, R8C};
 use crate::common::{get_bit_as_bool, load_romfile, set_bit, u8_as_i8};
@@ -21,10 +21,12 @@ use crate::optest::BitOps::{RL, RLC, RR, RRC, SLA, SRA, SRL, SWAP};
 use crate::optest::CallType::{CallCondU16, RetI};
 use crate::optest::Dst8::DstR8;
 use crate::optest::JumpType::{AbsoluteCond, Relative, RelativeCond};
-use crate::optest::OpType::{AddSP, Compare, EnableInterrupts, Halt, Load8, Math16};
+use crate::optest::BinOp16::Add16;
+use crate::optest::OpType::{AddSP, Compare, EnableInterrupts, Halt, Load8, Math16, Math16u};
 use crate::optest::Src8::{HiMemIm8, Im8, Mem, SrcR8};
 use crate::optest::R16::{AF, BC, DE, HL, SP};
 use crate::optest::R8::{A, B, C, D, E, H, L};
+use crate::optest::UnOp16::{Dec16, Inc16};
 use crate::ppu2::PPU2;
 
 #[derive(Debug, Copy, Clone)]
@@ -98,6 +100,16 @@ enum BinOp {
 }
 
 #[derive(Debug, Copy, Clone)]
+enum BinOp16 {
+    Add16,
+}
+#[derive(Debug, Copy, Clone)]
+enum UnOp16 {
+    Inc16(R16),
+    Dec16(R16),
+}
+
+#[derive(Debug, Copy, Clone)]
 enum BitOps {
     BIT(u8, Dst8),
     RES(u8, Dst8),
@@ -161,9 +173,8 @@ enum OpType {
     Compare(Dst8, Src8),
     Math(BinOp, Dst8, Src8),
     AddSP(Dst16,Src8),
-    Math16(BinOp, Dst16, Src16),
-    Inc16(R16),
-    Dec16(R16),
+    Math16(BinOp16, Dst16, Src16),
+    Math16u(UnOp16),
     Inc8(Dst8),
     Dec8(Dst8),
     BitOp(BitOps),
@@ -452,6 +463,13 @@ impl BinOp {
         }
     }
 }
+impl BinOp16 {
+    fn name(&self) -> &str {
+        match self {
+            Add16 => "ADD",
+        }
+    }
+}
 
 impl Cond {
     fn get_value(&self, gb: &GBState) -> bool {
@@ -703,7 +721,7 @@ const VBLANK_HANDLER_ADDRESS:u16 = 0x40;
 impl GBState {
     pub(crate) fn execute_op(&mut self, op: &Op) {
         match &op.typ {
-            OpType::Noop() => self.cpu.inc_pc(),
+            Noop() => self.cpu.inc_pc(),
             Jump(typ) => {
                 match typ {
                     Absolute(src) => {
@@ -860,12 +878,6 @@ impl GBState {
 
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
-            Inc16(dst) => {
-                let v1 = dst.get_value(self);
-                let v2 = v1.wrapping_add(1);
-                dst.set_value(self, v2);
-                self.set_pc(self.cpu.get_pc() + op.len);
-            }
             Inc8(dst) => {
                 let v1 = dst.get_value(self);
                 let result = v1.wrapping_add(1);
@@ -873,13 +885,6 @@ impl GBState {
                 self.cpu.r.zero = result == 0;
                 self.cpu.r.half = (result & 0x0F) + 1 > 0x0F;
                 self.cpu.r.subn = false;
-                self.set_pc(self.cpu.get_pc() + op.len);
-            }
-            Dec16(dst) => {
-                let v1 = dst.get_value(self);
-                let v2 = v1.wrapping_sub(1);
-                // println!(" ### DEC {:04x}",v2);
-                dst.set_value(self, v2);
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             Dec8(dst) => {
@@ -939,11 +944,7 @@ impl GBState {
                 let b = src.get_value(self);
                 let a = dst.get_value(self);
                 match binop {
-                    Or => {}
-                    Xor => {}
-                    And => {}
-                    SUB => {}
-                    Add => {
+                    Add16 => {
                         // println!("adding {:?},{:?}",dst,src);
                         // println!("values are {:04x} {:04x}",a,b);
                         let r = a.wrapping_add(b);
@@ -953,10 +954,25 @@ impl GBState {
                         // println!("final add value is {:04x}",r);
                         dst.set_value(self, r);
                     }
-                    ADC => {}
-                    SBC => {}
                 };
                 self.set_pc(self.cpu.get_pc() + op.len);
+            }
+            Math16u(unop) => {
+                match unop {
+                    Inc16(dst) => {
+                        let v1 = dst.get_value(self);
+                        let v2 = v1.wrapping_add(1);
+                        dst.set_value(self, v2);
+                        self.set_pc(self.cpu.get_pc() + op.len);
+                    }
+                    Dec16(dst) => {
+                        let v1 = dst.get_value(self);
+                        let v2 = v1.wrapping_sub(1);
+                        // println!(" ### DEC {:04x}",v2);
+                        dst.set_value(self, v2);
+                        self.set_pc(self.cpu.get_pc() + op.len);
+                    }
+                }
             }
             BitOp(bop) => {
                 match bop {
@@ -1167,7 +1183,7 @@ impl GBState {
 impl Op {
     pub fn to_asm(&self) -> String {
         match &self.typ {
-            OpType::Noop() => "NOOP".to_string(),
+            Noop() => "NOOP".to_string(),
             Jump(typ) => match typ {
                 Absolute(src) => format!("JP {}", src.name()),
                 RelativeCond(cond, src) => format!("JP {},{}", cond.name(), src.name()),
@@ -1176,17 +1192,17 @@ impl Op {
                 AbsoluteCond(cond, src) => format!("CALL {},{}", cond.name(), src.name()),
             },
             Load16(dst, src) => format!("LD {} {}", dst.name(), src.name()),
-            OpType::Load8(dst, src) => format!("LD {}, {}", dst.name(), src.name()),
+            Load8(dst, src) => format!("LD {}, {}", dst.name(), src.name()),
             DisableInterrupts() => "DI".to_string(),
             EnableInterrupts() => "EI".to_string(),
             Halt() => "HALT".to_string(),
             Compare(dst, src) => format!("CP {},{}", dst.name(), src.name()),
-            Inc16(dst) => format!("INC {}", dst.name()),
-            Dec16(dst) => format!("DEC {}", dst.name()),
             Inc8(dst) => format!("INC {}", dst.name()),
             Dec8(dst) => format!("DEC {}", dst.name()),
             Math(binop, dst, src) => format!("{} {},{}", binop.name(), dst.name(), src.name()),
             Math16(binop, dst, src) => format!("{} {},{}", binop.name(), dst.name(), src.name()),
+            Math16u(Inc16(dst)) => format!("INC {}",dst.name()),
+            Math16u(Dec16(dst)) => format!("DEC {}",dst.name()),
             BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.name()),
             BitOp(RES(n, src)) => format!("RES {}, {}", n, src.name()),
             BitOp(SET(n, src)) => format!("SET {}, {}", n, src.name()),
@@ -1220,7 +1236,7 @@ impl Op {
     }
     pub fn real(&self, gb: &GBState) -> String {
         match &self.typ {
-            OpType::Noop() => "NOOP".to_string(),
+            Noop() => "NOOP".to_string(),
             Jump(typ) => match typ {
                 Absolute(src) => format!("JP {:04x}", src.get_addr(gb)),
                 RelativeCond(cond, src) => format!("JR {}, {}", cond.real(gb), src.real(gb)),
@@ -1234,13 +1250,17 @@ impl Op {
             EnableInterrupts() => format!("EI"),
             Halt() => format!("HALT"),
             Compare(dst, src) => format!("CP {}, {}", dst.real(gb), src.real(gb)),
-            Inc16(dst) => format!("INC {}", dst.get_value(gb)),
-            Dec16(dst) => format!("DEC {}", dst.get_value(gb)),
             Inc8(dst) => format!("INC {}", dst.get_value(gb)),
             Dec8(dst) => format!("DEC {}", dst.get_value(gb)),
             Math(binop, dst, src) => format!("{} {},{}", binop.name(), dst.real(gb), src.real(gb)),
             Math16(binop, dst, src) => {
                 format!("{} {},{}", binop.name(), dst.real(gb), src.real(gb))
+            }
+            Math16u(unop) => {
+                match unop {
+                    Inc16(dst) => format!("INC {}", dst.get_value(gb)),
+                    Dec16(dst) => format!("DEC {}", dst.get_value(gb)),
+                }
             }
             BitOp(BIT(n, src)) => format!("BIT {}, {}", n, src.get_value(gb)),
             BitOp(RES(n, src)) => format!("RES {}, {}", n, src.get_value(gb)),
@@ -1339,7 +1359,7 @@ impl OpTable {
             code,
             len,
             cycles,
-            typ: OpType::Load8(dst, src),
+            typ: Load8(dst, src),
         });
     }
     fn load16(&mut self, code: u16, dst: Dst16, src: Src16) {
@@ -1381,7 +1401,7 @@ fn make_op_table() -> OpTable {
         code: 0x00,
         len: 1,
         cycles: 4,
-        typ: OpType::Noop(),
+        typ: Noop(),
     });
 
     op_table.load8(0x02, AddrDst(BC), SrcR8(A)); // LD L,A
@@ -1486,15 +1506,15 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0xFB,1,4,EnableInterrupts());
     op_table.add_op(0x76,1,16, Halt());
 
-    op_table.add_op(0x03,1,8,Inc16(BC));
-    op_table.add_op(0x13,1,8,Inc16(DE));
-    op_table.add_op(0x23,1,8,Inc16(HL));
-    op_table.add_op(0x33,1,8,Inc16(SP));
+    op_table.add_op(0x03,1,8,Math16u(Inc16(BC)));
+    op_table.add_op(0x13,1,8,Math16u(Inc16(DE)));
+    op_table.add_op(0x23,1,8,Math16u(Inc16(HL)));
+    op_table.add_op(0x33,1,8,Math16u(Inc16(SP)));
 
-    op_table.add_op(0x0B,1,8,Dec16(BC));
-    op_table.add_op(0x1B,1,8,Dec16(DE));
-    op_table.add_op(0x2B,1,8,Dec16(HL));
-    op_table.add_op(0x3B,1,8,Dec16(SP));
+    op_table.add_op(0x0B,1,8,Math16u(Dec16(BC)));
+    op_table.add_op(0x1B,1,8,Math16u(Dec16(DE)));
+    op_table.add_op(0x2B,1,8,Math16u(Dec16(HL)));
+    op_table.add_op(0x3B,1,8,Math16u(Dec16(SP)));
 
     op_table.add_op(0x04,1,4,Inc8(DstR8(B)));
     op_table.add_op(0x05,1,4,Dec8(DstR8(B)));
@@ -1578,10 +1598,10 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0xBE,1,8,Compare(DstR8(A), Mem(HL)));
     op_table.add_op(0xBF,1,4,Compare(DstR8(A), SrcR8(A)));
 
-    op_table.add_op(0x09,1,8,Math16(Add, DstR16(HL), SrcR16(BC)));
-    op_table.add_op(0x19,1,8,Math16(Add, DstR16(HL), SrcR16(DE)));
-    op_table.add_op(0x29,1,8,Math16(Add, DstR16(HL), SrcR16(HL)));
-    op_table.add_op(0x39,1,8,Math16(Add, DstR16(HL), SrcR16(SP)));
+    op_table.add_op(0x09,1,8,Math16(Add16, DstR16(HL), SrcR16(BC)));
+    op_table.add_op(0x19,1,8,Math16(Add16, DstR16(HL), SrcR16(DE)));
+    op_table.add_op(0x29,1,8,Math16(Add16, DstR16(HL), SrcR16(HL)));
+    op_table.add_op(0x39,1,8,Math16(Add16, DstR16(HL), SrcR16(SP)));
 
     op_table.add_op(0xC6,2,8,Math(Add, DstR8(A), Im8()));
     op_table.add_op(0xD6,2,8,Math(SUB, DstR8(A), Im8()));
