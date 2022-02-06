@@ -325,11 +325,11 @@ impl MMU2 {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
                     // info!("writing to JOYPAD register {:08b}",val);
-                    if get_bit_as_bool(val, 5) {
+                    if !get_bit_as_bool(val, 5) {
                         // info!("Select Action Buttons");
                         self.joypad.readmode = JoypadReadMode::Action();
                     }
-                    if get_bit_as_bool(val, 4) {
+                    if !get_bit_as_bool(val, 4) {
                         // info!("Select Direction Buttons");
                         self.joypad.readmode = JoypadReadMode::Direction();
                     }
@@ -340,7 +340,7 @@ impl MMU2 {
                 IORegister::SC => {
                     if val == 0x81 {
                         let sbv = self.read8_IO(IORegister::SB);
-                        info!(
+                        println!(
                             "print serial byte {:02x} {}",
                             sbv,
                             char::from_u32(sbv as u32).unwrap()

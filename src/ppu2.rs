@@ -105,7 +105,7 @@ impl PPU2 {
 
         let bg_tilemap = mmu.borrow_range(&mmu.lcdc.bg_tilemap_select);
         let oam_table = mmu.borrow_slice(0xFE00,0xFEA0);
-        print_ram(0xFE00, &oam_table.to_vec());
+        // print_ram(0xFE00, &oam_table.to_vec());
         let tile_data = mmu.borrow_range(&mmu.lcdc.bg_window_tiledata_select);
         let sprite_data = mmu.borrow_slice(0x8000,0x9000);
 
