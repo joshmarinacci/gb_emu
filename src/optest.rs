@@ -672,8 +672,8 @@ impl GBState {
             //check for interrupts
             if self.cpu.IME {
                 // println!("registers are {:02x}  {:02x}",self.mmu.read8_IO(IORegister::IE), self.mmu.read8_IO(IORegister::IF));
-                let vblank_enabled = get_bit_as_bool(self.mmu.read8_IO(IORegister::IE),0);
-                let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(IORegister::IF),0);
+                let vblank_enabled = get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),0);
+                let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(&IORegister::IF),0);
                 // println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
                 if vblank_requested && vblank_enabled {
                     // println!("firing the vblank interrupt");
@@ -728,9 +728,7 @@ impl GBState {
         self.set_pc(VBLANK_HANDLER_ADDRESS);
 
         //reset the IF register
-        let mut val2 = self.mmu.read8_IO(IORegister::IF);
-        val2 = set_bit(val2,0,false);
-        self.mmu.write8_IO(IORegister::IF,val2);
+        self.mmu.set_IO_bit(&IORegister::IF,0,false);
 
         //the RET routine pops the PC back off the stack
         //RETI does the same but with enabling interrupts again
@@ -1853,11 +1851,11 @@ fn test_hellogithub() {
         }
 
         if gb.count % 20 == 0 {
-            let mut v = gb.mmu.read8_IO(IORegister::LY);
+            let mut v = gb.mmu.read8_IO(&IORegister::LY);
             if v >= 154 {
                 v = 0;
             }
-            gb.mmu.write8_IO(IORegister::LY, v + 1);
+            gb.mmu.write8_IO(&IORegister::LY, v + 1);
         }
 
         if gb.count > goal {
@@ -1975,11 +1973,11 @@ fn test_bootrom() {
         }
 
         if gb.count % 500 == 0 {
-            let mut v = gb.mmu.read8_IO(IORegister::LY);
+            let mut v = gb.mmu.read8_IO(&IORegister::LY);
             if v >= 154 {
                 v = 0;
             }
-            gb.mmu.write8_IO(IORegister::LY, v + 1);
+            gb.mmu.write8_IO(&IORegister::LY, v + 1);
         }
 
         if gb.count > goal {
@@ -2061,7 +2059,7 @@ fn test_tetris() {
                 panic!("ill come back to this later");
             }
 
-            0x2828 => println!("checking ly {:04x}", gb.mmu.read8_IO(IORegister::LY)),
+            0x2828 => println!("checking ly {:04x}", gb.mmu.read8_IO(&IORegister::LY)),
             0x282e => println!("end of vblank wait"),
             // 0x0217 => println!("made it past the loop"),
             _ => {}
@@ -2124,7 +2122,7 @@ fn test_tetris() {
         // gb.clock += (op.cycles as u32);
         gb.count += 1;
         if gb.count % 500 == 0 {
-            let v = gb.mmu.read8_IO(IORegister::LY);
+            let v = gb.mmu.read8_IO(&IORegister::LY);
             // println!("v is {}",v);
             let mut v2 = v;
             if v >= 154 {
@@ -2136,7 +2134,7 @@ fn test_tetris() {
                 println!("vblank flip");
                 // gb.ppu.draw_full_screen(&gb.mmu)
             }
-            gb.mmu.write8_IO(IORegister::LY, v2);
+            gb.mmu.write8_IO(&IORegister::LY, v2);
         }
 
         if gb.count > goal {
@@ -2158,8 +2156,8 @@ fn read_n_right_test() {
     assert_eq!(mmu.read8(0x142), 0x66);
     mmu.write8(0x142, 0x42);
     assert_eq!(mmu.read8(0x142), 0x42);
-    mmu.write8_IO(IORegister::LY, 0x85);
-    assert_eq!(mmu.read8_IO(IORegister::LY), 0x85);
+    mmu.write8_IO(&IORegister::LY, 0x85);
+    assert_eq!(mmu.read8_IO(&IORegister::LY), 0x85);
 }
 
 #[test]

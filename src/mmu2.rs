@@ -315,7 +315,7 @@ impl MMU2 {
             self.mem[addr as usize]
         }
     }
-    pub fn read8_IO(&self, reg: IORegister) -> u8 {
+    pub fn read8_IO(&self, reg: &IORegister) -> u8 {
         self.read8(reg.get_addr())
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
@@ -339,7 +339,7 @@ impl MMU2 {
                 },
                 IORegister::SC => {
                     if val == 0x81 {
-                        let sbv = self.read8_IO(IORegister::SB);
+                        let sbv = self.read8_IO(&IORegister::SB);
                         println!(
                             "print serial byte {:02x} {}",
                             sbv,
@@ -375,23 +375,8 @@ impl MMU2 {
     pub(crate) fn write8_IO_raw(&mut self, reg: IORegister, value: u8) {
         self.mem[reg.get_addr() as usize] = value;
     }
-    pub fn write8_IO(&mut self, reg: IORegister, value: u8) {
+    pub fn write8_IO(&mut self, reg: &IORegister, value: u8) {
         self.write8(reg.get_addr(),value);
-        // match reg {
-        //     IORegister::IE => {
-        //         // println!("changing interrupts: {:08b}", value);
-        //         self.mem[reg.get_addr() as usize] = value;
-        //         return;
-        //     }
-        //     IORegister::IF => {
-        //         // println!("changing IF {:08b}",value);
-        //         self.mem[reg.get_addr() as usize] = value;
-        //     }
-        //     IORegister::LCDC => self.lcdc.set(value),
-        //     IORegister::STAT => self.stat.reset(value),
-        //     _ => {}
-        // };
-        // self.mem[reg.get_addr() as usize] = value;
     }
     pub fn read16(&self, addr: u16) -> u16 {
         let lo = self.mem[(addr + 0) as usize] as u16;
@@ -414,5 +399,11 @@ impl MMU2 {
             let byte = self.read8(src_addr + (n as u16));
             self.mem[(dst_addr + (n as u16)) as usize] = byte;
         }
+    }
+
+    pub fn set_IO_bit(&mut self, reg: &IORegister, bit: u8, tf: bool) {
+        let val = self.read8_IO(reg);
+        let val2 = set_bit(val,bit,tf);
+        self.write8_IO(reg,val2);
     }
 }

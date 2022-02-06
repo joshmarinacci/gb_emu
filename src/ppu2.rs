@@ -29,9 +29,9 @@ impl PPU2 {
                     // println!("entering OAM search");
                     mmu.stat.mode = LCDMode::Searching;
                     //maybe trigger interrupt
-                    let  ly1 = mmu.read8_IO(IORegister::LY);
+                    let  ly1 = mmu.read8_IO(&IORegister::LY);
                     let mut ly2 = ly1+1;
-                    mmu.write8_IO(IORegister::LY,ly2);
+                    mmu.write8_IO(&IORegister::LY,ly2);
                     // println!("incremented scanline ly {}",ly2);
                     self.next_clock += 80;
                     if ly2 >= 144 {
@@ -39,10 +39,8 @@ impl PPU2 {
                         // ly2 = 154;
                         mmu.stat.mode = LCDMode::VBlank;
                         //request vblank interrupt handler
-                        let val = mmu.read8_IO(IORegister::IF);
-                        let val2 = set_bit(val,0,true);
-                        mmu.write8_IO(IORegister::IF,val2);
-                        mmu.write8_IO(IORegister::IE,0xFF);
+                        mmu.set_IO_bit(&IORegister::IE,0,true);
+                        mmu.set_IO_bit(&IORegister::IF,0,true);
                         self.entered_vram = true;
                         //wait for 10 scan lines
                         self.next_clock += 456;
@@ -50,7 +48,7 @@ impl PPU2 {
                 },
                 LCDMode::VBlank => {
                     // println!("still in vblank");
-                    let  ly1 = mmu.read8_IO(IORegister::LY);
+                    let  ly1 = mmu.read8_IO(&IORegister::LY);
                     let mut ly2 = ly1+1;
                     if ly2 >= 154 {
                         // println!("time to end the vblank");
@@ -63,7 +61,7 @@ impl PPU2 {
                     } else {
                         self.next_clock += 456;
                     }
-                    mmu.write8_IO(IORegister::LY,ly2);
+                    mmu.write8_IO(&IORegister::LY,ly2);
                 }
                 LCDMode::Searching => {
                     mmu.stat.mode = LCDMode::Transferring;
@@ -100,8 +98,8 @@ impl PPU2 {
     pub fn draw_full_screen(&mut self, mmu: &MMU2) {
         // println!("drawing the full screen");
         let mut sss = self.sss.lock().unwrap();
-        sss.SCX = mmu.read8_IO(IORegister::SCX);
-        sss.SCY = mmu.read8_IO(IORegister::SCY);
+        sss.SCX = mmu.read8_IO(&IORegister::SCX);
+        sss.SCY = mmu.read8_IO(&IORegister::SCY);
 
         let bg_tilemap = mmu.borrow_range(&mmu.lcdc.bg_tilemap_select);
         let oam_table = mmu.borrow_slice(0xFE00,0xFEA0);

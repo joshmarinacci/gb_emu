@@ -97,10 +97,10 @@ fn main() -> Result<()>{
 
 fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
     gb.set_pc(0x100);
-    gb.mmu.write8_IO(IORegister::LCDC,0x00);
-    gb.mmu.write8_IO(IORegister::STAT, 0x00);
+    gb.mmu.write8_IO(&IORegister::LCDC,0x00);
+    gb.mmu.write8_IO(&IORegister::STAT, 0x00);
     // gb.mmu.write8_IO(IORegister::LY,0x00);
-    gb.mmu.write8_IO(IORegister::LYC,0x00);
+    gb.mmu.write8_IO(&IORegister::LYC,0x00);
 
     loop {
         gb.execute();
@@ -143,10 +143,10 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
 
 fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
     gb.set_pc(0x100);
-    gb.mmu.write8_IO(IORegister::LCDC,0x00);
-    gb.mmu.write8_IO(IORegister::STAT, 0x00);
+    gb.mmu.write8_IO(&IORegister::LCDC,0x00);
+    gb.mmu.write8_IO(&IORegister::STAT, 0x00);
     // gb.mmu.write8_IO(IORegister::LY,0x00);
-    gb.mmu.write8_IO(IORegister::LYC,0x00);
+    gb.mmu.write8_IO(&IORegister::LYC,0x00);
     let term = Term::stdout();
 
 
@@ -194,20 +194,20 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         term.write_line(&format!(
             "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  LY:{},  ",
             gb.cpu.IME,
-            gb.mmu.read8_IO(IORegister::IF),
-            gb.mmu.read8_IO(IORegister::IE),
-            gb.mmu.read8_IO(IORegister::LCDC),
-            gb.mmu.read8_IO(IORegister::STAT),
-            gb.mmu.read8_IO(IORegister::LY),
+            gb.mmu.read8_IO(&IORegister::IF),
+            gb.mmu.read8_IO(&IORegister::IE),
+            gb.mmu.read8_IO(&IORegister::LCDC),
+            gb.mmu.read8_IO(&IORegister::STAT),
+            gb.mmu.read8_IO(&IORegister::LY),
         ))?;
         term.write_line(&format!(
             "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
-            gb.mmu.read8_IO(IORegister::LY),
-            gb.mmu.read8_IO(IORegister::LYC),
-            gb.mmu.read8_IO(IORegister::SCY),
-            gb.mmu.read8_IO(IORegister::SCX),
-            gb.mmu.read8_IO(IORegister::WY),
-            gb.mmu.read8_IO(IORegister::WX),
+            gb.mmu.read8_IO(&IORegister::LY),
+            gb.mmu.read8_IO(&IORegister::LYC),
+            gb.mmu.read8_IO(&IORegister::SCY),
+            gb.mmu.read8_IO(&IORegister::SCX),
+            gb.mmu.read8_IO(&IORegister::WY),
+            gb.mmu.read8_IO(&IORegister::WX),
         ))?;
 
 
@@ -337,14 +337,8 @@ fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
     // let sel = &selections[selection];
     if selection == 0 {
         term.write_line("requesting a vblank interrupt")?;
-        let mut val = gb.mmu.read8_IO(IORegister::IE);
-        val = val | 0b0000_0001; //turn on the vblank interrupt
-        gb.mmu.write8_IO(IORegister::IE,val);
-
-        let mut val2 = gb.mmu.read8_IO(IORegister::IF);
-        val2 = val2 | 0b0000_0001;
-        gb.mmu.write8_IO(IORegister::IF,val2);
-
+        gb.mmu.set_IO_bit(&IORegister::IE,0,true);
+        gb.mmu.set_IO_bit(&IORegister::IF,1,true);
         term.write_line("will fire after the next instruction")?;
     }
     if selection == 1 {
