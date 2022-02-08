@@ -72,21 +72,21 @@ impl LCDCRegister {
 
 #[derive(Debug)]
 pub enum LCDMode {
-    HBlank,
-    VBlank,
-    Searching,
-    Transferring,
+    HBlank_0,
+    VBlank_1,
+    Searching_2,
+    Transferring_3,
 }
 
 #[derive(Debug)]
 pub struct STATRegister {
     value:u8,
-    pub(crate) mode:LCDMode, // bits 0 and 1
-    scanline_matching:bool, // bit 2 when LYC == LY
-    hblank_interrupt_enabled:bool,
-    vblank_interrupt_enabled:bool,
-    sprite_interrupt_enabled:bool,
-    scanline_match_interrupt_enabled:bool,
+    pub mode:LCDMode, // bits 0 and 1
+    pub scanline_matching:bool, // bit 2 when LYC == LY
+    pub hblank_interrupt_enabled:bool,
+    pub vblank_interrupt_enabled:bool,
+    pub sprite_interrupt_enabled:bool,
+    pub scanline_match_interrupt_enabled:bool,
 }
 
 
@@ -94,7 +94,7 @@ impl STATRegister {
     pub(crate) fn init() -> STATRegister {
         let mut lcd = STATRegister {
             value: 0,
-            mode: LCDMode::HBlank,
+            mode: LCDMode::HBlank_0,
             scanline_matching: false,
             hblank_interrupt_enabled: false,
             vblank_interrupt_enabled: false,
@@ -104,15 +104,51 @@ impl STATRegister {
         lcd
     }
     pub(crate) fn set(&mut self, byte:u8) {
+        println!("setting STAT to {:08b}",byte);
         self.value = byte;
-        self.vblank_interrupt_enabled = true;
-        println!("cant set STAT register directly! {:08b}",byte);
+        // self.vblank_interrupt_enabled = true;
+        //mode bits cannot be set by programs.
+        //bits 0 and 1 represent the current mode. set by the PPU
+        //bit 2 is for the LYC=LY. it is read only
+
+        if is_bit_set(byte,3) {
+            println!("enabling hblank interrupts");
+        } else {
+            println!("disabling hblank interrupt")
+        }
+        self.hblank_interrupt_enabled = is_bit_set(byte,3);
+        if is_bit_set(byte,4) {
+            println!("enabling vblank interrupts");
+        } else {
+            println!("disabling vblank interrupt");
+        }
+        self.vblank_interrupt_enabled = is_bit_set(byte,4);
+        if is_bit_set(byte,5) {
+            println!("enabling sprite interrupt");
+        } else {
+            println!("disabling sprite interrupt");
+        }
+        self.sprite_interrupt_enabled = is_bit_set(byte,5);
+
+        if is_bit_set(byte,6) {
+            println!("requesting concincidnce flag");
+        } else {
+            println!("disabilng concidince flag");
+        }
+
+        // if is_bit_set(byte, 7) {
+        //     println!("requeseting other flag");
+        // } else {
+        //     println!("diabing other flag");
+        // }
+        //writing directly to 0xFF44 (LY) by the program should reset it to 0.
         // panic!()
     }
     pub(crate) fn reset(&mut self, val: u8) {
-        // println!("wrote to STAT {:08b}", val);
+        println!("wrote to STAT {:08b}", val);
+        println!("resetting stat");
         self.value = 0;
-        self.mode = LCDMode::HBlank;
+        self.mode = LCDMode::HBlank_0;
         self.scanline_matching = false;
         self.hblank_interrupt_enabled = false;
         self.vblank_interrupt_enabled = false;
@@ -120,19 +156,19 @@ impl STATRegister {
         self.scanline_match_interrupt_enabled = false;
     }
     pub(crate) fn get(&self) -> u8 {
-        // println!("reading stat register");
+        println!("reading stat register. mdoe is {:?}",self.mode);
         VerboseByte {
             b0: match self.mode {
-                LCDMode::HBlank => false,
-                LCDMode::VBlank => true,
-                LCDMode::Searching => false,
-                LCDMode::Transferring => true,
+                LCDMode::HBlank_0 => false,
+                LCDMode::VBlank_1 => true,
+                LCDMode::Searching_2 => false,
+                LCDMode::Transferring_3 => true,
             },
             b1: match self.mode {
-                LCDMode::HBlank => false,
-                LCDMode::VBlank => false,
-                LCDMode::Searching => true,
-                LCDMode::Transferring => true,
+                LCDMode::HBlank_0 => false,
+                LCDMode::VBlank_1 => false,
+                LCDMode::Searching_2 => true,
+                LCDMode::Transferring_3 => true,
             },
             b2: false,
             b3: false,

@@ -12,7 +12,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 use structopt::StructOpt;
-use gb_emu::common::{InputEvent, JoyPadKey};
+use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
 use gb_emu::mmu2::IORegister;
 use gb_emu::screen::{Screen, ScreenSettings};
 
@@ -145,7 +145,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
     gb.set_pc(0x100);
     gb.mmu.write8_IO(&IORegister::LCDC,0x00);
     gb.mmu.write8_IO(&IORegister::STAT, 0x00);
-    // gb.mmu.write8_IO(IORegister::LY,0x00);
+    gb.mmu.write8_IO(&IORegister::LY,0x00);
     gb.mmu.write8_IO(&IORegister::LYC,0x00);
     let term = Term::stdout();
 
@@ -192,13 +192,12 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         ))?;
         //IO status bits
         term.write_line(&format!(
-            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  LY:{},  ",
+            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}",
             gb.cpu.IME,
             gb.mmu.read8_IO(&IORegister::IF),
             gb.mmu.read8_IO(&IORegister::IE),
             gb.mmu.read8_IO(&IORegister::LCDC),
             gb.mmu.read8_IO(&IORegister::STAT),
-            gb.mmu.read8_IO(&IORegister::LY),
         ))?;
         term.write_line(&format!(
             "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
@@ -209,6 +208,31 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             gb.mmu.read8_IO(&IORegister::WY),
             gb.mmu.read8_IO(&IORegister::WX),
         ))?;
+
+        //current lcd mode
+        //is lcd on
+        //which interrupts are set on the stat register
+        term.write_line(&format!(
+            "LCD {}   mode = {:?}  hi={}, vi={} spi={} sci={}",
+            gb.mmu.lcdc.enabled,
+            gb.mmu.stat.mode,
+            gb.mmu.stat.hblank_interrupt_enabled,
+            gb.mmu.stat.vblank_interrupt_enabled,
+            gb.mmu.stat.sprite_interrupt_enabled,
+            gb.mmu.stat.scanline_match_interrupt_enabled,
+        ));
+
+        let IE = gb.mmu.read8_IO(&IORegister::IE);
+        let IF = gb.mmu.read8_IO(&IORegister::IE);
+        term.write_line(&format!(
+            "IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
+            IE,
+            get_bit(IE,0),
+            get_bit(IE,1),
+            get_bit(IE,2),
+            get_bit(IE,3),
+            get_bit(IE,4),
+        ));
 
 
 

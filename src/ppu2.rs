@@ -3,7 +3,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram, set_bit};
 use crate::hardware::LCDMode;
-use crate::hardware::LCDMode::VBlank;
+use crate::hardware::LCDMode::VBlank_1;
 use crate::mmu2::{IORegister, MMU2};
 use crate::optest::GBState;
 
@@ -25,62 +25,89 @@ impl PPU2 {
     pub(crate) fn update(&mut self, mmu:&mut MMU2, clock: u32) {
         self.entered_vram = false;
         if clock > self.next_clock*4 {
+            // println!("current mode {:?} lcd on = {}", mmu.stat.mode, mmu.lcdc.enabled);
             if !mmu.lcdc.enabled {
-                mmu.stat.mode = VBlank; // have to set to mode one when screen is off
+                mmu.stat.mode = VBlank_1; // have to set to mode one when screen is off
             }
             match mmu.stat.mode {
-                LCDMode::HBlank => {
-                    // println!("entering OAM search");
-                    mmu.stat.mode = LCDMode::Searching;
-                    //maybe trigger interrupt
-                    let  ly1 = mmu.read8_IO(&IORegister::LY);
-                    let mut ly2 = ly1+1;
-                    mmu.write8_IO(&IORegister::LY,ly2);
-                    // println!("incremented scanline ly {}",ly2);
+                LCDMode::HBlank_0 => {
+                    mmu.stat.mode = LCDMode::Searching_2;
+                    let ly2 = inc_ly(mmu);
                     self.next_clock += 80;
                     if ly2 >= 144 {
-                        // println!("leaving normal, going to vblank");
-                        // ly2 = 154;
-                        mmu.stat.mode = LCDMode::VBlank;
+                        mmu.stat.mode = LCDMode::VBlank_1;
                         //request vblank interrupt handler
-                        mmu.set_IO_bit(&IORegister::IE,0,true);
-                        mmu.set_IO_bit(&IORegister::IF,0,true);
+                        // mmu.set_IO_bit(&IORegister::IE,0,true);
+                        // mmu.set_IO_bit(&IORegister::IF,0,true);
+                        if mmu.stat.vblank_interrupt_enabled {
+                            println!("requesting a vblank");
+                        }
                         self.entered_vram = true;
                         //wait for 10 scan lines
                         self.next_clock += 456;
                     }
                 },
-                LCDMode::VBlank => {
-                    // println!("still in vblank");
-                    let  ly1 = mmu.read8_IO(&IORegister::LY);
-                    let mut ly2 = ly1+1;
+                LCDMode::VBlank_1 => {
+                    println!("still in vblank");
+                    let ly2 = inc_ly(mmu);
                     if ly2 >= 154 {
-                        // println!("time to end the vblank");
-                        ly2 = 0;
+                        println!("time to end the vblank");
+                        reset_ly(mmu);
                         self.draw_full_screen(mmu);
-                        mmu.stat.mode = LCDMode::Searching;
+                        mmu.stat.mode = LCDMode::Searching_2;
+                        if mmu.stat.sprite_interrupt_enabled {
+                            println!("sprite interrupt enabled. requesting it");
+                        }
                         self.entered_vram = false;
-                        // println!("frame len {}",clock - self.last_vblank);
                         self.last_vblank = clock;
                     } else {
                         self.next_clock += 456;
                     }
-                    mmu.write8_IO(&IORegister::LY,ly2);
                 }
-                LCDMode::Searching => {
-                    mmu.stat.mode = LCDMode::Transferring;
+                LCDMode::Searching_2 => {
+                    mmu.stat.mode = LCDMode::Transferring_3;
                     // println!("entering oam transfer");
                     //maybe trigger interrupt
                     self.next_clock += 172;
                 }
-                LCDMode::Transferring => {
-                    mmu.stat.mode = LCDMode::HBlank;
-                    // println!("entering hblank");
+                LCDMode::Transferring_3 => {
+                    mmu.stat.mode = LCDMode::HBlank_0;
+                    if mmu.stat.hblank_interrupt_enabled {
+                        println!("hblank interrupt enabled. requesting it");
+                    }
+                    println!("entering hblank");
                     //maybe trigger interrupt
                     self.next_clock += (456-172-80);
                 }
             }
         }
+    }
+}
+
+fn reset_ly(mmu: &mut MMU2) {
+    mmu.write8_IO(&IORegister::LY,0);
+    println!("incremented scanline ly {}",0);
+    check_scanline_match(mmu);
+}
+
+fn inc_ly(mmu: &mut MMU2) -> u8 {
+    let  ly1 = mmu.read8_IO(&IORegister::LY);
+    let ly2 = ly1+1;
+    mmu.write8_IO(&IORegister::LY,ly1+1);
+    println!("incremented scanline ly {}",ly2);
+    check_scanline_match(mmu);
+    return ly2
+}
+
+fn check_scanline_match(mmu: &mut MMU2) {
+    if mmu.read8_IO(&IORegister::LY) == mmu.read8_IO(&IORegister::LYC) {
+        println!("LY == LYC");
+        mmu.stat.scanline_matching = true;
+        if mmu.stat.scanline_match_interrupt_enabled {
+            println!("trigger a scanline match interrupt");
+        }
+    } else {
+        mmu.stat.scanline_matching = false;
     }
 }
 

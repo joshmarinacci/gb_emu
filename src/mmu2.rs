@@ -187,8 +187,8 @@ pub struct MMU2 {
     mem: Vec<u8>,
     boot_rom_enabled: bool,
     pub joypad: Joypad,
-    pub(crate) lcdc:LCDCRegister,
-    pub(crate) stat:STATRegister,
+    pub lcdc:LCDCRegister,
+    pub stat:STATRegister,
 }
 
 impl MMU2 {
