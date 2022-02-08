@@ -3,6 +3,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram, set_bit};
 use crate::hardware::LCDMode;
+use crate::hardware::LCDMode::VBlank;
 use crate::mmu2::{IORegister, MMU2};
 use crate::optest::GBState;
 
@@ -24,6 +25,9 @@ impl PPU2 {
     pub(crate) fn update(&mut self, mmu:&mut MMU2, clock: u32) {
         self.entered_vram = false;
         if clock > self.next_clock*4 {
+            if !mmu.lcdc.enabled {
+                mmu.stat.mode = VBlank; // have to set to mode one when screen is off
+            }
             match mmu.stat.mode {
                 LCDMode::HBlank => {
                     // println!("entering OAM search");
@@ -107,8 +111,8 @@ impl PPU2 {
         let tile_data = mmu.borrow_range(&mmu.lcdc.bg_window_tiledata_select);
         let sprite_data = mmu.borrow_slice(0x8000,0x9000);
 
-        let sx = sss.SCX as usize;
-        let sy = sss.SCY as usize;
+        let sx = sss.SCX as i32;
+        let sy = sss.SCY as i32;
         if mmu.lcdc.bg_enabled {
             let img = &mut sss.backbuffer;
             let spacing = 8;
@@ -121,18 +125,20 @@ impl PPU2 {
                         continue;
                     }
                     let id = *tile_id;
+                    let xx = (x as i32) * spacing + sx;
+                    let yy = (y as i32) * spacing + sy;
                     if mmu.lcdc.signed_addressing {
                         let id2 = i16::from(id as i8) + 128;
                         draw_tile_at(
                             img,
-                            x * spacing + sx,
-                            y * spacing + sy,
+                            xx,
+                            yy,
                             id2 as u8,
                             tile_data,
                             false,
                         );
                     } else {
-                        draw_tile_at(img, x * spacing + sx, y * spacing + sy, id, tile_data, false);
+                        draw_tile_at(img, xx, yy, id, tile_data, false);
                     }
                 }
             }
@@ -157,7 +163,7 @@ impl PPU2 {
                         // img.set_pixel_rgb(x as i32,y as i32,0,0,0);
                         // img.set_pixel_rgb((x+1) as i32,y as i32,0,0,0);
                         // img.set_pixel_rgb((x+1) as i32,(y+1) as i32,0,0,0);
-                        draw_tile_at(img, x as usize, y as usize, tile_id, sprite_data, false);
+                        draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data, false);
                     }
                 }
             }
@@ -187,7 +193,7 @@ impl PPU2 {
     }
 }
 
-fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u8], print: bool) {
+fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], print: bool) {
     let start: usize = ((tile_id as u16) * 16) as usize;
     let stop: usize = start + 16;
     // if print {
@@ -209,7 +215,7 @@ fn draw_tile_at(img: &mut Bitmap, x: usize, y: usize, tile_id: u8, tiledata: &[u
                 3 => (200, 200, 200),
                 _ => (255, 0, 255),
             };
-            img.set_pixel_rgb((x + 7 - n) as i32, (y + line) as i32, r, g, b);
+            img.set_pixel_rgb((x + 7 - (n as i32)) as i32, (y + (line as i32)) as i32, r, g, b);
         }
     }
 }
