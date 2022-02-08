@@ -74,10 +74,10 @@ impl IORegister {
             0xFF45 => Some(IORegister::LYC),
             0xFF46 => Some(IORegister::DMA),
             0xFF47 => Some(IORegister::BGP),
-            // IORegister::OBP0 => 0xFF48,
-            // IORegister::OBP1 => 0xFF49,
-            // IORegister::WY   => 0xFF4A,
-            // IORegister::WX   => 0xFF4B,
+            0xFF48 => Some(IORegister::OBP0),
+            0xFF49 => Some(IORegister::OBP1),
+            0xFF4A => Some(IORegister::WY),
+            0xFF4B => Some(IORegister::WX),
             0xFF0F => Some(IORegister::IF),
             0xFFFF => Some(IORegister::IE),
             _ => None,
@@ -350,12 +350,12 @@ impl MMU2 {
                 //writing to div resets it
                 IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
-                // IORegister::IF => {
-                //     println!("changing IF {:08b}",val);
-                //     self.mem[addr as usize] = val;
-                // }
+                IORegister::IF => {
+                    // println!("changing IF {:08b}",val);
+                    self.mem[addr as usize] = val;
+                }
                 IORegister::IE => {
-                    // println!("changing interrupts: {:08b}",val);
+                    println!("changing interrupts: {:08b}",val);
                     // let mut val2 = gb.mmu.read8_IO(IORegister::IF);
                     // val2 = val2 | 0b0000_0001;
                     // gb.mmu.write8_IO(IORegister::IF,val2);
@@ -363,6 +363,10 @@ impl MMU2 {
                 }
                 IORegister::LCDC => self.lcdc.set(val),
                 IORegister::STAT => self.stat.set(val),
+                IORegister::BGP => {
+                    println!("setting BGP! {:08b}",val);
+                    self.mem[addr as usize] = val;
+                }
                 _ => {
                     //for registers we don't handle yet, just write as normal
                     self.mem[addr as usize] = val;

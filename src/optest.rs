@@ -269,7 +269,7 @@ impl GBState {
         gb.set_pc(0);
         return gb;
     }
-    pub(crate) fn dump_current_state(&self) {
+    pub fn dump_current_state(&self) {
         println!(
             "PC: {:04x}  OP: {:04x}  clock={}   count={}",
             self.cpu.get_pc(),

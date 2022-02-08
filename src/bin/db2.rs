@@ -132,13 +132,18 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
                 //         ctx.jump_to_next_vblank(&mut term, &mut ss1).unwrap();
                 //     }
                 // }
+                InputEvent::Stop() => {
+                    println!("emu stopping. current status is");
+                    gb.dump_current_state();
+                    break;
+                },
                 _ => {
                     println!("unhandled event {:?}", evt);
                 }
             }
         }
-
     }
+    Ok(())
 }
 
 fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
