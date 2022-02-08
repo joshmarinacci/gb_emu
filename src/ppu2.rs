@@ -37,8 +37,8 @@ impl PPU2 {
                     if ly2 >= 144 {
                         mmu.stat.mode = LCDMode::VBlank_1;
                         //request vblank interrupt handler
-                        // mmu.set_IO_bit(&IORegister::IE,0,true);
-                        // mmu.set_IO_bit(&IORegister::IF,0,true);
+                        mmu.set_IO_bit(&IORegister::IE,0,true);
+                        mmu.set_IO_bit(&IORegister::IF,0,true);
                         if mmu.stat.vblank_interrupt_enabled {
                             println!("requesting a vblank");
                         }
@@ -48,10 +48,10 @@ impl PPU2 {
                     }
                 },
                 LCDMode::VBlank_1 => {
-                    println!("still in vblank");
+                    // println!("still in vblank");
                     let ly2 = inc_ly(mmu);
                     if ly2 >= 154 {
-                        println!("time to end the vblank");
+                        // println!("time to end the vblank");
                         reset_ly(mmu);
                         self.draw_full_screen(mmu);
                         mmu.stat.mode = LCDMode::Searching_2;
@@ -75,7 +75,7 @@ impl PPU2 {
                     if mmu.stat.hblank_interrupt_enabled {
                         println!("hblank interrupt enabled. requesting it");
                     }
-                    println!("entering hblank");
+                    // println!("entering hblank");
                     //maybe trigger interrupt
                     self.next_clock += (456-172-80);
                 }
@@ -86,7 +86,7 @@ impl PPU2 {
 
 fn reset_ly(mmu: &mut MMU2) {
     mmu.write8_IO(&IORegister::LY,0);
-    println!("incremented scanline ly {}",0);
+    // println!("incremented scanline ly {}",0);
     check_scanline_match(mmu);
 }
 
@@ -94,14 +94,14 @@ fn inc_ly(mmu: &mut MMU2) -> u8 {
     let  ly1 = mmu.read8_IO(&IORegister::LY);
     let ly2 = ly1+1;
     mmu.write8_IO(&IORegister::LY,ly1+1);
-    println!("incremented scanline ly {}",ly2);
+    // println!("incremented scanline ly {}",ly2);
     check_scanline_match(mmu);
     return ly2
 }
 
 fn check_scanline_match(mmu: &mut MMU2) {
     if mmu.read8_IO(&IORegister::LY) == mmu.read8_IO(&IORegister::LYC) {
-        println!("LY == LYC");
+        // println!("LY == LYC");
         mmu.stat.scanline_matching = true;
         if mmu.stat.scanline_match_interrupt_enabled {
             println!("trigger a scanline match interrupt");

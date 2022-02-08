@@ -668,16 +668,51 @@ impl GBState {
             // perform the actual operation
             self.execute_op(&op);
             self.ppu.update(&mut self.mmu, self.clock);
+            {
+                //update DIV
+                let mut div = self.mmu.read8_IO(&IORegister::DIV);
+                if self.count % 5 == 0 {
+                    div = div.wrapping_add(1);
+                    self.mmu.write8_IO_raw(IORegister::DIV,div);
+                }
+            }
+
+            {
+                //update timer
+                let TAC = self.mmu.read8_IO(&IORegister::TAC);
+                let b1 = get_bit_as_bool(TAC,1);
+                let b0 = get_bit_as_bool(TAC,0);
+                let factor = match (b1,b0) {
+                    (false,false) => 1024,
+                    (false,true) => 16,
+                    (true,false) => 64,
+                    (true,true) => 256,
+                };
+                if get_bit_as_bool(TAC,2) {
+                    // println!("timer enabled. updating with factor {}",factor);
+                    let mut TIMA = self.mmu.read8_IO(&IORegister::TIMA);
+                    let mut TMA = self.mmu.read8_IO(&IORegister::TMA);
+                    if self.count % factor == 0 {
+                        let (t2,over) = TIMA.overflowing_add(1);
+                        if over {
+                            TIMA = TMA;
+                            self.trigger_timer_interrupt();
+                        } else {
+                            TIMA = t2;
+                        }
+                        self.mmu.write8_IO_raw(IORegister::TIMA,TIMA);
+                    }
+                }
+            }
 
             //check for interrupts
             if self.cpu.IME {
-                // println!("registers are {:02x}  {:02x}",self.mmu.read8_IO(IORegister::IE), self.mmu.read8_IO(IORegister::IF));
+                // println!("registers are {:02x}  {:02x}",self.mmu.read8_IO(&IORegister::IE), self.mmu.read8_IO(&IORegister::IF));
                 let vblank_enabled = get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),0);
                 let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(&IORegister::IF),0);
                 // println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
                 if vblank_requested && vblank_enabled {
-                    // println!("firing the vblank interrupt");
-                    self.service_interrupt();
+                    self.trigger_vblank_interrupt();
                 }
             }
 
@@ -714,10 +749,11 @@ impl GBState {
         }
     }
 
-    fn service_interrupt(&mut self) {
+    fn trigger_vblank_interrupt(&mut self) {
         //if IME is set and IE flags are set
         //reset the IEM flag to prevent other interrupts
         // println!("disabling interrupts to do an interrupt");
+        println!("doing vblank interrupt");
         self.cpu.IME = false;
         //push PC onto stack
         self.cpu.dec_sp();
@@ -734,10 +770,33 @@ impl GBState {
         //RETI does the same but with enabling interrupts again
         // println!("jumping to vertical blank interrupt;");
     }
+    fn trigger_timer_interrupt(&mut self) {
+        if self.cpu.IME == false {
+            println!("cant do timer. IME is false");
+            return;
+        }
+        if !get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),2) {
+            println!("cant do dimer, IE for timer is disabled");
+            return;
+        }
+        println!("doing timer interrupt");
+        self.cpu.IME = false;
+        //push PC onto stack
+        self.cpu.dec_sp();
+        self.cpu.dec_sp();
+        self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
+
+        //jump to start of interrupt
+        self.set_pc(TIMER_HANDLER_ADDRESS);
+
+        //reset the IF register
+        self.mmu.set_IO_bit(&IORegister::IF,2,false);
+    }
 }
 
 
 const VBLANK_HANDLER_ADDRESS:u16 = 0x40;
+const TIMER_HANDLER_ADDRESS:u16 = 0x50;
 
 
 

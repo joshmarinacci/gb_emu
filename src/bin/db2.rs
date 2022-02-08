@@ -225,7 +225,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         let IE = gb.mmu.read8_IO(&IORegister::IE);
         let IF = gb.mmu.read8_IO(&IORegister::IE);
         term.write_line(&format!(
-            "IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
+            "interr: IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
             IE,
             get_bit(IE,0),
             get_bit(IE,1),
@@ -234,6 +234,13 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             get_bit(IE,4),
         ));
 
+        term.write_line(&format!(
+            "timer: DIV = {}  TIMA {}   TMA {} TAC {} ",
+            gb.mmu.read8_IO(&IORegister::DIV),
+            gb.mmu.read8_IO(&IORegister::TIMA),
+            gb.mmu.read8_IO(&IORegister::TMA),
+            gb.mmu.read8_IO(&IORegister::TAC),
+        ))?;
 
 
             let commands = Style::new().reverse();
