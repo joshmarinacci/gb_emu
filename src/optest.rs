@@ -716,6 +716,10 @@ impl GBState {
                 }
             }
 
+            if get_bit_as_bool(self.mmu.read8_IO(&IORegister::IF),1) {
+                self.trigger_stat_interrupt();
+            }
+
             // if self.debug {
             //     println!("AFTER:  PC {:04x}  op:{:04x} {:?}  reg:{}",
             //              self.cpu.get_pc(),
@@ -792,11 +796,37 @@ impl GBState {
         //reset the IF register
         self.mmu.set_IO_bit(&IORegister::IF,2,false);
     }
+    fn trigger_stat_interrupt(&mut self) {
+        if self.cpu.IME == false {
+            println!("cant do stat inter. IME is false");
+            return;
+        }
+        if !get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),1) {
+            println!("cant do stat inter, IE for timer is disabled");
+            return;
+        }
+
+        println!("doing stat interrupt");
+        self.cpu.IME = false;
+        //push PC onto stack
+        self.cpu.dec_sp();
+        self.cpu.dec_sp();
+        self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
+
+        //jump to start of interrupt
+        self.set_pc(STAT_HANDLER_ADDRESS);
+
+        //reset the IF register
+        self.mmu.set_IO_bit(&IORegister::IF,1,false);
+    }
 }
 
 
 const VBLANK_HANDLER_ADDRESS:u16 = 0x40;
+const STAT_HANDLER_ADDRESS:u16 = 0x48;
 const TIMER_HANDLER_ADDRESS:u16 = 0x50;
+const SERIAL_HANDLER_ADDRESS:u16 = 0x58;
+const JOYPAD_HANDLER_ADDRESS:u16 = 0x60;
 
 
 

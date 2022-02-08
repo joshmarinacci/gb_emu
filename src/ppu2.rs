@@ -57,6 +57,7 @@ impl PPU2 {
                         mmu.stat.mode = LCDMode::Searching_2;
                         if mmu.stat.sprite_interrupt_enabled {
                             println!("sprite interrupt enabled. requesting it");
+                            mmu.set_IO_bit(&IORegister::IF,1,true);
                         }
                         self.entered_vram = false;
                         self.last_vblank = clock;
@@ -74,6 +75,7 @@ impl PPU2 {
                     mmu.stat.mode = LCDMode::HBlank_0;
                     if mmu.stat.hblank_interrupt_enabled {
                         println!("hblank interrupt enabled. requesting it");
+                        mmu.set_IO_bit(&IORegister::IF,1,true);
                     }
                     // println!("entering hblank");
                     //maybe trigger interrupt
