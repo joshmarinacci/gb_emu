@@ -283,7 +283,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             'm' => dump_memory(&gb, &term)?,
             'i' => request_interrupt(gb, &term)?,
             'v' => dump_vram_png(gb, &term)?,
-            'g' => gb.execute_n(100_000_000),
+            'g' => go_until(gb, &term)?,
             'V' => gb.run_to_vblank(),
             'q' => break,
             _ => println!("??"),
@@ -293,6 +293,39 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             to_screen.send(String::from("redraw"));
         }
     }
+    Ok(())
+}
+
+fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
+    let options = [
+        "instruction executed",
+        "PC",
+        "register read",
+        "register written",
+    ];
+    let index = dialoguer::Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("go until:")
+        .default(0)
+        .items(&options)
+        .interact()
+        .unwrap();
+
+    match index {
+        0 => {
+            term.write_line("going until instruction");
+            if let Ok(f) = term.read_line_initial_text("which instruction? (hex)") {
+                if let Ok(code) = u16::from_str_radix(&f, 16) {
+                    term.write_line(&format!("going until instruction {}", &code));
+                    gb.run_to_instruction(&f);
+                }
+            }
+        }
+        _ => {
+            println!("not implemented yet")
+        }
+    };
+
+
     Ok(())
 }
 

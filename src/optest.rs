@@ -753,6 +753,25 @@ impl GBState {
         }
     }
 
+    pub fn run_to_instruction(&mut self, ins_name: &String) {
+            loop {
+                self.execute();
+                let current = self.mmu.read8(self.cpu.get_pc());
+                println!("instruction {}",current);
+                let code = self.fetch_opcode_at(self.get_pc());
+                if let Some(op) = self.lookup_op(&code) {
+                    match op.typ {
+                        DisableInterrupts() => {
+                            println!("hit disable interrupts");
+                            break;
+                        }
+                        _ => {}
+                    };
+                };
+
+            }
+    }
+
     fn trigger_vblank_interrupt(&mut self) {
         //if IME is set and IE flags are set
         //reset the IEM flag to prevent other interrupts
