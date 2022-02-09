@@ -992,21 +992,22 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             Inc8(dst) => {
-                let v1 = dst.get_value(self);
-                let result = v1.wrapping_add(1);
+                let a = dst.get_value(self);
+                let result = a.wrapping_add(1);
                 dst.set_value(self, result);
                 self.cpu.r.zero = result == 0;
-                self.cpu.r.half = (result & 0x0F) + 1 > 0x0F;
                 self.cpu.r.subn = false;
+                self.cpu.r.half = (a & 0x0F) + 1 > 0x0F;
+                //carry not modified
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             Dec8(dst) => {
-                let v1 = dst.get_value(self);
-                let result = v1.wrapping_sub(1);
+                let a = dst.get_value(self);
+                let result = a.wrapping_sub(1);
                 dst.set_value(self, result);
                 self.cpu.r.zero = result == 0;
                 self.cpu.r.subn = true;
-                self.cpu.r.half = (result & 0x0F) == 0;
+                self.cpu.r.half = (a & 0x0F) == 0;
                 // carry not modified
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
