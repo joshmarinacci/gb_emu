@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 pub struct RomFile {
     pub data: Vec<u8>,
-    pub(crate) path: String,
+    pub path: String,
+    pub mbc: MBC,
 }
 
 pub fn get_bit(by: u8, n: u8) -> u8 {
@@ -174,6 +175,15 @@ impl HWReg {
 }
 
 #[derive(Debug)]
+pub enum MBC {
+    RomOnly(),
+    MBC1(),
+    MBC2(),
+    MBC3(),
+    MBC5(),
+}
+
+#[derive(Debug)]
 pub enum JoyPadKey {
     A,
     B,
@@ -213,20 +223,20 @@ pub fn load_romfile(pth: &PathBuf) -> Result<RomFile> {
     println!("0x014A dest code {:02x}", data[0x014A]);
 
     let cart_type = data[0x0147];
-    match cart_type {
-        0x0 => println!("ROM only. Great!"),
-        0x1..=0x3 => println!("MBC1! Not supported!"),
-        0x5 | 0x6 => println!("MBC2! Not supported!"),
-        0x12 | 0x13 => println!("MBC3! Not supported!"),
-        0x19 | 0x1A | 0x1B | 0x1C | 0x1D | 0x1E => println!("MBC5! Not supported!"),
-        0x1F => println!("Bocket Camera, unsupported!"),
-        0xFD => println!("Bocket Camera, unsupported!"),
-        0xFE | 0xFF => println!("Hudson HuC, unsupported!"),
+    let mbc = match cart_type {
+        0x0 => MBC::RomOnly(),
+        0x1..=0x3 => MBC::MBC1(),
+        0x5 | 0x6 => MBC::MBC2(),
+        0x12 | 0x13 => MBC::MBC3(),
+        0x19 | 0x1A | 0x1B | 0x1C | 0x1D | 0x1E => MBC::MBC5(),
+        0x1F => panic!("Bocket Camera, unsupported!"),
+        0xFD => panic!("Bocket Camera, unsupported!"),
+        0xFE | 0xFF => panic!("Hudson HuC, unsupported!"),
         _ => {
-            println!("trying anyway");
+            panic!("unknown cart MBC type");
         }
-    }
-    Ok(RomFile { data, path: pth2 })
+    };
+    Ok(RomFile { data, path: pth2, mbc:mbc, })
 }
 
 

@@ -11,7 +11,7 @@ use JumpType::{Absolute, Restart};
 use OpType::{BitOp, Call, Dec8, DisableInterrupts, Inc8, Jump, Load16, Math, Noop};
 use Src16::{SrcR16};
 use CPUR8::{R8A, R8B, R8C};
-use crate::common::{get_bit_as_bool, load_romfile, set_bit, u8_as_i8};
+use crate::common::{get_bit_as_bool, load_romfile, MBC, set_bit, u8_as_i8};
 use crate::cpu2::CPUR8::{R8D, R8E, R8H, R8L};
 use crate::cpu2::{CPU, CPUR16, CPUR8};
 use crate::mmu2::{IORegister, MMU2};
@@ -259,7 +259,7 @@ impl GBState {
     pub(crate) fn make_test_context(rom: &Vec<u8>) -> GBState {
         let mut gb = GBState {
             cpu: CPU::init(),
-            mmu: MMU2::init(rom),
+            mmu: MMU2::init(rom, MBC::RomOnly()),
             ppu: PPU2::init(),
             clock: 0,
             count: 0,
@@ -1858,7 +1858,7 @@ pub fn setup_test_rom(fname: &str) -> Option<GBState> {
         Ok(cart) => {
             let mut gb = GBState {
                 cpu: CPU::init(),
-                mmu: MMU2::init(&cart.data),
+                mmu: MMU2::init(&cart.data, cart.mbc),
                 ppu: PPU2::init(),
                 clock: 0,
                 count: 0,
@@ -1870,7 +1870,9 @@ pub fn setup_test_rom(fname: &str) -> Option<GBState> {
             gb.mmu.write8_IO_raw(IORegister::IE,0);
             return Some(gb);
         }
-        Err(_) => return None,
+        Err(_) => {
+            panic!("couldnt load the rom file {}",fname);
+        }
     }
 }
 
@@ -1976,7 +1978,7 @@ fn test_bootrom() {
 
     let mut gb = GBState {
         cpu: CPU::init(),
-        mmu: MMU2::init(&data),
+        mmu: MMU2::init(&data, MBC::RomOnly()),
         ppu: PPU2::init(),
         clock: 0,
         count: 0,
@@ -2099,7 +2101,7 @@ fn test_tetris() {
 
     let mut gb = GBState {
         cpu: CPU::init(),
-        mmu: MMU2::init(&data),
+        mmu: MMU2::init(&data, MBC::RomOnly()),
         ppu: PPU2::init(),
         clock: 0,
         count: 0,

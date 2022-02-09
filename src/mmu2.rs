@@ -1,4 +1,4 @@
-use crate::common::{get_bit_as_bool, set_bit};
+use crate::common::{get_bit_as_bool, MBC, set_bit};
 use log::info;
 use std::fs;
 use crate::hardware::{LCDCRegister, MemRange, STATRegister};
@@ -189,20 +189,22 @@ pub struct MMU2 {
     pub joypad: Joypad,
     pub lcdc:LCDCRegister,
     pub stat:STATRegister,
+    pub mbc: MBC,
 }
 
 impl MMU2 {
     pub(crate) fn init_empty(val: u8) -> MMU2 {
-        let mut data: Vec<u8> = vec![0x00; 0xFFFF + 1];
-        data.fill(val);
+        let mut mem: Vec<u8> = vec![0x00; 0xFFFF + 1];
+        mem.fill(val);
         MMU2 {
             cart_rom: vec![],
             boot_rom: vec![],
-            mem: data,
+            mem,
             boot_rom_enabled: false,
             joypad: Joypad::init(),
             lcdc:LCDCRegister::init(),
             stat:STATRegister::init(),
+            mbc: MBC::RomOnly()
         }
     }
 }
@@ -250,21 +252,22 @@ impl Joypad {
 }
 
 impl MMU2 {
-    pub fn init(rom: &[u8]) -> MMU2 {
-        let mut data: Vec<u8> = vec![0xD3; 0xFFFF + 1];
-        data.fill(0xD3);
+    pub fn init(rom: &[u8], mbc: MBC) -> MMU2 {
+        let mut mem: Vec<u8> = vec![0xD3; 0xFFFF + 1];
+        mem.fill(0xD3);
         //copy over the cart rom
         for i in 0..rom.len() {
-            data[i] = rom[i];
+            mem[i] = rom[i];
         }
         MMU2 {
             boot_rom_enabled: false,
             boot_rom: fs::read("./resources/testroms/dmg_boot.bin").unwrap(),
-            mem: data,
+            mem,
             cart_rom: rom.to_vec(),
             joypad: Joypad::init(),
             lcdc: LCDCRegister::init(),
             stat: STATRegister::init(),
+            mbc,
         }
     }
     pub fn disable_bootrom(&mut self) {
