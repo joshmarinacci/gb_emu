@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use console::Color::White;
 use console::{Color, Style, Term};
 use dialoguer::theme::ColorfulTheme;
@@ -71,7 +72,7 @@ fn main() -> Result<()>{
         if args.run {
             start_run(&mut gb, to_screen, receive_cpu).unwrap();
         } else {
-            start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu).unwrap();
+            start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu, args.print_reg).unwrap();
         }
     });
 
@@ -146,13 +147,30 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
     Ok(())
 }
 
-fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
+fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>, print_reg: String) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(&IORegister::LCDC,0x00);
     gb.mmu.write8_IO(&IORegister::STAT, 0x00);
     gb.mmu.write8_IO(&IORegister::LY,0x00);
     gb.mmu.write8_IO(&IORegister::LYC,0x00);
     let term = Term::stdout();
+
+    let regs = print_reg.split(",").filter(|s|!s.trim().is_empty()).collect::<Vec<&str>>();
+
+    for reg in regs {
+        // println!("reg is {}",reg);
+        match IORegister::match_name(reg) {
+            Some(reg) => {
+                println!("monitoring for writing to register {:?}",reg);
+                gb.mmu.debug_registers.insert(reg);
+            }
+            None => {
+                println!("cannot find register with name {}",reg);
+                panic!("cannot monitor unknown register {}",reg);
+            }
+        }
+    }
+
 
 
     // fast forward by however much is specified
@@ -397,8 +415,10 @@ struct Cli {
     run:bool,
     #[structopt(long, default_value="0")]
     fastforward:u32,
-    // #[structopt(long)]
-    // verbose:bool,
+
+    #[structopt(long, default_value="")]
+    print_reg:String,
+
     // #[structopt(long, parse(try_from_str = parse_hex), default_value="0")]
     // breakpoint:u16,
     #[structopt(long)]

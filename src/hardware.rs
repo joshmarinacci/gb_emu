@@ -156,7 +156,7 @@ impl STATRegister {
         self.scanline_match_interrupt_enabled = false;
     }
     pub(crate) fn get(&self) -> u8 {
-        println!("reading stat register. mdoe is {:?}",self.mode);
+        // println!("reading stat register. mdoe is {:?}",self.mode);
         VerboseByte {
             b0: match self.mode {
                 LCDMode::HBlank_0 => false,

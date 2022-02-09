@@ -1,7 +1,9 @@
+use std::collections::HashSet;
 use crate::common::{get_bit_as_bool, MBC, set_bit};
 use log::info;
 use std::fs;
 use crate::hardware::{LCDCRegister, MemRange, STATRegister};
+use crate::mmu2::IORegister::{SCX, SCY};
 
 /*
 IO registers
@@ -13,7 +15,7 @@ IO registers
 
  */
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum IORegister {
     JOYPAD_P1,
     SB,
@@ -82,6 +84,13 @@ impl IORegister {
             0xFFFF => Some(IORegister::IE),
             _ => None,
         }
+    }
+    pub fn match_name(name:&str) -> Option<IORegister> {
+        let lname = name.to_lowercase();
+        if IORegister::SCX.name().to_lowercase().eq(&lname) { return Some(IORegister::SCX); }
+        if IORegister::SCY.name().to_lowercase().eq(&lname) { return Some(IORegister::SCY); }
+        if IORegister::BGP.name().to_lowercase().eq(&lname) { return Some(IORegister::BGP); }
+        return None
     }
 }
 
@@ -190,6 +199,8 @@ pub struct MMU2 {
     pub lcdc:LCDCRegister,
     pub stat:STATRegister,
     pub mbc: MBC,
+    pub debug_registers:HashSet<IORegister>,
+
 }
 
 impl MMU2 {
@@ -204,7 +215,8 @@ impl MMU2 {
             joypad: Joypad::init(),
             lcdc:LCDCRegister::init(),
             stat:STATRegister::init(),
-            mbc: MBC::RomOnly()
+            mbc: MBC::RomOnly(),
+            debug_registers: Default::default()
         }
     }
 }
@@ -268,6 +280,7 @@ impl MMU2 {
             lcdc: LCDCRegister::init(),
             stat: STATRegister::init(),
             mbc,
+            debug_registers: Default::default()
         }
     }
     pub fn disable_bootrom(&mut self) {
@@ -324,6 +337,9 @@ impl MMU2 {
     pub fn write8(&mut self, addr: u16, val: u8) {
         if let Some(en) = IORegister::match_address(addr) {
             // println!("reg {:?} <- {:02x}", en, val);
+            if self.debug_registers.contains(&en) {
+                println!("register {:?} set to {:02x} {:08b}",en,val, val);
+            }
             match en {
                 IORegister::DISABLE_BOOTROM => self.disable_bootrom(),
                 IORegister::JOYPAD_P1 => {
@@ -366,10 +382,6 @@ impl MMU2 {
                 }
                 IORegister::LCDC => self.lcdc.set(val),
                 IORegister::STAT => self.stat.set(val),
-                IORegister::BGP => {
-                    println!("setting BGP! {:08b}",val);
-                    self.mem[addr as usize] = val;
-                }
                 _ => {
                     //for registers we don't handle yet, just write as normal
                     self.mem[addr as usize] = val;
