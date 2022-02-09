@@ -1576,7 +1576,7 @@ fn make_op_table() -> OpTable {
     op_table.load8(0x72, AddrDst(HL), SrcR8(D));
     op_table.load8(0x73, AddrDst(HL), SrcR8(E));
     op_table.load8(0x74, AddrDst(HL), SrcR8(H));
-    op_table.load8(0x75, AddrDst(HL), SrcR8(H));
+    op_table.load8(0x75, AddrDst(HL), SrcR8(L));
     //76
     op_table.load8(0x77, AddrDst(HL), SrcR8(A)); // LD L,A
     op_table.load8(0x78, DstR8(A), SrcR8(B));
