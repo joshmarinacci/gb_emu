@@ -1227,7 +1227,7 @@ impl GBState {
                         let c = a & 0x01 == 0x01;
                         let r = (a >> 1) | (if self.cpu.r.carry { 0x80 } else { 0x00 });
                         A.set_value(self, r);
-                        self.cpu.r.zero = r == 0;
+                        self.cpu.r.zero = false;
                         self.cpu.r.subn = false;
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
@@ -1237,7 +1237,7 @@ impl GBState {
                         let c = a & 0x01 == 0x01;
                         let r = (a >> 1) | (if c { 0x80 } else { 0x00 });
                         A.set_value(self, r);
-                        self.cpu.r.zero = r == 0;
+                        self.cpu.r.zero = false;
                         self.cpu.r.subn = false;
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
