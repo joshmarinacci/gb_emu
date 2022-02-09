@@ -376,6 +376,25 @@ impl MMU2 {
                 }
             }
         } else {
+            if addr >= 0x0000 && addr <= 0x7FFF {
+                println!("writing to ROM. MCB type is {:?}", self.mbc);
+            }
+            if addr >= 0x0000 && addr <= 0x1FFF {
+                println!("trying to enable external ram {:04x}, {:02x}",addr,val);
+                return;
+            }
+            if addr >= 0x2000 && addr <= 0x3FFF {
+                println!("ROM bank. switching low rom bank {:04x}, {:02x}",addr,val);
+                return;
+            }
+            if addr >= 0x4000 && addr <= 0x5FFF {
+                println!("ROM bank. switching high rom bank {:04x}, {:02x}",addr,val);
+                return;
+            }
+            if addr >= 0x6000 && addr <= 0x7FFF {
+                println!("set mode {:04x}, {:02x}",addr,val);
+                return;
+            }
             self.mem[addr as usize] = val;
         }
     }
@@ -391,6 +410,10 @@ impl MMU2 {
         (hi << 8) + lo
     }
     pub fn write16(&mut self, addr: u16, data: u16) {
+        if addr >= 0x0000 && addr <= 0x7FFF {
+            println!("writing to the rom area. illegal!");
+            panic!("cannot write to the rom area");
+        }
         let hi = ((data & 0xFF00) >> 8) as u8;
         let lo = ((data & 0x00FF) >> 0) as u8;
         self.mem[(addr + 0) as usize] = lo;
