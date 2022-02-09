@@ -170,6 +170,7 @@ impl CPU {
         if self.recent_pcs.len() > MAX_PC_SCROLLBACK {
             self.recent_pcs.pop_back();
         }
+        // self.check_infinite_loop();
         self.pc = pc;
     }
     pub(crate) fn inc_pc(&mut self) {
@@ -186,5 +187,16 @@ impl CPU {
     }
     pub(crate) fn inc_sp(&mut self) {
         self.sp += 1;
+    }
+    fn check_infinite_loop(&self) {
+        if self.recent_pcs.len() >= 2 {
+            let ins0 = self.recent_pcs[0];
+            let ins1 = self.recent_pcs[1];
+            if ins0 == ins1 {
+                println!("possible infinite loop at {:04x}",ins0);
+            }
+
+
+        }
     }
 }
