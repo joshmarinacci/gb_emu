@@ -935,6 +935,14 @@ impl GBState {
             Load16(dst, src) => {
                 let val = src.get_value(self);
                 dst.set_value(self, val);
+                if let Src16::SrcR16WithOffset(r2) = src {
+                    let a = r2.get_value(self);
+                    let b = u8_as_i8(self.mmu.read8(self.cpu.get_pc()+1)) as u16;
+                    self.cpu.r.zero = false;
+                    self.cpu.r.subn = false;
+                    self.cpu.r.half  = ((a & 0x000F) + (b & 0x000F) > 0x000F);
+                    self.cpu.r.carry = ((a & 0x00FF) + (b & 0x00FF) > 0x00FF);
+                }
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             Load8(dst, src) => {
