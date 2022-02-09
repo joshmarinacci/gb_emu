@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use BinOp::{ADC, And, Or, SUB, Xor};
-use BitOps::{BIT, CCF, CPL, DDA, RES, RLA, RLCA, RRA, RRCA, SCF, SET};
+use BitOps::{BIT, CCF, CPL, DAA, RES, RLA, RLCA, RRA, RRCA, SCF, SET};
 use CallType::{CallU16, Pop, Push, Ret, RetCond};
 use Cond::{Carry, NotCarry, NotZero, Zero};
 use Dst16::DstR16;
@@ -129,7 +129,7 @@ enum BitOps {
     RRA(),
     RRCA(),
     CPL(),
-    DDA(),
+    DAA(),
     SCF(),
     CCF(),
 }
@@ -1250,28 +1250,28 @@ impl GBState {
                         self.cpu.r.half = false;
                         self.cpu.r.carry = c;
                     }
-                    DDA() => {
-                        let mut a: u8 = A.get_value(self);
-                        let mut adjust = if self.cpu.r.carry { 0x60 } else { 0x00 };
-                        if self.cpu.r.half {
-                            adjust |= 0x06;
-                        };
-                        if !self.cpu.r.zero {
-                            if a & 0x0F > 0x09 {
-                                adjust |= 0x06;
-                            };
-                            if a > 0x99 {
-                                adjust |= 0x60;
-                            };
-                            a = a.wrapping_add(adjust);
-                        } else {
-                            a = a.wrapping_sub(adjust);
+                    DAA() => {
+                        let mut adj = 0;
+                        let mut v: u8 = A.get_value(self);
+
+                        if self.cpu.r.half || (!self.cpu.r.subn && (v & 0xf) > 9) {
+                            adj |= 0x6;
                         }
 
-                        self.cpu.r.zero = a == 0;
-                        self.cpu.r.carry = adjust >= 0x60;
+                        let c = if self.cpu.r.carry || (!self.cpu.r.subn && v > 0x99) {
+                            adj |= 0x60;
+                            true
+                        } else {
+                            false
+                        };
+
+                        let (v,over) = if self.cpu.r.subn { v.overflowing_sub(adj) } else { v.overflowing_add(adj) };
+                        let v = (v & 0xff) as u8;
+
+                        self.cpu.r.zero = v == 0;
+                        self.cpu.r.carry = c;
                         self.cpu.r.half = false;
-                        A.set_value(self, a);
+                        A.set_value(self, v);
                     }
                     SCF() => {
                         self.cpu.r.subn = false;
@@ -1341,7 +1341,7 @@ impl Op {
             BitOp(RRA()) => format!("RRA"),
             BitOp(RRCA()) => format!("RRCA"),
             BitOp(CPL()) => format!("CPL"),
-            BitOp(DDA()) => format!("DDA"),
+            BitOp(DAA()) => format!("DDA"),
             BitOp(SCF()) => format!("SCF"),
             BitOp(CCF()) => format!("CCF"),
             Call(ct) => match ct {
@@ -1400,7 +1400,7 @@ impl Op {
             BitOp(RRA()) => format!("RRA {}", A.get_value(gb)),
             BitOp(RRCA()) => format!("RRCA {}", A.get_value(gb)),
             BitOp(CPL()) => format!("CPL {}", A.get_value(gb)),
-            BitOp(DDA()) => format!("DDA {}", A.get_value(gb)),
+            BitOp(DAA()) => format!("DDA {}", A.get_value(gb)),
             BitOp(SCF()) => format!("SCF {}", A.get_value(gb)),
             BitOp(CCF()) => format!("CCF {}", A.get_value(gb)),
             Call(ct) => match ct {
@@ -1764,7 +1764,7 @@ fn make_op_table() -> OpTable {
     op_table.add_op(0x0F,1,4,BitOp(RRCA()));
     op_table.add_op(0x17,1,4,BitOp(RLA()));
     op_table.add_op(0x1F,1,4,BitOp(RRA()));
-    op_table.add_op(0x27,1,4,BitOp(DDA()));
+    op_table.add_op(0x27,1,4,BitOp(DAA()));
     op_table.add_op(0x2F,1,4,BitOp(CPL()));
     op_table.add_op(0x37,1,4,BitOp(SCF()));
     op_table.add_op(0x3F,1,4,BitOp(CCF()));
