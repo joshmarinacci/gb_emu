@@ -1014,9 +1014,9 @@ impl GBState {
                 let b = src.get_value(self);
                 let a = dst.get_value(self);
                 let (res, sub, half, carry) = match binop {
-                    Or => (a | b, false, false, self.cpu.r.carry),
-                    Xor => (a ^ b, false, false, self.cpu.r.carry),
-                    And => (a & b, false, true, self.cpu.r.carry),
+                    Or  => (a | b, false, false, false),
+                    Xor => (a ^ b, false, false, false),
+                    And => (a & b, false, true,  false),
                     Add => {
                         let c = 0;
                         let r = a.wrapping_add(b).wrapping_add(c);

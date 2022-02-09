@@ -355,7 +355,7 @@ impl MMU2 {
                     self.mem[addr as usize] = val;
                 }
                 IORegister::IE => {
-                    println!("changing interrupts: {:08b}",val);
+                    // println!("changing interrupts: {:08b}",val);
                     // let mut val2 = gb.mmu.read8_IO(IORegister::IF);
                     // val2 = val2 | 0b0000_0001;
                     // gb.mmu.write8_IO(IORegister::IF,val2);
