@@ -49,7 +49,7 @@ impl LCDCRegister {
     }
 
     pub(crate) fn set(&mut self, byte: u8) {
-        println!("setting LCDC to {:08b}", byte);
+        // println!("setting LCDC to {:08b}", byte);
         self.value = byte;
         self.bg_enabled = is_bit_set(byte, 0);
         self.sprite_enabled = is_bit_set(byte, 1);
@@ -107,9 +107,8 @@ impl STATRegister {
         lcd
     }
     pub(crate) fn set(&mut self, byte:u8) {
-        println!("setting STAT to {:08b}",byte);
+        // println!("setting STAT to {:08b}",byte);
         self.value = byte;
-        // self.vblank_interrupt_enabled = true;
         //mode bits cannot be set by programs.
         //bits 0 and 1 represent the current mode. set by the PPU
         //bit 2 is for the LYC=LY. it is read only

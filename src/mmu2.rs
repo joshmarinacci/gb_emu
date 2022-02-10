@@ -389,7 +389,7 @@ impl MMU2 {
                                     "INVALID"
                                 }
                             };
-                            println!("IF: changing {} to {}", name, get_bit_as_bool(val,bit));
+                            // println!("IF: changing {} to {}", name, get_bit_as_bool(val,bit));
                         }
                     }
                     self.mem[addr as usize] = val;
@@ -410,7 +410,7 @@ impl MMU2 {
                                     "INVALID"
                                 }
                             };
-                            println!("IE: changing {} to {}", name, get_bit_as_bool(val,bit));
+                            // println!("IE: changing {} to {}", name, get_bit_as_bool(val,bit));
                         }
                     }
                     self.mem[addr as usize] = val;
