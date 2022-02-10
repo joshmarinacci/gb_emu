@@ -13,6 +13,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 use sdl2::libc::sleep;
+use serde_json::to_string;
 use structopt::StructOpt;
 use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
 use gb_emu::mmu2::IORegister;
@@ -291,7 +292,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             'm' => dump_memory(&gb, &term)?,
             'i' => request_interrupt(gb, &term)?,
             'v' => dump_vram_png(gb, &term)?,
-            'g' => go_until(gb, &term)?,
+            'g' => go_until(gb, &term, &to_screen)?,
             'V' => gb.run_to_vblank(),
             'q' => break,
             _ => println!("??"),
@@ -331,11 +332,12 @@ fn print_current_memory_block(gb: &mut GBState, term: &Term) -> Result<()> {
     Ok(())
 }
 
-fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
+fn go_until(gb: &mut GBState, term: &Term, to_screen: &Sender<String>) -> Result<()> {
     let options = [
         "instruction executed",
         "next vblank",
         "register written",
+        "PC",
         // "PC",
         // "register read",
     ];
@@ -354,6 +356,7 @@ fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
                     term.clear_screen()?;
                     term.write_line(&format!("going until instruction {}", &code));
                     gb.run_to_instruction(code);
+                    to_screen.send(String::from("redraw"));
                 } else {
                     term.write_line(&format!("invalid number"));
                 }
@@ -361,6 +364,7 @@ fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
         }
         1 => {
             gb.run_to_vblank();
+            to_screen.send(String::from("redraw"));
         }
         2 => {
             term.write_line("which address? (hex)")?;
@@ -370,6 +374,20 @@ fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
                     term.clear_screen()?;
                     term.write_line(&format!("going until memory write at {:04x}", &address))?;
                     gb.run_to_register_write(address);
+                    to_screen.send(String::from("redraw"));
+                } else {
+                    term.write_line(&format!("invalid number"));
+                }
+            }
+        }
+        3 => {
+            term.write_line("run until which Program Counter (PC) address ?")?;
+            if let Ok(f) = term.read_line() {
+                if let Ok(new_pc) = u16::from_str_radix(&f, 16) {
+                    term.clear_screen()?;
+                    term.write_line(&format!("going until PC ==  {:04x}", &new_pc))?;
+                    gb.run_to_pc(new_pc);
+                    to_screen.send(String::from("redraw"));
                 } else {
                     term.write_line(&format!("invalid number"));
                 }

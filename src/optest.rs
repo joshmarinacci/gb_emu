@@ -826,6 +826,15 @@ impl GBState {
             }
         }
     }
+    pub fn run_to_pc(&mut self, new_pc: u16) {
+        loop {
+            self.execute();
+            if self.get_pc() == new_pc {
+                println!("hit the specified PC");
+                break;
+            }
+        }
+    }
 
     fn trigger_interrupt(&mut self, handler_address:u16, bit:u8) {
         // println!("doing interrupt for bit {}",bit);
