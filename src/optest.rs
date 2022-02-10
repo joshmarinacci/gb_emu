@@ -666,7 +666,9 @@ impl GBState {
             }
 
             // perform the actual operation
-            self.execute_op(&op);
+            if !self.cpu.halt {
+                self.execute_op(&op);
+            }
             self.ppu.update(&mut self.mmu, self.clock);
             {
                 //update DIV
@@ -771,6 +773,7 @@ impl GBState {
         self.cpu.dec_sp();
         self.cpu.dec_sp();
         self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
+        self.cpu.halt = false;
         //jump to start of interrupt
         self.set_pc(handler_address);
         //reset the IF register
@@ -968,7 +971,8 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             Halt() => {
-                // println!("pretending to halt");
+                self.cpu.halt = true;
+                self.set_pc(self.cpu.get_pc() + op.len);
             }
             Compare(dst, src) => {
                 let src_v = src.get_value(self);

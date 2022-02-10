@@ -223,12 +223,13 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         ))?;
         //IO status bits
         term.write_line(&format!(
-            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}",
+            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  HALT={}",
             gb.cpu.IME,
             gb.mmu.read8_IO(&IORegister::IF),
             gb.mmu.read8_IO(&IORegister::IE),
             gb.mmu.read8_IO(&IORegister::LCDC),
             gb.mmu.read8_IO(&IORegister::STAT),
+            gb.cpu.halt,
         ))?;
         term.write_line(&format!(
             "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
