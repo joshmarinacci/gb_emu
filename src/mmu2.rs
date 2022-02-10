@@ -90,6 +90,7 @@ impl IORegister {
         if IORegister::SCX.name().to_lowercase().eq(&lname) { return Some(IORegister::SCX); }
         if IORegister::SCY.name().to_lowercase().eq(&lname) { return Some(IORegister::SCY); }
         if IORegister::BGP.name().to_lowercase().eq(&lname) { return Some(IORegister::BGP); }
+        if IORegister::DMA.name().to_lowercase().eq(&lname) { return Some(IORegister::DMA); }
         return None
     }
 }
@@ -146,13 +147,13 @@ impl IORegister {
         match self {
             IORegister::DISABLE_BOOTROM => "DISABLE_BOOTROM",
             IORegister::JOYPAD_P1 => "P1_Joypad",
-            IORegister::SB => "SB",
-            IORegister::SC => "SC",
-            IORegister::DIV => "DIV",
+            IORegister::SB   => "SB",
+            IORegister::SC   => "SC",
+            IORegister::DIV  => "DIV",
             IORegister::TIMA => "TIMA",
-            IORegister::TMA => "TMA",
-            IORegister::TAC => "TAC",
-            IORegister::IF => "IF",
+            IORegister::TMA  => "TMA",
+            IORegister::TAC  => "TAC",
+            IORegister::IF   => "IF",
             IORegister::NR10 => "NR10",
             IORegister::NR11 => "NR1",
             IORegister::NR12 => "NR1",
@@ -176,17 +177,17 @@ impl IORegister {
             IORegister::NR52 => "NR1",
             IORegister::LCDC => "LCDC",
             IORegister::STAT => "STAT",
-            IORegister::LY => "LY",
-            IORegister::LYC => "LYC",
-            IORegister::SCY => "SCY",
-            IORegister::SCX => "SCX",
-            IORegister::DMA => "DMA",
-            IORegister::BGP => "BGP",
+            IORegister::LY   => "LY",
+            IORegister::LYC  => "LYC",
+            IORegister::SCY  => "SCY",
+            IORegister::SCX  => "SCX",
+            IORegister::DMA  => "DMA",
+            IORegister::BGP  => "BGP",
             IORegister::OBP0 => "OBP0",
             IORegister::OBP1 => "OBP1",
-            IORegister::WY => "WY",
-            IORegister::WX => "WX",
-            IORegister::IE => "IE",
+            IORegister::WY   => "WY",
+            IORegister::WX   => "WX",
+            IORegister::IE   => "IE",
         }
     }
 }
@@ -201,7 +202,6 @@ pub struct MMU2 {
     pub mbc: MBC,
     pub debug_registers:HashSet<IORegister>,
     pub last_write_address:u16,
-
 }
 
 impl MMU2 {

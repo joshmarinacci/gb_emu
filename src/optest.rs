@@ -368,6 +368,14 @@ impl GBState {
 
         let line_str: String = self.cpu.recent_pcs.iter().map(|b| format!("{:02x} ", b)).collect();
         println!("recent PCs {}",line_str);
+
+        for pc in self.cpu.recent_pcs.iter() {
+            let opcode = self.fetch_opcode_at(*pc);
+            if let Some(inst) = self.lookup_op(&opcode) {
+                println!("${:04X}  {:04x} {}  {}", pc, opcode, inst.to_asm(), inst.real(self));
+            }
+        }
+        println!("here again");
     }
     fn print_ram_at(&self, pc: u16, len: u16) {
         let nums = 0..16;

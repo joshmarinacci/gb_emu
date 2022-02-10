@@ -39,6 +39,10 @@ impl PPU2 {
                         mmu.stat.mode = LCDMode::VBlank_1;
                         //request vblank interrupt handler
                         mmu.set_IO_bit(&IORegister::IF,0,true);
+                        if mmu.stat.vblank_interrupt_enabled {
+                            println!("vblank STAT interrupt enabled. requesting it");
+                            mmu.set_IO_bit(&IORegister::IF,1,true);
+                        }
                         self.entered_vram = true;
                         //wait for 10 scan lines
                         self.next_clock += 456;
