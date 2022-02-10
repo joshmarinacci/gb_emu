@@ -28,6 +28,7 @@ impl PPU2 {
             // println!("current mode {:?} lcd on = {}", mmu.stat.mode, mmu.lcdc.enabled);
             if !mmu.lcdc.enabled {
                 mmu.stat.mode = VBlank_1; // have to set to mode one when screen is off
+                // return;
             }
             match mmu.stat.mode {
                 LCDMode::HBlank_0 => {
@@ -37,11 +38,7 @@ impl PPU2 {
                     if ly2 >= 144 {
                         mmu.stat.mode = LCDMode::VBlank_1;
                         //request vblank interrupt handler
-                        mmu.set_IO_bit(&IORegister::IE,0,true);
                         mmu.set_IO_bit(&IORegister::IF,0,true);
-                        if mmu.stat.vblank_interrupt_enabled {
-                            println!("requesting a vblank");
-                        }
                         self.entered_vram = true;
                         //wait for 10 scan lines
                         self.next_clock += 456;

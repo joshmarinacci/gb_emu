@@ -251,7 +251,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         ));
 
         let IE = gb.mmu.read8_IO(&IORegister::IE);
-        let IF = gb.mmu.read8_IO(&IORegister::IE);
+        let IF = gb.mmu.read8_IO(&IORegister::IF);
         term.write_line(&format!(
             "interr: IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
             IE,
@@ -345,12 +345,12 @@ fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
 
     match index {
         0 => {
-            term.write_line("going until instruction");
-            if let Ok(f) = term.read_line_initial_text("which instruction? (hex)") {
+            term.write_line("going until instruction. which instruction code? (hex)");
+            if let Ok(f) = term.read_line() {
                 if let Ok(code) = u16::from_str_radix(&f, 16) {
                     term.clear_screen()?;
                     term.write_line(&format!("going until instruction {}", &code));
-                    gb.run_to_instruction(&f);
+                    gb.run_to_instruction(code);
                 } else {
                     term.write_line(&format!("invalid number"));
                 }
@@ -477,7 +477,7 @@ fn request_interrupt(gb: &mut GBState, term: &Term) -> Result<()> {
     if selection == 0 {
         term.write_line("requesting a vblank interrupt")?;
         gb.mmu.set_IO_bit(&IORegister::IE,0,true);
-        gb.mmu.set_IO_bit(&IORegister::IF,1,true);
+        gb.mmu.set_IO_bit(&IORegister::IF,0,true);
         term.write_line("will fire after the next instruction")?;
     }
     if selection == 1 {

@@ -430,7 +430,7 @@ impl Src16 {
         match self {
             Src16::Im16() => format!("{:04x}", gb.mmu.read16(gb.cpu.get_pc() + 1)),
             SrcR16(r) => format!("{:04x}", r.get_value(gb)),
-            Src16::SrcR16WithOffset(r) => todo!(),
+            Src16::SrcR16WithOffset(r) => format!("{:04x} + {}",r.get_value(gb),gb.mmu.read8(gb.cpu.get_pc()+1)),
         }
     }
 }
@@ -696,7 +696,7 @@ impl GBState {
                         let (t2,over) = TIMA.overflowing_add(1);
                         if over {
                             TIMA = TMA;
-                            self.trigger_timer_interrupt();
+                            self.mmu.set_IO_bit(&IORegister::IF, 2, true);
                         } else {
                             TIMA = t2;
                         }
@@ -707,17 +707,9 @@ impl GBState {
 
             //check for interrupts
             if self.cpu.IME {
-                // println!("registers are {:02x}  {:02x}",self.mmu.read8_IO(&IORegister::IE), self.mmu.read8_IO(&IORegister::IF));
-                let vblank_enabled = get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),0);
-                let vblank_requested = get_bit_as_bool(self.mmu.read8_IO(&IORegister::IF),0);
-                // println!("vblank = en {}  rq {}",vblank_enabled,vblank_requested);
-                if vblank_requested && vblank_enabled {
-                    self.trigger_vblank_interrupt();
+                if self.mmu.read8_IO(&IORegister::IF) > 0 {
+                    self.process_interrupts();
                 }
-            }
-
-            if get_bit_as_bool(self.mmu.read8_IO(&IORegister::IF),1) {
-                self.trigger_stat_interrupt();
             }
 
             // if self.debug {
@@ -762,90 +754,53 @@ impl GBState {
             }
         }
     }
-    pub fn run_to_instruction(&mut self, ins_name: &String) {
+    pub fn run_to_instruction(&mut self, code:u16) {
         loop {
             self.execute();
-            let current = self.mmu.read8(self.cpu.get_pc());
-            println!("instruction {}",current);
-            let code = self.fetch_opcode_at(self.get_pc());
-            if let Some(op) = self.lookup_op(&code) {
-                match op.typ {
-                    DisableInterrupts() => {
-                        println!("hit disable interrupts");
-                        break;
-                    }
-                    _ => {}
-                };
-            };
-
+            let current_code = self.fetch_opcode_at(self.get_pc());
+            if current_code == code {
+                println!("hit instruction code {:04x}",code);
+                break;
+            }
         }
     }
 
-    fn trigger_vblank_interrupt(&mut self) {
-        //if IME is set and IE flags are set
-        //reset the IEM flag to prevent other interrupts
-        // println!("disabling interrupts to do an interrupt");
-        println!("doing vblank interrupt");
+    fn trigger_interrupt(&mut self, handler_address:u16, bit:u8) {
+        println!("doing interrupt for bit {}",bit);
         self.cpu.IME = false;
-        //push PC onto stack
         self.cpu.dec_sp();
         self.cpu.dec_sp();
         self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
-
         //jump to start of interrupt
-        self.set_pc(VBLANK_HANDLER_ADDRESS);
-
+        self.set_pc(handler_address);
         //reset the IF register
-        self.mmu.set_IO_bit(&IORegister::IF,0,false);
-
-        //the RET routine pops the PC back off the stack
-        //RETI does the same but with enabling interrupts again
-        // println!("jumping to vertical blank interrupt;");
+        self.mmu.set_IO_bit(&IORegister::IF,bit,false);
     }
-    fn trigger_timer_interrupt(&mut self) {
-        if self.cpu.IME == false {
-            println!("cant do timer. IME is false");
+    fn process_interrupts(&mut self) {
+        // println!("IF requested for {:08b}",self.mmu.read8_IO(&IORegister::IF));
+        if self.mmu.get_IO_bit(&IORegister::IF,0) && self.mmu.get_IO_bit(&IORegister::IE,0) {
+            self.trigger_interrupt(VBLANK_HANDLER_ADDRESS, 0);
             return;
         }
-        if !get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),2) {
-            println!("cant do dimer, IE for timer is disabled");
+        if self.mmu.get_IO_bit(&IORegister::IF,1) && self.mmu.get_IO_bit(&IORegister::IE,1) {
+            self.trigger_interrupt(STAT_HANDLER_ADDRESS, 1);
             return;
         }
-        println!("doing timer interrupt");
-        self.cpu.IME = false;
-        //push PC onto stack
-        self.cpu.dec_sp();
-        self.cpu.dec_sp();
-        self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
-
-        //jump to start of interrupt
-        self.set_pc(TIMER_HANDLER_ADDRESS);
-
-        //reset the IF register
-        self.mmu.set_IO_bit(&IORegister::IF,2,false);
-    }
-    fn trigger_stat_interrupt(&mut self) {
-        if self.cpu.IME == false {
-            println!("cant do stat inter. IME is false");
+        if self.mmu.get_IO_bit(&IORegister::IF,2) && self.mmu.get_IO_bit(&IORegister::IE,2) {
+            self.trigger_interrupt(TIMER_HANDLER_ADDRESS, 2);
             return;
         }
-        if !get_bit_as_bool(self.mmu.read8_IO(&IORegister::IE),1) {
-            println!("cant do stat inter, IE for timer is disabled");
+        if self.mmu.get_IO_bit(&IORegister::IF,3) && self.mmu.get_IO_bit(&IORegister::IE,3) {
+            self.trigger_interrupt(SERIAL_HANDLER_ADDRESS, 3);
             return;
         }
-
-        println!("doing stat interrupt");
-        self.cpu.IME = false;
-        //push PC onto stack
-        self.cpu.dec_sp();
-        self.cpu.dec_sp();
-        self.mmu.write16(self.cpu.get_sp(), self.cpu.get_pc());
-
-        //jump to start of interrupt
-        self.set_pc(STAT_HANDLER_ADDRESS);
-
-        //reset the IF register
-        self.mmu.set_IO_bit(&IORegister::IF,1,false);
+        if self.mmu.get_IO_bit(&IORegister::IF,4) && self.mmu.get_IO_bit(&IORegister::IE,4) {
+            self.trigger_interrupt(JOYPAD_HANDLER_ADDRESS, 4);
+            return;
+        }
+        println!("some other interrupt requested but not handled");
+        println!("IE ={:08b}",self.mmu.read8_IO(&IORegister::IE));
+        println!("IF ={:08b}",self.mmu.read8_IO(&IORegister::IF));
     }
 }
 
@@ -1003,12 +958,12 @@ impl GBState {
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             DisableInterrupts() => {
-                // println!("disabling interrupts by DI");
+                println!("disabling interrupts by DI");
                 self.cpu.IME = false;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
             EnableInterrupts() => {
-                // println!("enabling interrupts by EI");
+                println!("enabling interrupts by EI");
                 self.cpu.IME = true;
                 self.set_pc(self.cpu.get_pc() + op.len);
             }
@@ -1897,6 +1852,9 @@ pub fn setup_test_rom(fname: &str) -> Option<GBState> {
             gb.set_pc(0x100);
             gb.mmu.write8_IO_raw(IORegister::IF,0);
             gb.mmu.write8_IO_raw(IORegister::IE,0);
+            gb.mmu.stat.reset();
+            gb.mmu.lcdc.reset();
+            println!("SETUP the rom {}",fname);
             return Some(gb);
         }
         Err(_) => {

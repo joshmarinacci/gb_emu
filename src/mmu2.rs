@@ -375,13 +375,44 @@ impl MMU2 {
                 IORegister::DMA => self.dma_transfer(val),
                 IORegister::IF => {
                     // println!("changing IF {:08b}",val);
+                    let old = self.mem[addr as usize];
+                    for bit in 0..5 {
+                        if get_bit_as_bool(old,bit) != get_bit_as_bool(val,bit) {
+                            let name = match bit {
+                                0 => "VBLANK",
+                                1 => "STAT",
+                                2 => "TIMER",
+                                3 => "SERIAL",
+                                4 => "JOYPAD",
+                                _ => {
+                                    println!("tried to set an invalid bit to the IE register");
+                                    "INVALID"
+                                }
+                            };
+                            println!("IF: changing {} to {}", name, get_bit_as_bool(val,bit));
+                        }
+                    }
                     self.mem[addr as usize] = val;
                 }
                 IORegister::IE => {
                     // println!("changing interrupts: {:08b}",val);
-                    // let mut val2 = gb.mmu.read8_IO(IORegister::IF);
-                    // val2 = val2 | 0b0000_0001;
-                    // gb.mmu.write8_IO(IORegister::IF,val2);
+                    let old = self.mem[addr as usize];
+                    for bit in 0..5 {
+                        if get_bit_as_bool(old,bit) != get_bit_as_bool(val,bit) {
+                            let name = match bit {
+                                0 => "VBLANK",
+                                1 => "STAT",
+                                2 => "TIMER",
+                                3 => "SERIAL",
+                                4 => "JOYPAD",
+                                _ => {
+                                    println!("tried to set an invalid bit to the IE register");
+                                    "INVALID"
+                                }
+                            };
+                            println!("IE: changing {} to {}", name, get_bit_as_bool(val,bit));
+                        }
+                    }
                     self.mem[addr as usize] = val;
                 }
                 IORegister::LCDC => self.lcdc.set(val),
@@ -447,5 +478,9 @@ impl MMU2 {
         let val = self.read8_IO(reg);
         let val2 = set_bit(val,bit,tf);
         self.write8_IO(reg,val2);
+    }
+    pub fn get_IO_bit(&self, reg: &IORegister, bit:u8) -> bool {
+        let val = self.read8_IO(reg);
+        return get_bit_as_bool(val,bit)
     }
 }

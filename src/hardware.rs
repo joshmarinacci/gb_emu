@@ -41,12 +41,15 @@ impl LCDCRegister {
         lcd
     }
 
+    pub(crate) fn reset(&mut self) {
+        self.set(0);
+    }
     pub(crate) fn get(&self) -> u8 {
         self.value
     }
 
     pub(crate) fn set(&mut self, byte: u8) {
-        println!("setting LCDC to {:04x} {:08b}", byte, byte);
+        println!("setting LCDC to {:08b}", byte);
         self.value = byte;
         self.bg_enabled = is_bit_set(byte, 0);
         self.sprite_enabled = is_bit_set(byte, 1);
@@ -110,50 +113,25 @@ impl STATRegister {
         //mode bits cannot be set by programs.
         //bits 0 and 1 represent the current mode. set by the PPU
         //bit 2 is for the LYC=LY. it is read only
-
-        if is_bit_set(byte,3) {
-            println!("enabling hblank interrupts");
-        } else {
-            println!("disabling hblank interrupt")
+        if is_bit_set(byte,3) != self.hblank_interrupt_enabled {
+            println!("STAT: changed hblank interrupt to {}",is_bit_set(byte,3));
+            self.hblank_interrupt_enabled = is_bit_set(byte,3);
         }
-        self.hblank_interrupt_enabled = is_bit_set(byte,3);
-        if is_bit_set(byte,4) {
-            println!("enabling vblank interrupts");
-        } else {
-            println!("disabling vblank interrupt");
+        if is_bit_set(byte,4) != self.hblank_interrupt_enabled {
+            println!("STAT: changed hblank interrupt to {}",is_bit_set(byte,4));
+            self.vblank_interrupt_enabled = is_bit_set(byte,4);
         }
-        self.vblank_interrupt_enabled = is_bit_set(byte,4);
-        if is_bit_set(byte,5) {
-            println!("enabling sprite interrupt");
-        } else {
-            println!("disabling sprite interrupt");
+        if is_bit_set(byte,5) != self.hblank_interrupt_enabled {
+            println!("STAT: changed sprite interrupt to {}",is_bit_set(byte,5));
+            self.vblank_interrupt_enabled = is_bit_set(byte,5);
         }
-        self.sprite_interrupt_enabled = is_bit_set(byte,5);
-
-        if is_bit_set(byte,6) {
-            println!("requesting concincidnce flag");
-        } else {
-            println!("disabilng concidince flag");
+        if is_bit_set(byte,6) != self.hblank_interrupt_enabled {
+            println!("STAT: changed coincidence interrupt to {}",is_bit_set(byte,6));
+            self.vblank_interrupt_enabled = is_bit_set(byte,6);
         }
-
-        // if is_bit_set(byte, 7) {
-        //     println!("requeseting other flag");
-        // } else {
-        //     println!("diabing other flag");
-        // }
-        //writing directly to 0xFF44 (LY) by the program should reset it to 0.
-        // panic!()
     }
-    pub(crate) fn reset(&mut self, val: u8) {
-        println!("wrote to STAT {:08b}", val);
-        println!("resetting stat");
-        self.value = 0;
-        self.mode = LCDMode::HBlank_0;
-        self.scanline_matching = false;
-        self.hblank_interrupt_enabled = false;
-        self.vblank_interrupt_enabled = false;
-        self.sprite_interrupt_enabled = false;
-        self.scanline_match_interrupt_enabled = false;
+    pub(crate) fn reset(&mut self) {
+        self.set(0);
     }
     pub(crate) fn get(&self) -> u8 {
         // println!("reading stat register. mdoe is {:?}",self.mode);
