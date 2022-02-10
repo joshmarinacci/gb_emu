@@ -117,7 +117,7 @@ impl Bitmap {
         let mut data: Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
         data.resize((w * h * 4) as usize, 255);
         data.fill(255);
-        println!("Length is {}", data.len());
+        // println!("Length is {}", data.len());
         Bitmap { w, h, data }
     }
 }

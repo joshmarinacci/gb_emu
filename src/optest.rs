@@ -559,7 +559,7 @@ impl Src8 {
                 let im = gb.mmu.read8(gb.cpu.get_pc() + 1);
                 let addr = 0xFF00 + im as u16;
                 let name = named_addr(addr, gb);
-                return format!("({}) is {:02x}", name, self.get_value(gb));
+                return format!("{} ({:02x})", name, self.get_value(gb));
             }
             _ => {}
         }
@@ -618,7 +618,7 @@ impl Dst8 {
     }
     fn real(&self, gb: &GBState) -> String {
         match self {
-            DstR8(r8) => format!("{:02x}", r8.get_value(gb)),
+            DstR8(r8) => format!("{}", r8.name()),
             AddrDst(addr) => format!("{:02x}", gb.mmu.read8(addr.get_value(gb))),
             Dst8::MemIm16() => {
                 let addr = gb.mmu.read16(gb.cpu.get_pc() + 1);
@@ -753,23 +753,32 @@ impl GBState {
         }
     }
 
-    pub fn run_to_instruction(&mut self, ins_name: &String) {
-            loop {
-                self.execute();
-                let current = self.mmu.read8(self.cpu.get_pc());
-                println!("instruction {}",current);
-                let code = self.fetch_opcode_at(self.get_pc());
-                if let Some(op) = self.lookup_op(&code) {
-                    match op.typ {
-                        DisableInterrupts() => {
-                            println!("hit disable interrupts");
-                            break;
-                        }
-                        _ => {}
-                    };
-                };
-
+    pub fn run_to_register_write(&mut self, address:u16) {
+        loop {
+            self.execute();
+            if self.mmu.last_write_address == address {
+                println!("just wrote");
+                break;
             }
+        }
+    }
+    pub fn run_to_instruction(&mut self, ins_name: &String) {
+        loop {
+            self.execute();
+            let current = self.mmu.read8(self.cpu.get_pc());
+            println!("instruction {}",current);
+            let code = self.fetch_opcode_at(self.get_pc());
+            if let Some(op) = self.lookup_op(&code) {
+                match op.typ {
+                    DisableInterrupts() => {
+                        println!("hit disable interrupts");
+                        break;
+                    }
+                    _ => {}
+                };
+            };
+
+        }
     }
 
     fn trigger_vblank_interrupt(&mut self) {
@@ -937,6 +946,7 @@ impl GBState {
                         self.cpu.inc_sp();
                         self.cpu.inc_sp();
                         self.set_pc(addr);
+                        println!("ending interrupt");
                         self.cpu.IME = true;
                     }
                     RetCond(cond) => {

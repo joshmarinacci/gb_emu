@@ -68,11 +68,26 @@ fn main() -> Result<()>{
     let (to_screen, receive_screen) = channel::<String>();
     let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
+    let regs = args.print_reg.split(",").filter(|s|!s.trim().is_empty()).collect::<Vec<&str>>();
+    for reg in regs {
+        // println!("reg is {}",reg);
+        match IORegister::match_name(reg) {
+            Some(reg) => {
+                println!("monitoring for writing to register {:?}",reg);
+                gb.mmu.debug_registers.insert(reg);
+            }
+            None => {
+                println!("cannot find register with name {}",reg);
+                panic!("cannot monitor unknown register {}",reg);
+            }
+        }
+    }
+
     let hand = thread::spawn(move || {
         if args.run {
             start_run(&mut gb, to_screen, receive_cpu).unwrap();
         } else {
-            start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu, args.print_reg).unwrap();
+            start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu).unwrap();
         }
     });
 
@@ -147,7 +162,7 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
     Ok(())
 }
 
-fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>, print_reg: String) -> Result<()> {
+fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(&IORegister::LCDC,0x00);
     gb.mmu.write8_IO(&IORegister::STAT, 0x00);
@@ -155,21 +170,6 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
     gb.mmu.write8_IO(&IORegister::LYC,0x00);
     let term = Term::stdout();
 
-    let regs = print_reg.split(",").filter(|s|!s.trim().is_empty()).collect::<Vec<&str>>();
-
-    for reg in regs {
-        // println!("reg is {}",reg);
-        match IORegister::match_name(reg) {
-            Some(reg) => {
-                println!("monitoring for writing to register {:?}",reg);
-                gb.mmu.debug_registers.insert(reg);
-            }
-            None => {
-                println!("cannot find register with name {}",reg);
-                panic!("cannot monitor unknown register {}",reg);
-            }
-        }
-    }
 
 
 
@@ -178,6 +178,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
 
     loop {
         let commands = Style::new().reverse();
+        let op_highlight = Style::new().red().reverse();
         term.write_line(
             &commands
                 .apply_to("========================================")
@@ -185,20 +186,27 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         )?;
 
 
+        //current memory range
+        print_current_memory_block(gb,&term)?;
+
         // status
         term.write_line(&format!(
-            "PC: {:04x}  SP:{:04x}    clock={}  PPU clock={}",
+            "PC: {:04x}  SP:{:04x}    clock={}  PPU clock={}  diff={}",
             gb.cpu.get_pc(),
             gb.cpu.get_sp(),
             gb.clock,
             gb.ppu.next_clock,
+            ((gb.clock as i32) - (gb.ppu.next_clock as i32))
         ))?;
         //current instruction
         let code = gb.fetch_opcode_at(gb.get_pc());
         // println!("current op {:04x}", code);
         if let Some(opx) = gb.lookup_op(&code) {
             let op: Op = (*opx).clone();
-            println!("instr {:02x}  ->  {}  ->  {}",code, op.to_asm(), op.real(&gb));
+            println!("instr {:02x}  ->  {}  ->  {}",
+                     code,
+                     op_highlight.apply_to(op.to_asm()).to_string(),
+                     op.real(&gb));
         }
         //registers
         let reg_style = Style::new().bg(Color::White).red().underlined();
@@ -232,10 +240,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
             gb.mmu.read8_IO(&IORegister::WX),
         ))?;
 
-        //current lcd mode
-        //is lcd on
-        //which interrupts are set on the stat register
-        term.write_line(&format!(
+         term.write_line(&format!(
             "LCD {}   mode = {:?}  hi={}, vi={} spi={} sci={}",
             gb.mmu.lcdc.enabled,
             gb.mmu.stat.mode,
@@ -266,13 +271,13 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
         ))?;
 
 
-            let commands = Style::new().reverse();
+        let commands = Style::new().reverse();
         term.write_line(
             &commands
-                .apply_to(&format!("j=step J=16 u=256 U=4096 "))
+                .apply_to(&format!("j=step J=16 u=256 U=4096 m=memory q=quit g=go"))
                 .to_string(),
         )?;
-        term.write_line(&commands.apply_to(&format!("m=memory  q=quit")).to_string())?;
+        // term.write_line(&commands.apply_to(&format!("m=memory  q=quit")).to_string())?;
 
         let ch = term.read_char().unwrap();
         match ch {
@@ -296,12 +301,40 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
     Ok(())
 }
 
+fn print_current_memory_block(gb: &mut GBState, term: &Term) -> Result<()> {
+    let highlight = Style::new().cyan().reverse();
+    let loowlight = Style::new().red();
+    let mut start = (gb.get_pc() as u16 / 16) * 16;
+    if start >= 16 {
+        start = start - 16;
+    }
+    // println!("start is {:04x}",start);
+    let data = gb.mmu.borrow_slice(start as usize, (start + 16 * 4) as usize);
+
+    let nums = 0..16;
+    let line_str: String = nums.into_iter().map(|n| (format!(" {:01x} ", n))).collect();
+    println!("     {}",line_str);
+    for (j, chunk) in data.chunks(16).enumerate() {
+        let line_str: String = chunk.iter().enumerate().map(|(i,b)| {
+            let pc = (j * 16 + i) as u16 + start;
+            if pc == gb.get_pc() {
+                highlight.apply_to(format!("{:02x} ", b)).to_string()
+            } else {
+                loowlight.apply_to(format!("{:02x} ", b)).to_string()
+            }
+        }).collect();
+        term.write_line(&format!("{:04X} {}", ((j * 16) as u16) + start, line_str))?;
+    }
+    Ok(())
+}
+
 fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
     let options = [
         "instruction executed",
-        "PC",
-        "register read",
+        "next vblank",
         "register written",
+        // "PC",
+        // "register read",
     ];
     let index = dialoguer::Select::with_theme(&ColorfulTheme::default())
         .with_prompt("go until:")
@@ -315,8 +348,27 @@ fn go_until(gb: &mut GBState, term: &Term) -> Result<()> {
             term.write_line("going until instruction");
             if let Ok(f) = term.read_line_initial_text("which instruction? (hex)") {
                 if let Ok(code) = u16::from_str_radix(&f, 16) {
+                    term.clear_screen()?;
                     term.write_line(&format!("going until instruction {}", &code));
                     gb.run_to_instruction(&f);
+                } else {
+                    term.write_line(&format!("invalid number"));
+                }
+            }
+        }
+        1 => {
+            gb.run_to_vblank();
+        }
+        2 => {
+            term.write_line("which address? (hex)")?;
+            if let Ok(f) = term.read_line() {
+                println!("string is -{}-",f);
+                if let Ok(address) = u16::from_str_radix(&f, 16) {
+                    term.clear_screen()?;
+                    term.write_line(&format!("going until memory write at {:04x}", &address))?;
+                    gb.run_to_register_write(address);
+                } else {
+                    term.write_line(&format!("invalid number"));
                 }
             }
         }

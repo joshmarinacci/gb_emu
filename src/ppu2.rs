@@ -24,7 +24,7 @@ pub struct PPU2 {
 impl PPU2 {
     pub(crate) fn update(&mut self, mmu:&mut MMU2, clock: u32) {
         self.entered_vram = false;
-        if clock > self.next_clock*4 {
+        if clock > self.next_clock {
             // println!("current mode {:?} lcd on = {}", mmu.stat.mode, mmu.lcdc.enabled);
             if !mmu.lcdc.enabled {
                 mmu.stat.mode = VBlank_1; // have to set to mode one when screen is off

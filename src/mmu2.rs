@@ -200,6 +200,7 @@ pub struct MMU2 {
     pub stat:STATRegister,
     pub mbc: MBC,
     pub debug_registers:HashSet<IORegister>,
+    pub last_write_address:u16,
 
 }
 
@@ -216,7 +217,8 @@ impl MMU2 {
             lcdc:LCDCRegister::init(),
             stat:STATRegister::init(),
             mbc: MBC::RomOnly(),
-            debug_registers: Default::default()
+            debug_registers: Default::default(),
+            last_write_address: 0
         }
     }
 }
@@ -280,7 +282,8 @@ impl MMU2 {
             lcdc: LCDCRegister::init(),
             stat: STATRegister::init(),
             mbc,
-            debug_registers: Default::default()
+            debug_registers: Default::default(),
+            last_write_address: 0
         }
     }
     pub fn disable_bootrom(&mut self) {
@@ -335,6 +338,7 @@ impl MMU2 {
         self.read8(reg.get_addr())
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
+        self.last_write_address = addr;
         if let Some(en) = IORegister::match_address(addr) {
             // println!("reg {:?} <- {:02x}", en, val);
             if self.debug_registers.contains(&en) {
@@ -396,15 +400,15 @@ impl MMU2 {
                 return;
             }
             if addr >= 0x2000 && addr <= 0x3FFF {
-                println!("ROM bank. switching low rom bank {:04x}, {:02x}",addr,val);
+                println!("ROM bank. switching low rom bank addr={:04x}, val={:02x}  bank number={:02x}",addr,val, (val & 0b0001_1111));
                 return;
             }
             if addr >= 0x4000 && addr <= 0x5FFF {
-                println!("ROM bank. switching high rom bank {:04x}, {:02x}",addr,val);
+                println!("ROM bank. switching high rom bank addr={:04x}, val={:02x}  number = {:02x}",addr,val, (val & 0b0000_0011));
                 return;
             }
             if addr >= 0x6000 && addr <= 0x7FFF {
-                println!("set mode {:04x}, {:02x}",addr,val);
+                println!("set mode addr={:04x}, val={:02x}, mode= {:02x}",addr,val, (val & 0b0000_0001));
                 return;
             }
             self.mem[addr as usize] = val;
@@ -422,14 +426,10 @@ impl MMU2 {
         (hi << 8) + lo
     }
     pub fn write16(&mut self, addr: u16, data: u16) {
-        if addr >= 0x0000 && addr <= 0x7FFF {
-            println!("writing to the rom area. illegal!");
-            panic!("cannot write to the rom area");
-        }
         let hi = ((data & 0xFF00) >> 8) as u8;
         let lo = ((data & 0x00FF) >> 0) as u8;
-        self.mem[(addr + 0) as usize] = lo;
-        self.mem[(addr + 1) as usize] = hi;
+        self.write8(addr+0,lo);
+        self.write8(addr+1,hi);
     }
     fn dma_transfer(&mut self, val: u8) {
         // println!("DMA requested!");

@@ -165,7 +165,7 @@ impl Screen {
 
 impl Screen {
     pub fn init(settings: &ScreenSettings, sss: Arc<Mutex<SSS>>) -> Screen {
-        println!("using scale {}", settings.scale);
+        // println!("using scale {}", settings.scale);
         let win_w: u32 = (settings.scale * (256.0 + 128.0)).floor() as u32;
         let win_h: u32 = (settings.scale * 256.0).floor() as u32;
         let sdl_context = sdl2::init().unwrap();
