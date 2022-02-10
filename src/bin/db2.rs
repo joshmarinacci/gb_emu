@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
+use sdl2::libc::sleep;
 use structopt::StructOpt;
 use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
 use gb_emu::mmu2::IORegister;
@@ -96,6 +97,7 @@ fn main() -> Result<()>{
         screen_obj.update_screen();
         loop {
             if !screen_obj.process_input(&to_cpu) {
+                thread::sleep(Duration::from_millis(100));
                 break;
             }
             // screen_obj.update_screen();

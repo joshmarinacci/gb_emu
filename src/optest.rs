@@ -11,7 +11,7 @@ use JumpType::{Absolute, Restart};
 use OpType::{BitOp, Call, Dec8, DisableInterrupts, Inc8, Jump, Load16, Math, Noop};
 use Src16::{SrcR16};
 use CPUR8::{R8A, R8B, R8C};
-use crate::common::{get_bit_as_bool, load_romfile, MBC, set_bit, u8_as_i8};
+use crate::common::{get_bit, get_bit_as_bool, load_romfile, MBC, set_bit, u8_as_i8};
 use crate::cpu2::CPUR8::{R8D, R8E, R8H, R8L};
 use crate::cpu2::{CPU, CPUR16, CPUR8};
 use crate::mmu2::{IORegister, MMU2};
@@ -293,6 +293,66 @@ impl GBState {
             self.cpu.get_r16(CPUR16::BC),
             self.cpu.get_r16(CPUR16::DE),
             self.cpu.get_r16(CPUR16::HL),
+        );
+
+
+        //IO status bits
+        println!(
+            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  HALT={}",
+            self.cpu.IME,
+            self.mmu.read8_IO(&IORegister::IF),
+            self.mmu.read8_IO(&IORegister::IE),
+            self.mmu.read8_IO(&IORegister::LCDC),
+            self.mmu.read8_IO(&IORegister::STAT),
+            self.cpu.halt,
+        );
+        println!(
+            "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
+            self.mmu.read8_IO(&IORegister::LY),
+            self.mmu.read8_IO(&IORegister::LYC),
+            self.mmu.read8_IO(&IORegister::SCY),
+            self.mmu.read8_IO(&IORegister::SCX),
+            self.mmu.read8_IO(&IORegister::WY),
+            self.mmu.read8_IO(&IORegister::WX),
+        );
+
+        println!(
+            "LCD {}   mode = {:?}  hi={}, vi={} spi={} sci={}",
+            self.mmu.lcdc.enabled,
+            self.mmu.stat.mode,
+            self.mmu.stat.hblank_interrupt_enabled,
+            self.mmu.stat.vblank_interrupt_enabled,
+            self.mmu.stat.sprite_interrupt_enabled,
+            self.mmu.stat.scanline_match_interrupt_enabled,
+        );
+
+        let IE = self.mmu.read8_IO(&IORegister::IE);
+        let IF = self.mmu.read8_IO(&IORegister::IF);
+        println!(
+            "interr: IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
+            IE,
+            get_bit(IE,0),
+            get_bit(IE,1),
+            get_bit(IE,2),
+            get_bit(IE,3),
+            get_bit(IE,4),
+        );
+        println!(
+            "interr: IF = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
+            IF,
+            get_bit(IF,0),
+            get_bit(IF,1),
+            get_bit(IF,2),
+            get_bit(IF,3),
+            get_bit(IF,4),
+        );
+
+        println!(
+            "timer: DIV = {}  TIMA {}   TMA {} TAC {} ",
+            self.mmu.read8_IO(&IORegister::DIV),
+            self.mmu.read8_IO(&IORegister::TIMA),
+            self.mmu.read8_IO(&IORegister::TMA),
+            self.mmu.read8_IO(&IORegister::TAC),
         );
 
         //back PC up to nearest 32byt boundary, then back up another 32 bytes, then print out 10 rows of memory
@@ -768,7 +828,7 @@ impl GBState {
     }
 
     fn trigger_interrupt(&mut self, handler_address:u16, bit:u8) {
-        println!("doing interrupt for bit {}",bit);
+        // println!("doing interrupt for bit {}",bit);
         self.cpu.IME = false;
         self.cpu.dec_sp();
         self.cpu.dec_sp();
