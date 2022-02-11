@@ -165,10 +165,10 @@ impl PPU2 {
                             yy,
                             id2 as u8,
                             tile_data,
-                            false,
+                            0,
                         );
                     } else {
-                        draw_tile_at(img, xx, yy, id, tile_data, false);
+                        draw_tile_at(img, xx, yy, id, tile_data, 0);
                     }
                 }
             }
@@ -183,7 +183,7 @@ impl PPU2 {
                 if mmu.lcdc.sprite_size_big {
                     // we dont' draw big sprites yet
                 } else {
-                    draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data, false);
+                    draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data,  flags);
                 }
             }
         }
@@ -212,18 +212,17 @@ impl PPU2 {
     }
 }
 
-fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], print: bool) {
+fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], flags: u8) {
     let start: usize = ((tile_id as u16) * 16) as usize;
     let stop: usize = start + 16;
-    // if print {
-    //     println!(
-    //         "id {:02x} maps to addr {:04x} - {:04x}  final {:04x}",
-    //         tile_id,
-    //         start,
-    //         stop,
-    //         ((start as u16) + 0x8800)
-    //     );
-    // }
+    //flag bits
+    // 0,1,2,3 not used
+    // 4 palette number
+    // 5 xflip
+    // 6 yflip
+    // 7 sprite to background priority
+    let xflip = get_bit_as_bool(flags,5);
+    let yflip = get_bit_as_bool(flags,6);
     let tile = &tiledata[start..stop];
     for (line, row) in tile.chunks_exact(2).enumerate() {
         for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
@@ -234,7 +233,15 @@ fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], 
                 3 => (200, 200, 200),
                 _ => (255, 0, 255),
             };
-            img.set_pixel_rgb((x + 7 - (n as i32)) as i32, (y + (line as i32)) as i32, r, g, b);
+            let mut final_x = x + 7 - (n as i32);
+            if xflip {
+                final_x = x + (n as i32);
+            }
+            let mut final_y = y + (line as i32);
+            if yflip {
+                y + 7 - (line as i32);
+            }
+            img.set_pixel_rgb(final_x, final_y, r, g, b);
         }
     }
 }

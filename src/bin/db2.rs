@@ -541,7 +541,7 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
             let x = atts[1];
             let tile_id = atts[2];
             let flags = atts[3];
-            println!("i {} id {}  xy {},{} flags={}",i,tile_id, x,y,flags);
+            println!("sprite {} id={:02x}  xy {},{} flags={:08b}",i,tile_id, x,y,flags);
             if tile_id >= 0 && tile_id < 0x80 {}
         }
     }
