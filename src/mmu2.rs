@@ -328,6 +328,7 @@ impl MMU2 {
                         }
                     }
                 }
+                IORegister::SB => 0xFF, //always return FF so that game thinks there is no other player
                 _ => self.mem[addr as usize],
             }
         } else {
