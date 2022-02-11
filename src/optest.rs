@@ -878,9 +878,9 @@ impl GBState {
             self.trigger_interrupt(JOYPAD_HANDLER_ADDRESS, 4);
             return;
         }
-        println!("some other interrupt requested but not handled");
-        println!("IE ={:08b}",self.mmu.read8_IO(&IORegister::IE));
-        println!("IF ={:08b}",self.mmu.read8_IO(&IORegister::IF));
+        // println!("some other interrupt requested but not handled");
+        // println!("IE ={:08b}",self.mmu.read8_IO(&IORegister::IE));
+        // println!("IF ={:08b}",self.mmu.read8_IO(&IORegister::IF));
     }
 }
 

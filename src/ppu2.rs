@@ -147,7 +147,7 @@ impl PPU2 {
             let img = &mut sss.backbuffer;
             let spacing = 8;
             for (y, row) in bg_tilemap.chunks_exact(32).enumerate() {
-                if y > 0x10 {
+                if y > 0x11 {
                     continue;
                 }
                 for (x, tile_id) in row.iter().enumerate() {
