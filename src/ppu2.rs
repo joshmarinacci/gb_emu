@@ -143,6 +143,7 @@ impl PPU2 {
 
         let sx = sss.SCX as i32;
         let sy = sss.SCY as i32;
+        let bg_palette = mmu.read8_IO(&IORegister::BGP);
         if mmu.lcdc.bg_enabled {
             let img = &mut sss.backbuffer;
             let spacing = 8;
@@ -166,9 +167,11 @@ impl PPU2 {
                             id2 as u8,
                             tile_data,
                             0,
+                            bg_palette,
+                            false,
                         );
                     } else {
-                        draw_tile_at(img, xx, yy, id, tile_data, 0);
+                        draw_tile_at(img, xx, yy, id, tile_data, 0, bg_palette, false);
                     }
                 }
             }
@@ -180,10 +183,15 @@ impl PPU2 {
                 let x = atts[1];
                 let tile_id = atts[2];
                 let flags = atts[3];
+                let sprite_palette = match get_bit_as_bool(flags, 4) {
+                    true => mmu.read8_IO(&IORegister::OBP1),
+                    false => mmu.read8_IO(&IORegister::OBP0),
+                };
+
                 if mmu.lcdc.sprite_size_big {
                     // we dont' draw big sprites yet
                 } else {
-                    draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data,  flags);
+                    draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data,  flags, sprite_palette, true);
                 }
             }
         }
@@ -198,10 +206,10 @@ impl PPU2 {
                 for (line, row) in tile.chunks_exact(2).enumerate() {
                     for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
                         let (r, g, b) = match color {
-                            0 => (255, 255, 255),
-                            1 => (220, 220, 220),
-                            2 => (170, 170, 170),
-                            3 => (50, 50, 50),
+                            0 => (255,255,255),
+                            1 => (200, 200, 200),
+                            2 => (100, 100, 100),
+                            3 => (0,0,0),
                             _ => (255, 0, 255),
                         };
                         img.set_pixel_rgb((x + 7 - n) as i32, (y + line) as i32, r, g, b);
@@ -212,7 +220,7 @@ impl PPU2 {
     }
 }
 
-fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], flags: u8) {
+fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], flags: u8, palette:u8, transparency: bool) {
     let start: usize = ((tile_id as u16) * 16) as usize;
     let stop: usize = start + 16;
     //flag bits
@@ -223,16 +231,15 @@ fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], 
     // 7 sprite to background priority
     let xflip = get_bit_as_bool(flags,5);
     let yflip = get_bit_as_bool(flags,6);
+    let priority = get_bit_as_bool(flags,7);
+
     let tile = &tiledata[start..stop];
     for (line, row) in tile.chunks_exact(2).enumerate() {
-        for (n, color) in pixel_row_to_colors(row).iter().enumerate() {
-            let (r, g, b) = match color {
-                0 => (50, 50, 50),
-                1 => (100, 100, 100),
-                2 => (0, 0, 0),
-                3 => (200, 200, 200),
-                _ => (255, 0, 255),
-            };
+        for (n, tile_color) in pixel_row_to_colors(row).iter().enumerate() {
+            if *tile_color == 0 && transparency {
+                continue;
+            }
+            let (r,g,b) = calculate_color_id(tile_color, palette);
             let mut final_x = x + 7 - (n as i32);
             if xflip {
                 final_x = x + (n as i32);
@@ -244,6 +251,27 @@ fn draw_tile_at(img: &mut Bitmap, x: i32, y: i32, tile_id: u8, tiledata: &[u8], 
             img.set_pixel_rgb(final_x, final_y, r, g, b);
         }
     }
+}
+
+fn calculate_color_id(color: &u8, palette: u8) -> (u8, u8, u8) {
+    let final_color = match color {
+        0 => get_bits_as_u8(palette, 6, 7),
+        1 => get_bits_as_u8(palette, 5, 4),
+        2 => get_bits_as_u8(palette, 3, 2),
+        3 => get_bits_as_u8(palette, 1, 0),
+        _ => return (255,0,255),
+    };
+    match final_color {
+        0 => (255,255,255),
+        1 => (200, 200, 200),
+        2 => (100, 100, 100),
+        3 => (0,0,0),
+        _ => (255, 0, 255),
+    }
+}
+
+fn get_bits_as_u8(palette: u8, b0: u8, b1: u8) -> u8 {
+    get_bit(palette,b0) + (get_bit(palette,b1) << 1)
 }
 
 fn pixel_row_to_colors(row: &[u8]) -> Vec<u8> {

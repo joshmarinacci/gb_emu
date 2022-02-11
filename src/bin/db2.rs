@@ -285,6 +285,12 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
                 gb.mmu.read8_IO(&IORegister::WY),
                 gb.mmu.read8_IO(&IORegister::WX),
             ))?;
+            term.write_line(&format!(
+                "BGP = {:08b}  OBP0 {:08b}   OBP1 {:08b}",
+                gb.mmu.read8_IO(&IORegister::BGP),
+                gb.mmu.read8_IO(&IORegister::OBP0),
+                gb.mmu.read8_IO(&IORegister::OBP1),
+            ))?;
 
             term.write_line(&format!(
                 "LCD {}   mode = {:?}  hi={}, vi={} spi={} sci={}",
