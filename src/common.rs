@@ -199,6 +199,7 @@ pub enum InputEvent {
     Press(JoyPadKey),
     Release(JoyPadKey),
     Stop(),
+    Break(),
     JumpNextVBlank(),
 }
 

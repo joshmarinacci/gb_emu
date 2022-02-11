@@ -118,7 +118,7 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
     gb.set_pc(0x100);
     gb.mmu.write8_IO(&IORegister::LCDC,0x00);
     gb.mmu.write8_IO(&IORegister::STAT, 0x00);
-    // gb.mmu.write8_IO(IORegister::LY,0x00);
+    gb.mmu.write8_IO(&IORegister::LY,0x00);
     gb.mmu.write8_IO(&IORegister::LYC,0x00);
 
     loop {
@@ -179,125 +179,178 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
     // fast forward by however much is specified
     gb.execute_n(fastforward as usize);
 
+    let mut interactive = true;
+
     loop {
-        let commands = Style::new().reverse();
-        let op_highlight = Style::new().red().reverse();
-        term.write_line(
-            &commands
-                .apply_to("========================================")
-                .to_string(),
-        )?;
-
-
-        //current memory range
-        print_current_memory_block(gb,&term)?;
-
-        // status
-        term.write_line(&format!(
-            "PC: {:04x}  SP:{:04x}    clock={}  PPU clock={}  diff={}",
-            gb.cpu.get_pc(),
-            gb.cpu.get_sp(),
-            gb.clock,
-            gb.ppu.next_clock,
-            ((gb.clock as i32) - (gb.ppu.next_clock as i32))
-        ))?;
-        //current instruction
-        let code = gb.fetch_opcode_at(gb.get_pc());
-        // println!("current op {:04x}", code);
-        if let Some(opx) = gb.lookup_op(&code) {
-            let op: Op = (*opx).clone();
-            println!("instr {:02x}  ->  {}  ->  {}",
-                     code,
-                     op_highlight.apply_to(op.to_asm()).to_string(),
-                     op.real(&gb));
+        // println!("check for screen input");
+        if let Ok(evt) = receive_cpu.try_recv() {
+            match evt {
+                InputEvent::Press(JoyPadKey::A) => {    gb.mmu.joypad.a = true;  }
+                InputEvent::Release(JoyPadKey::A) => {  gb.mmu.joypad.a = false; }
+                InputEvent::Press(JoyPadKey::B) => {    gb.mmu.joypad.b = true;  }
+                InputEvent::Release(JoyPadKey::B) => {  gb.mmu.joypad.b = false; }
+                InputEvent::Press(JoyPadKey::Start) => { gb.mmu.joypad.start = true; }
+                InputEvent::Release(JoyPadKey::Start) => { gb.mmu.joypad.start = false; }
+                InputEvent::Press(JoyPadKey::Select) => {  gb.mmu.joypad.select = true; }
+                InputEvent::Release(JoyPadKey::Select) => { gb.mmu.joypad.select = false;  }
+                InputEvent::Press(JoyPadKey::Left) => {   gb.mmu.joypad.left = true;   }
+                InputEvent::Release(JoyPadKey::Left) => { gb.mmu.joypad.left = false;  }
+                InputEvent::Press(JoyPadKey::Right) => {  gb.mmu.joypad.right = true;  }
+                InputEvent::Release(JoyPadKey::Right) => { gb.mmu.joypad.right = false; }
+                InputEvent::Press(JoyPadKey::Up) => {      gb.mmu.joypad.up = true;     }
+                InputEvent::Release(JoyPadKey::Up) => {    gb.mmu.joypad.up = false;    }
+                InputEvent::Press(JoyPadKey::Down) => {    gb.mmu.joypad.down = true;   }
+                InputEvent::Release(JoyPadKey::Down) => {  gb.mmu.joypad.down = false;  }
+                // InputEvent::JumpNextVBlank() => {
+                //     if ctx.interactive {
+                //         println!("got a jump next vblank");
+                //         ctx.jump_to_next_vblank(&mut term, &mut ss1).unwrap();
+                //     }
+                // }
+                InputEvent::Stop() => {
+                    println!("emu stopping. current status is");
+                    gb.dump_current_state();
+                    break;
+                },
+                // _ => {
+                //     println!("unhandled event {:?}", evt);
+                // }
+                InputEvent::Break() => {
+                    println!("got a break");
+                    interactive = true;
+                }
+                InputEvent::JumpNextVBlank() => {
+                    gb.execute_n(1);
+                }
+            }
         }
-        //registers
-        let reg_style = Style::new().bg(Color::White).red().underlined();
-        let regs = gb.cpu.reg_to_str();
-        term.write_line(&reg_style.apply_to(regs).to_string())?;
-        //flags
-        let flag_style = Style::new().blue();
-        term.write_line(&format!(
-            "flags Z:{}   N:{}  H:{}  C:{}",
-            flag_style.apply_to(gb.cpu.r.zero),
-            flag_style.apply_to(gb.cpu.r.subn),
-            flag_style.apply_to(gb.cpu.r.half),
-            flag_style.apply_to(gb.cpu.r.carry)
-        ))?;
-        //IO status bits
-        term.write_line(&format!(
-            "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  HALT={}",
-            gb.cpu.IME,
-            gb.mmu.read8_IO(&IORegister::IF),
-            gb.mmu.read8_IO(&IORegister::IE),
-            gb.mmu.read8_IO(&IORegister::LCDC),
-            gb.mmu.read8_IO(&IORegister::STAT),
-            gb.cpu.halt,
-        ))?;
-        term.write_line(&format!(
-            "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
-            gb.mmu.read8_IO(&IORegister::LY),
-            gb.mmu.read8_IO(&IORegister::LYC),
-            gb.mmu.read8_IO(&IORegister::SCY),
-            gb.mmu.read8_IO(&IORegister::SCX),
-            gb.mmu.read8_IO(&IORegister::WY),
-            gb.mmu.read8_IO(&IORegister::WX),
-        ))?;
 
-         term.write_line(&format!(
-            "LCD {}   mode = {:?}  hi={}, vi={} spi={} sci={}",
-            gb.mmu.lcdc.enabled,
-            gb.mmu.stat.mode,
-            gb.mmu.stat.hblank_interrupt_enabled,
-            gb.mmu.stat.vblank_interrupt_enabled,
-            gb.mmu.stat.sprite_interrupt_enabled,
-            gb.mmu.stat.scanline_match_interrupt_enabled,
-        ));
-
-        let IE = gb.mmu.read8_IO(&IORegister::IE);
-        let IF = gb.mmu.read8_IO(&IORegister::IF);
-        term.write_line(&format!(
-            "interr: IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
-            IE,
-            get_bit(IE,0),
-            get_bit(IE,1),
-            get_bit(IE,2),
-            get_bit(IE,3),
-            get_bit(IE,4),
-        ));
-
-        term.write_line(&format!(
-            "timer: DIV = {}  TIMA {}   TMA {} TAC {} ",
-            gb.mmu.read8_IO(&IORegister::DIV),
-            gb.mmu.read8_IO(&IORegister::TIMA),
-            gb.mmu.read8_IO(&IORegister::TMA),
-            gb.mmu.read8_IO(&IORegister::TAC),
-        ))?;
+        if interactive {
+            let commands = Style::new().reverse();
+            let op_highlight = Style::new().red().reverse();
+            term.write_line(
+                &commands
+                    .apply_to("========================================")
+                    .to_string(),
+            )?;
 
 
-        let commands = Style::new().reverse();
-        term.write_line(
-            &commands
-                .apply_to(&format!("j=step J=16 u=256 U=4096 m=memory q=quit g=go"))
-                .to_string(),
-        )?;
-        // term.write_line(&commands.apply_to(&format!("m=memory  q=quit")).to_string())?;
+            //current memory range
+            print_current_memory_block(gb, &term)?;
 
-        let ch = term.read_char().unwrap();
-        match ch {
-            'j' => gb.execute_n(1),
-            'J' => gb.execute_n(16),
-            'u' => gb.execute_n(256),
-            'U' => gb.execute_n(256 * 16),
-            'm' => dump_memory(&gb, &term)?,
-            'i' => request_interrupt(gb, &term)?,
-            'v' => dump_vram_png(gb, &term)?,
-            'g' => go_until(gb, &term, &to_screen)?,
-            'V' => gb.run_to_vblank(),
-            'q' => break,
-            _ => println!("??"),
-        };
+            // status
+            term.write_line(&format!(
+                "PC: {:04x}  SP:{:04x}    clock={}  PPU clock={}  diff={}",
+                gb.cpu.get_pc(),
+                gb.cpu.get_sp(),
+                gb.clock,
+                gb.ppu.next_clock,
+                ((gb.clock as i32) - (gb.ppu.next_clock as i32))
+            ))?;
+            //current instruction
+            let code = gb.fetch_opcode_at(gb.get_pc());
+            // println!("current op {:04x}", code);
+            if let Some(opx) = gb.lookup_op(&code) {
+                let op: Op = (*opx).clone();
+                println!("instr {:02x}  ->  {}  ->  {}",
+                         code,
+                         op_highlight.apply_to(op.to_asm()).to_string(),
+                         op.real(&gb));
+            }
+            //registers
+            let reg_style = Style::new().bg(Color::White).red().underlined();
+            let regs = gb.cpu.reg_to_str();
+            term.write_line(&reg_style.apply_to(regs).to_string())?;
+            //flags
+            let flag_style = Style::new().blue();
+            term.write_line(&format!(
+                "flags Z:{}   N:{}  H:{}  C:{}",
+                flag_style.apply_to(gb.cpu.r.zero),
+                flag_style.apply_to(gb.cpu.r.subn),
+                flag_style.apply_to(gb.cpu.r.half),
+                flag_style.apply_to(gb.cpu.r.carry)
+            ))?;
+            //IO status bits
+            term.write_line(&format!(
+                "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  HALT={}",
+                gb.cpu.IME,
+                gb.mmu.read8_IO(&IORegister::IF),
+                gb.mmu.read8_IO(&IORegister::IE),
+                gb.mmu.read8_IO(&IORegister::LCDC),
+                gb.mmu.read8_IO(&IORegister::STAT),
+                gb.cpu.halt,
+            ))?;
+            term.write_line(&format!(
+                "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
+                gb.mmu.read8_IO(&IORegister::LY),
+                gb.mmu.read8_IO(&IORegister::LYC),
+                gb.mmu.read8_IO(&IORegister::SCY),
+                gb.mmu.read8_IO(&IORegister::SCX),
+                gb.mmu.read8_IO(&IORegister::WY),
+                gb.mmu.read8_IO(&IORegister::WX),
+            ))?;
 
+            term.write_line(&format!(
+                "LCD {}   mode = {:?}  hi={}, vi={} spi={} sci={}",
+                gb.mmu.lcdc.enabled,
+                gb.mmu.stat.mode,
+                gb.mmu.stat.hblank_interrupt_enabled,
+                gb.mmu.stat.vblank_interrupt_enabled,
+                gb.mmu.stat.sprite_interrupt_enabled,
+                gb.mmu.stat.scanline_match_interrupt_enabled,
+            ));
+
+            let IE = gb.mmu.read8_IO(&IORegister::IE);
+            let IF = gb.mmu.read8_IO(&IORegister::IF);
+            term.write_line(&format!(
+                "interr: IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
+                IE,
+                get_bit(IE, 0),
+                get_bit(IE, 1),
+                get_bit(IE, 2),
+                get_bit(IE, 3),
+                get_bit(IE, 4),
+            ));
+
+            term.write_line(&format!(
+                "timer: DIV = {}  TIMA {}   TMA {} TAC {} ",
+                gb.mmu.read8_IO(&IORegister::DIV),
+                gb.mmu.read8_IO(&IORegister::TIMA),
+                gb.mmu.read8_IO(&IORegister::TMA),
+                gb.mmu.read8_IO(&IORegister::TAC),
+            ))?;
+
+
+            let commands = Style::new().reverse();
+            term.write_line(
+                &commands
+                    .apply_to(&format!("j=step J=16 u=256 U=4096 m=memory q=quit g=go"))
+                    .to_string(),
+            )?;
+            // term.write_line(&commands.apply_to(&format!("m=memory  q=quit")).to_string())?;
+
+            let ch = term.read_char().unwrap();
+            match ch {
+                'j' => gb.execute_n(1),
+                'J' => gb.execute_n(16),
+                'u' => gb.execute_n(256),
+                'U' => gb.execute_n(256 * 16),
+                'm' => dump_memory(&gb, &term)?,
+                'i' => request_interrupt(gb, &term)?,
+                'v' => dump_vram_png(gb, &term)?,
+                'g' => go_until(gb, &term, &to_screen)?,
+                'r' => {
+                    interactive = false;
+                    // run_until_break()
+                },
+                'V' => gb.run_to_vblank(),
+                'q' => break,
+                _ => println!("??"),
+            };
+        } else {
+            // println!("just looping");
+            gb.execute_n(1);
+        }
         if gb.ppu.entered_vram {
             to_screen.send(String::from("redraw"));
         }

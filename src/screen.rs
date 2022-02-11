@@ -1,4 +1,4 @@
-use crate::common::InputEvent::{JumpNextVBlank, Press, Release};
+use crate::common::InputEvent::{Break, JumpNextVBlank, Press, Release};
 use crate::common::{Bitmap, InputEvent, JoyPadKey};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -59,6 +59,12 @@ impl Screen {
                         ..
                     } => {
                         to_cpu.send(Press(JoyPadKey::B));
+                    }
+                    Event::KeyDown {
+                        keycode: Some(Keycode::B),
+                        ..
+                    } => {
+                        to_cpu.send(Break());
                     }
                     Event::KeyUp {
                         keycode: Some(Keycode::X),
