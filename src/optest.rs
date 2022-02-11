@@ -741,7 +741,7 @@ impl GBState {
             {
                 //update DIV
                 let mut div = self.mmu.read8_IO(&IORegister::DIV);
-                if self.count % 5 == 0 {
+                if self.count % 256 == 0 {
                     div = div.wrapping_add(1);
                     self.mmu.write8_IO_raw(IORegister::DIV,div);
                 }
@@ -760,17 +760,17 @@ impl GBState {
                 };
                 if get_bit_as_bool(TAC,2) {
                     // println!("timer enabled. updating with factor {}",factor);
-                    let mut TIMA = self.mmu.read8_IO(&IORegister::TIMA);
-                    let mut TMA = self.mmu.read8_IO(&IORegister::TMA);
+                    let mut tima = self.mmu.read8_IO(&IORegister::TIMA);
+                    let mut tma = self.mmu.read8_IO(&IORegister::TMA);
                     if self.count % factor == 0 {
-                        let (t2,over) = TIMA.overflowing_add(1);
+                        let (t2,over) = tima.overflowing_add(1);
                         if over {
-                            TIMA = TMA;
+                            tima = tma;
                             self.mmu.set_IO_bit(&IORegister::IF, 2, true);
                         } else {
-                            TIMA = t2;
+                            tima = t2;
                         }
-                        self.mmu.write8_IO_raw(IORegister::TIMA,TIMA);
+                        self.mmu.write8_IO_raw(IORegister::TIMA, tima);
                     }
                 }
             }

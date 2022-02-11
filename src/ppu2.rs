@@ -39,6 +39,7 @@ impl PPU2 {
                         mmu.stat.mode = LCDMode::VBlank_1;
                         //request vblank interrupt handler
                         mmu.set_IO_bit(&IORegister::IF,0,true);
+                        //maybe request the STAT version of the vblank handler
                         if mmu.stat.vblank_interrupt_enabled {
                             println!("vblank STAT interrupt enabled. requesting it");
                             mmu.set_IO_bit(&IORegister::IF,1,true);
