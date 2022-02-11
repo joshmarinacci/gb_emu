@@ -86,11 +86,7 @@ fn main() -> Result<()>{
     }
 
     let hand = thread::spawn(move || {
-        if args.run {
-            start_run(&mut gb, to_screen, receive_cpu).unwrap();
-        } else {
-            start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu).unwrap();
-        }
+        start_debugger(&mut gb, args.fastforward, to_screen, receive_cpu, !args.run).unwrap();
     });
 
     if settings.enabled {
@@ -165,7 +161,7 @@ fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<
     Ok(())
 }
 
-fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
+fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>, init_interactive: bool) -> Result<()> {
     gb.set_pc(0x100);
     gb.mmu.write8_IO(&IORegister::LCDC,0x00);
     gb.mmu.write8_IO(&IORegister::STAT, 0x00);
@@ -179,7 +175,7 @@ fn start_debugger(gb: &mut GBState, fastforward: u32, to_screen: Sender<String>,
     // fast forward by however much is specified
     gb.execute_n(fastforward as usize);
 
-    let mut interactive = true;
+    let mut interactive = init_interactive;
 
     loop {
         // println!("check for screen input");
