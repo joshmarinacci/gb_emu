@@ -536,6 +536,19 @@ fn dump_memory(gb: &GBState, term: &Term) -> Result<()> {
         let line_str: String = chunk.iter().map(|b| format!("{:02x}", b)).collect();
         term.write_line(&format!("{:04X} {}", (n * 32 * 2) + range.start, line_str))?;
     }
+
+    if range.start == 0xFE00 {
+        println!("printing out the sprite table");
+        let oam_table = gb.mmu.borrow_slice(0xFE00,0xFEA0);
+        for (i, atts) in oam_table.chunks_exact(4).enumerate() {
+            let y = atts[0];
+            let x = atts[1];
+            let tile_id = atts[2];
+            let flags = atts[3];
+            println!("i {} id {}  xy {},{} flags={}",i,tile_id, x,y,flags);
+            if tile_id >= 0 && tile_id < 0x80 {}
+        }
+    }
     Ok(())
 }
 

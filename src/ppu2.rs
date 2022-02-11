@@ -109,6 +109,7 @@ fn check_scanline_match(mmu: &mut MMU2) {
         mmu.stat.scanline_matching = true;
         if mmu.stat.scanline_match_interrupt_enabled {
             println!("trigger a scanline match interrupt");
+            mmu.set_IO_bit(&IORegister::IF,1,true);
         }
     } else {
         mmu.stat.scanline_matching = false;
@@ -131,14 +132,12 @@ impl PPU2 {
         }
     }
     pub fn draw_full_screen(&mut self, mmu: &MMU2) {
-        // println!("drawing the full screen");
         let mut sss = self.sss.lock().unwrap();
         sss.SCX = mmu.read8_IO(&IORegister::SCX);
         sss.SCY = mmu.read8_IO(&IORegister::SCY);
 
         let bg_tilemap = mmu.borrow_range(&mmu.lcdc.bg_tilemap_select);
         let oam_table = mmu.borrow_slice(0xFE00,0xFEA0);
-        // print_ram(0xFE00, &oam_table.to_vec());
         let tile_data = mmu.borrow_range(&mmu.lcdc.bg_window_tiledata_select);
         let sprite_data = mmu.borrow_slice(0x8000,0x9000);
 
@@ -175,27 +174,16 @@ impl PPU2 {
             }
         }
         if mmu.lcdc.sprite_enabled {
-            // println!("drawing sprites");
             let img = &mut sss.backbuffer;
             for (i, atts) in oam_table.chunks_exact(4).enumerate() {
                 let y = atts[0];
                 let x = atts[1];
                 let tile_id = atts[2];
                 let flags = atts[3];
-                // println!("i {} id {}",i,tile_id);
-                if tile_id >= 0 && tile_id < 0x80 {
-                    //println!("{} {} {}",tile_id,y,x);
-                    // println!("drawing sprite {}",tile_id);
-                    // println!("   sprite at {}x{} id={:02x} flags={:08b}", x, y, tile_id, flags);
-                    if mmu.lcdc.sprite_size_big {
-                        // println!("skipping big sprites");
-                    } else {
-                        // println!("drawing sprite at {},{}",x,y);
-                        // img.set_pixel_rgb(x as i32,y as i32,0,0,0);
-                        // img.set_pixel_rgb((x+1) as i32,y as i32,0,0,0);
-                        // img.set_pixel_rgb((x+1) as i32,(y+1) as i32,0,0,0);
-                        draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data, false);
-                    }
+                if mmu.lcdc.sprite_size_big {
+                    // we dont' draw big sprites yet
+                } else {
+                    draw_tile_at(img, (x as i32) - 8, (y as i32) - 16, tile_id, sprite_data, false);
                 }
             }
         }
