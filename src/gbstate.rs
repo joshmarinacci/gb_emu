@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use crate::common::{get_bit, get_bit_as_bool, load_romfile, MBC};
-use crate::cpu2::{CPU, CPUR16, CPUR8};
-use crate::mmu2::{IORegister, MMU2};
+use crate::cpu::{CPU, CPUR16, CPUR8};
+use crate::mmu::{IORegister, MMU2};
 use crate::ops::{execute_op, make_op_table, Op, OpTable};
-use crate::ppu2::PPU2;
+use crate::ppu::PPU2;
 
 pub struct GBState {
     pub cpu: CPU,
@@ -20,9 +20,6 @@ impl GBState {
     pub fn lookup_op(&self, code: &u16) -> Option<&Op> {
         self.ops.ops.get(code)
     }
-}
-
-impl GBState {
     pub fn draw_full_screen(&mut self) {
         self.ppu.draw_full_screen(&self.mmu);
     }
@@ -54,9 +51,6 @@ impl GBState {
         // }
         self.cpu.real_set_pc(pc);
     }
-}
-
-impl GBState {
     pub fn fetch_opcode_at(&self, pc: u16) -> u16 {
         let fb: u8 = self.mmu.read8(pc);
         if fb == 0xcb {
@@ -69,9 +63,6 @@ impl GBState {
     pub(crate) fn fetch_next_opcode(&self) -> u16 {
         self.fetch_opcode_at(self.cpu.get_pc())
     }
-}
-
-impl GBState {
     pub(crate) fn make_test_context(rom: &Vec<u8>) -> GBState {
         let mut gb = GBState {
             cpu: CPU::init(),
@@ -203,9 +194,6 @@ impl GBState {
             println!("{:04x} {}", (pc + ((n as u16) * 16)) as u16, line_str);
         }
     }
-}
-
-impl GBState {
     pub fn execute(&mut self) {
         let code = self.fetch_next_opcode();
         if let Some(opx) = self.ops.ops.get(&code) {

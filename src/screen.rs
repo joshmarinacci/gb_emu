@@ -9,7 +9,7 @@ use sdl2::Sdl;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use crate::ppu2::SSS;
+use crate::ppu::SSS;
 
 #[derive(Debug)]
 pub struct ScreenSettings {

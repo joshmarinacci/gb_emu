@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use crate::common::{get_bit_as_bool, set_bit, u8_as_i8};
-use crate::cpu2::{CPU, CPUR16};
-use crate::cpu2::CPUR8::{R8A, R8B, R8C, R8D, R8E, R8H, R8L};
-use crate::mmu2::{IORegister, MMU2};
+use crate::cpu::{CPU, CPUR16};
+use crate::cpu::CPUR8::{R8A, R8B, R8C, R8D, R8E, R8H, R8L};
+use crate::mmu::{IORegister, MMU2};
 use crate::ops::BinOp::{ADC, Add, And, Or, SBC, SUB, Xor};
 use crate::ops::BinOp16::Add16;
 use crate::ops::BitOps::{BIT, CCF, CPL, DAA, RES, RL, RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SCF, SET, SLA, SRA, SRL, SWAP};
@@ -17,8 +17,8 @@ use crate::ops::R8::{A, B, C, D, E, H, L};
 use crate::ops::Src16::SrcR16;
 use crate::ops::Src8::{Im8, Mem, SrcR8};
 use crate::ops::UnOp16::{Dec16, Inc16};
-use crate::optest::GBState;
-use crate::ppu2::PPU2;
+use crate::gbstate::GBState;
+use crate::ppu::PPU2;
 
 #[derive(Debug, Copy, Clone)]
 pub enum R8 {

@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram, set_bit};
 use crate::hardware::LCDMode;
 use crate::hardware::LCDMode::VBlank_1;
-use crate::mmu2::{IORegister, MMU2};
-use crate::optest::GBState;
+use crate::mmu::{IORegister, MMU2};
+use crate::gbstate::GBState;
 
 pub struct SSS {
     pub SCX: u8,

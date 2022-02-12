@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use console::Color::White;
 use console::{Color, Style, Term};
 use dialoguer::theme::ColorfulTheme;
-use gb_emu::optest::{GBState, make_core_from_rom};
+use gb_emu::gbstate::{GBState, make_core_from_rom};
 use log::{info, LevelFilter};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Root};
@@ -16,7 +16,7 @@ use sdl2::libc::sleep;
 use serde_json::to_string;
 use structopt::StructOpt;
 use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
-use gb_emu::mmu2::IORegister;
+use gb_emu::mmu::IORegister;
 use gb_emu::ops::Op;
 use gb_emu::screen::{Screen, ScreenSettings};
 

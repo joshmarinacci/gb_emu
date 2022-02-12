@@ -3,7 +3,7 @@ use crate::common::{get_bit_as_bool, MBC, set_bit};
 use log::info;
 use std::fs;
 use crate::hardware::{LCDCRegister, MemRange, STATRegister};
-use crate::mmu2::IORegister::{SCX, SCY};
+use crate::mmu::IORegister::{SCX, SCY};
 
 /*
 IO registers
