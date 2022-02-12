@@ -86,20 +86,20 @@ impl GBState {
         println!(
             "IME = {} IF = {:08b} IE = {:08b}  LCDC: {:08b}   STAT: {:08b}  HALT={}",
             self.cpu.IME,
-            self.mmu.read8_IO(&IORegister::IF),
-            self.mmu.read8_IO(&IORegister::IE),
-            self.mmu.read8_IO(&IORegister::LCDC),
-            self.mmu.read8_IO(&IORegister::STAT),
+            self.mmu.read8_IO(IORegister::IF),
+            self.mmu.read8_IO(IORegister::IE),
+            self.mmu.read8_IO(IORegister::LCDC),
+            self.mmu.read8_IO(IORegister::STAT),
             self.cpu.halt,
         );
         println!(
             "LY = {}  LYC {}   SCY {} SCX {}   WY {} WX {} ",
-            self.mmu.read8_IO(&IORegister::LY),
-            self.mmu.read8_IO(&IORegister::LYC),
-            self.mmu.read8_IO(&IORegister::SCY),
-            self.mmu.read8_IO(&IORegister::SCX),
-            self.mmu.read8_IO(&IORegister::WY),
-            self.mmu.read8_IO(&IORegister::WX),
+            self.mmu.read8_IO(IORegister::LY),
+            self.mmu.read8_IO(IORegister::LYC),
+            self.mmu.read8_IO(IORegister::SCY),
+            self.mmu.read8_IO(IORegister::SCX),
+            self.mmu.read8_IO(IORegister::WY),
+            self.mmu.read8_IO(IORegister::WX),
         );
 
         println!(
@@ -112,8 +112,8 @@ impl GBState {
             self.mmu.stat.scanline_match_interrupt_enabled,
         );
 
-        let IE = self.mmu.read8_IO(&IORegister::IE);
-        let IF = self.mmu.read8_IO(&IORegister::IF);
+        let IE = self.mmu.read8_IO(IORegister::IE);
+        let IF = self.mmu.read8_IO(IORegister::IF);
         println!(
             "interr: IE = {:08b} vblank {}   lcd stat {}   timer {}   serial {}   joy {} ",
             IE,
@@ -135,10 +135,10 @@ impl GBState {
 
         println!(
             "timer: DIV = {}  TIMA {}   TMA {} TAC {} ",
-            self.mmu.read8_IO(&IORegister::DIV),
-            self.mmu.read8_IO(&IORegister::TIMA),
-            self.mmu.read8_IO(&IORegister::TMA),
-            self.mmu.read8_IO(&IORegister::TAC),
+            self.mmu.read8_IO(IORegister::DIV),
+            self.mmu.read8_IO(IORegister::TIMA),
+            self.mmu.read8_IO(IORegister::TMA),
+            self.mmu.read8_IO(IORegister::TAC),
         );
 
         //back PC up to nearest 32byt boundary, then back up another 32 bytes, then print out 10 rows of memory
@@ -196,7 +196,7 @@ impl GBState {
             self.ppu.update(&mut self.mmu, self.clock);
             {
                 //update DIV
-                let mut div = self.mmu.read8_IO(&IORegister::DIV);
+                let mut div = self.mmu.read8_IO(IORegister::DIV);
                 if self.count % 256 == 0 {
                     div = div.wrapping_add(1);
                     self.mmu.write8_IO_raw(IORegister::DIV,div);
@@ -205,7 +205,7 @@ impl GBState {
 
             {
                 //update timer
-                let TAC = self.mmu.read8_IO(&IORegister::TAC);
+                let TAC = self.mmu.read8_IO(IORegister::TAC);
                 let b1 = get_bit_as_bool(TAC,1);
                 let b0 = get_bit_as_bool(TAC,0);
                 let factor = match (b1,b0) {
@@ -216,13 +216,13 @@ impl GBState {
                 };
                 if get_bit_as_bool(TAC,2) {
                     // println!("timer enabled. updating with factor {}",factor);
-                    let mut tima = self.mmu.read8_IO(&IORegister::TIMA);
-                    let mut tma = self.mmu.read8_IO(&IORegister::TMA);
+                    let mut tima = self.mmu.read8_IO(IORegister::TIMA);
+                    let mut tma = self.mmu.read8_IO(IORegister::TMA);
                     if self.count % factor == 0 {
                         let (t2,over) = tima.overflowing_add(1);
                         if over {
                             tima = tma;
-                            self.mmu.set_IO_bit(&IORegister::IF, 2, true);
+                            self.mmu.set_IO_bit(IORegister::IF, 2, true);
                         } else {
                             tima = t2;
                         }
@@ -233,7 +233,7 @@ impl GBState {
 
             //check for interrupts
             if self.cpu.IME {
-                if self.mmu.read8_IO(&IORegister::IF) > 0 {
+                if self.mmu.read8_IO(IORegister::IF) > 0 {
                     self.process_interrupts();
                 }
             }
@@ -310,27 +310,27 @@ impl GBState {
         //jump to start of interrupt
         self.set_pc(handler_address);
         //reset the IF register
-        self.mmu.set_IO_bit(&IORegister::IF,bit,false);
+        self.mmu.set_IO_bit(IORegister::IF,bit,false);
     }
     fn process_interrupts(&mut self) {
         // println!("IF requested for {:08b}",self.mmu.read8_IO(&IORegister::IF));
-        if self.mmu.get_IO_bit(&IORegister::IF,0) && self.mmu.get_IO_bit(&IORegister::IE,0) {
+        if self.mmu.get_IO_bit(IORegister::IF,0) && self.mmu.get_IO_bit(IORegister::IE,0) {
             self.trigger_interrupt(VBLANK_HANDLER_ADDRESS, 0);
             return;
         }
-        if self.mmu.get_IO_bit(&IORegister::IF,1) && self.mmu.get_IO_bit(&IORegister::IE,1) {
+        if self.mmu.get_IO_bit(IORegister::IF,1) && self.mmu.get_IO_bit(IORegister::IE,1) {
             self.trigger_interrupt(STAT_HANDLER_ADDRESS, 1);
             return;
         }
-        if self.mmu.get_IO_bit(&IORegister::IF,2) && self.mmu.get_IO_bit(&IORegister::IE,2) {
+        if self.mmu.get_IO_bit(IORegister::IF,2) && self.mmu.get_IO_bit(IORegister::IE,2) {
             self.trigger_interrupt(TIMER_HANDLER_ADDRESS, 2);
             return;
         }
-        if self.mmu.get_IO_bit(&IORegister::IF,3) && self.mmu.get_IO_bit(&IORegister::IE,3) {
+        if self.mmu.get_IO_bit(IORegister::IF,3) && self.mmu.get_IO_bit(IORegister::IE,3) {
             self.trigger_interrupt(SERIAL_HANDLER_ADDRESS, 3);
             return;
         }
-        if self.mmu.get_IO_bit(&IORegister::IF,4) && self.mmu.get_IO_bit(&IORegister::IE,4) {
+        if self.mmu.get_IO_bit(IORegister::IF,4) && self.mmu.get_IO_bit(IORegister::IE,4) {
             self.trigger_interrupt(JOYPAD_HANDLER_ADDRESS, 4);
             return;
         }
@@ -461,11 +461,11 @@ fn test_hellogithub() {
         }
 
         if gb.count % 20 == 0 {
-            let mut v = gb.mmu.read8_IO(&IORegister::LY);
+            let mut v = gb.mmu.read8_IO(IORegister::LY);
             if v >= 154 {
                 v = 0;
             }
-            gb.mmu.write8_IO(&IORegister::LY, v + 1);
+            gb.mmu.write8_IO(IORegister::LY, v + 1);
         }
 
         if gb.count > goal {
@@ -583,11 +583,11 @@ fn test_bootrom() {
         }
 
         if gb.count % 500 == 0 {
-            let mut v = gb.mmu.read8_IO(&IORegister::LY);
+            let mut v = gb.mmu.read8_IO(IORegister::LY);
             if v >= 154 {
                 v = 0;
             }
-            gb.mmu.write8_IO(&IORegister::LY, v + 1);
+            gb.mmu.write8_IO(IORegister::LY, v + 1);
         }
 
         if gb.count > goal {
@@ -669,7 +669,7 @@ fn test_tetris() {
                 panic!("ill come back to this later");
             }
 
-            0x2828 => println!("checking ly {:04x}", gb.mmu.read8_IO(&IORegister::LY)),
+            0x2828 => println!("checking ly {:04x}", gb.mmu.read8_IO(IORegister::LY)),
             0x282e => println!("end of vblank wait"),
             // 0x0217 => println!("made it past the loop"),
             _ => {}
@@ -732,7 +732,7 @@ fn test_tetris() {
         // gb.clock += (op.cycles as u32);
         gb.count += 1;
         if gb.count % 500 == 0 {
-            let v = gb.mmu.read8_IO(&IORegister::LY);
+            let v = gb.mmu.read8_IO(IORegister::LY);
             // println!("v is {}",v);
             let mut v2 = v;
             if v >= 154 {
@@ -744,7 +744,7 @@ fn test_tetris() {
                 println!("vblank flip");
                 // gb.ppu.draw_full_screen(&gb.mmu)
             }
-            gb.mmu.write8_IO(&IORegister::LY, v2);
+            gb.mmu.write8_IO(IORegister::LY, v2);
         }
 
         if gb.count > goal {
@@ -766,8 +766,8 @@ fn read_n_right_test() {
     assert_eq!(mmu.read8(0x142), 0x66);
     mmu.write8(0x142, 0x42);
     assert_eq!(mmu.read8(0x142), 0x42);
-    mmu.write8_IO(&IORegister::LY, 0x85);
-    assert_eq!(mmu.read8_IO(&IORegister::LY), 0x85);
+    mmu.write8_IO(IORegister::LY, 0x85);
+    assert_eq!(mmu.read8_IO(IORegister::LY), 0x85);
 }
 
 #[test]

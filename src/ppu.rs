@@ -38,11 +38,11 @@ impl PPU2 {
                     if ly2 >= 144 {
                         mmu.stat.mode = LCDMode::VBlank_1;
                         //request vblank interrupt handler
-                        mmu.set_IO_bit(&IORegister::IF,0,true);
+                        mmu.set_IO_bit(IORegister::IF,0,true);
                         //maybe request the STAT version of the vblank handler
                         if mmu.stat.vblank_interrupt_enabled {
                             println!("vblank STAT interrupt enabled. requesting it");
-                            mmu.set_IO_bit(&IORegister::IF,1,true);
+                            mmu.set_IO_bit(IORegister::IF,1,true);
                         }
                         self.entered_vram = true;
                         //wait for 10 scan lines
@@ -59,7 +59,7 @@ impl PPU2 {
                         mmu.stat.mode = LCDMode::Searching_2;
                         if mmu.stat.sprite_interrupt_enabled {
                             println!("sprite interrupt enabled. requesting it");
-                            mmu.set_IO_bit(&IORegister::IF,1,true);
+                            mmu.set_IO_bit(IORegister::IF,1,true);
                         }
                         self.entered_vram = false;
                         self.last_vblank = clock;
@@ -77,7 +77,7 @@ impl PPU2 {
                     mmu.stat.mode = LCDMode::HBlank_0;
                     if mmu.stat.hblank_interrupt_enabled {
                         println!("hblank interrupt enabled. requesting it");
-                        mmu.set_IO_bit(&IORegister::IF,1,true);
+                        mmu.set_IO_bit(IORegister::IF,1,true);
                     }
                     // println!("entering hblank");
                     //maybe trigger interrupt
@@ -89,27 +89,27 @@ impl PPU2 {
 }
 
 fn reset_ly(mmu: &mut MMU2) {
-    mmu.write8_IO(&IORegister::LY,0);
+    mmu.write8_IO(IORegister::LY,0);
     // println!("incremented scanline ly {}",0);
     check_scanline_match(mmu);
 }
 
 fn inc_ly(mmu: &mut MMU2) -> u8 {
-    let  ly1 = mmu.read8_IO(&IORegister::LY);
+    let  ly1 = mmu.read8_IO(IORegister::LY);
     let ly2 = ly1+1;
-    mmu.write8_IO(&IORegister::LY,ly1+1);
+    mmu.write8_IO(IORegister::LY,ly1+1);
     // println!("incremented scanline ly {}",ly2);
     check_scanline_match(mmu);
     return ly2
 }
 
 fn check_scanline_match(mmu: &mut MMU2) {
-    if mmu.read8_IO(&IORegister::LY) == mmu.read8_IO(&IORegister::LYC) {
+    if mmu.read8_IO(IORegister::LY) == mmu.read8_IO(IORegister::LYC) {
         // println!("LY == LYC");
         mmu.stat.scanline_matching = true;
         if mmu.stat.scanline_match_interrupt_enabled {
             println!("trigger a scanline match interrupt");
-            mmu.set_IO_bit(&IORegister::IF,1,true);
+            mmu.set_IO_bit(IORegister::IF,1,true);
         }
     } else {
         mmu.stat.scanline_matching = false;
@@ -133,8 +133,8 @@ impl PPU2 {
     }
     pub fn draw_full_screen(&mut self, mmu: &MMU2) {
         let mut sss = self.sss.lock().unwrap();
-        sss.SCX = mmu.read8_IO(&IORegister::SCX);
-        sss.SCY = mmu.read8_IO(&IORegister::SCY);
+        sss.SCX = mmu.read8_IO(IORegister::SCX);
+        sss.SCY = mmu.read8_IO(IORegister::SCY);
 
         let bg_tilemap = mmu.borrow_range(&mmu.lcdc.bg_tilemap_select);
         let oam_table = mmu.borrow_slice(0xFE00,0xFEA0);
@@ -143,7 +143,7 @@ impl PPU2 {
 
         let sx = sss.SCX as i32;
         let sy = sss.SCY as i32;
-        let bg_palette = mmu.read8_IO(&IORegister::BGP);
+        let bg_palette = mmu.read8_IO(IORegister::BGP);
         if mmu.lcdc.bg_enabled {
             let img = &mut sss.backbuffer;
             let spacing = 8;
@@ -184,8 +184,8 @@ impl PPU2 {
                 let tile_id = atts[2];
                 let flags = atts[3];
                 let sprite_palette = match get_bit_as_bool(flags, 4) {
-                    true => mmu.read8_IO(&IORegister::OBP1),
-                    false => mmu.read8_IO(&IORegister::OBP0),
+                    true => mmu.read8_IO(IORegister::OBP1),
+                    false => mmu.read8_IO(IORegister::OBP0),
                 };
 
                 if mmu.lcdc.sprite_size_big {

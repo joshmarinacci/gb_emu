@@ -124,8 +124,8 @@ impl MMU2 {
             self.mem[addr as usize]
         }
     }
-    pub fn read8_IO(&self, reg: &IORegister) -> u8 {
-        self.read8(reg.get_addr())
+    pub fn read8_IO(&self, reg: IORegister) -> u8 {
+        self.read8(reg as u16)
     }
     pub fn write8(&mut self, addr: u16, val: u8) {
         self.last_write_address = addr;
@@ -152,7 +152,7 @@ impl MMU2 {
                 },
                 IORegister::SC => {
                     if val == 0x81 {
-                        let sbv = self.read8_IO(&IORegister::SB);
+                        let sbv = self.read8_IO(IORegister::SB);
                         println!(
                             "print serial byte {:02x} {}",
                             sbv,
@@ -161,7 +161,7 @@ impl MMU2 {
                     }
                 }
                 //writing to div resets it
-                IORegister::DIV => self.mem[IORegister::DIV.get_addr() as usize] = 0,
+                IORegister::DIV => self.mem[IORegister::DIV as u16 as usize] = 0,
                 IORegister::DMA => self.dma_transfer(val),
                 IORegister::IF => {
                     // println!("changing IF {:08b}",val);
@@ -236,10 +236,10 @@ impl MMU2 {
         }
     }
     pub(crate) fn write8_IO_raw(&mut self, reg: IORegister, value: u8) {
-        self.mem[reg.get_addr() as usize] = value;
+        self.mem[reg as u16 as usize] = value;
     }
-    pub fn write8_IO(&mut self, reg: &IORegister, value: u8) {
-        self.write8(reg.get_addr(),value);
+    pub fn write8_IO(&mut self, reg: IORegister, value: u8) {
+        self.write8(reg as u16,value);
     }
     pub fn read16(&self, addr: u16) -> u16 {
         let lo = self.mem[(addr + 0) as usize] as u16;
@@ -264,12 +264,12 @@ impl MMU2 {
         }
     }
 
-    pub fn set_IO_bit(&mut self, reg: &IORegister, bit: u8, tf: bool) {
+    pub fn set_IO_bit(&mut self, reg: IORegister, bit: u8, tf: bool) {
         let val = self.read8_IO(reg);
         let val2 = set_bit(val,bit,tf);
         self.write8_IO(reg,val2);
     }
-    pub fn get_IO_bit(&self, reg: &IORegister, bit:u8) -> bool {
+    pub fn get_IO_bit(&self, reg: IORegister, bit:u8) -> bool {
         let val = self.read8_IO(reg);
         return get_bit_as_bool(val,bit)
     }
