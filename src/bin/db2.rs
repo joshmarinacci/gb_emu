@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use console::Color::White;
 use console::{Color, Style, Term};
 use dialoguer::theme::ColorfulTheme;
-use gb_emu::optest::{setup_test_rom, GBState, Op};
+use gb_emu::optest::{GBState, make_core_from_rom};
 use log::{info, LevelFilter};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Root};
@@ -17,36 +17,9 @@ use serde_json::to_string;
 use structopt::StructOpt;
 use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
 use gb_emu::mmu2::IORegister;
+use gb_emu::ops::Op;
 use gb_emu::screen::{Screen, ScreenSettings};
 
-/*
-
-new debugger
-
-choose rom to load
-
-default is interactive
-
-//press j to jump ahead 1
-//press J to jump ahead 16
-press l to jump ahead to the end of the loop (when the next conditional jump fails so you go past it)
-press u to jump ahead 256
-press U to jump ahead 256*16
-press m to view memory:
-    particular blocks of memory
-    or the range around the current PC
-    or the current stack
-press v to dump current VRAM to an image by drawing
-press t to turn on and off logging of
-    interrupts fired
-    io registers written to
-    io registers read from
-always show the status of the current registers:
-    PC & current op & SP
-    A,B,C etc.HL, DE, etc.
-    IO regs: LCDC, STAT, BGP, LY, SCX, SCY, IE, IME,
-
- */
 fn main() -> Result<()>{
     let args = init_setup();
     if let None = args.romfile {
@@ -56,7 +29,7 @@ fn main() -> Result<()>{
     let pth = args.romfile.unwrap();
     println!("loading the romfile {:?}", pth.as_path());
     let str = pth.to_str().unwrap().to_string();
-    let mut gb = setup_test_rom(&str).unwrap();
+    let mut gb = make_core_from_rom(&str).unwrap();
     let sss = gb.ppu.sss.clone();
 
 
@@ -70,6 +43,7 @@ fn main() -> Result<()>{
     let (to_screen, receive_screen) = channel::<String>();
     let (to_cpu, receive_cpu) = channel::<InputEvent>();
 
+    //setup watch list
     let regs = args.print_reg.split(",").filter(|s|!s.trim().is_empty()).collect::<Vec<&str>>();
     for reg in regs {
         // println!("reg is {}",reg);
@@ -107,57 +81,6 @@ fn main() -> Result<()>{
         hand.join().unwrap();
     }
 
-    Ok(())
-}
-
-fn start_run(gb: &mut GBState, to_screen: Sender<String>, receive_cpu: Receiver<InputEvent>) -> Result<()> {
-    gb.set_pc(0x100);
-    gb.mmu.write8_IO(&IORegister::LCDC,0x00);
-    gb.mmu.write8_IO(&IORegister::STAT, 0x00);
-    gb.mmu.write8_IO(&IORegister::LY,0x00);
-    gb.mmu.write8_IO(&IORegister::LYC,0x00);
-
-    loop {
-        gb.execute();
-        if gb.ppu.entered_vram {
-            to_screen.send(String::from("redraw"));
-            ::std::thread::sleep(Duration::from_millis(1000 / 60));
-        }
-        if let Ok(evt) = receive_cpu.try_recv() {
-            match evt {
-                InputEvent::Press(JoyPadKey::A) => {    gb.mmu.joypad.a = true;  }
-                InputEvent::Release(JoyPadKey::A) => {  gb.mmu.joypad.a = false; }
-                InputEvent::Press(JoyPadKey::B) => {    gb.mmu.joypad.b = true;  }
-                InputEvent::Release(JoyPadKey::B) => {  gb.mmu.joypad.b = false; }
-                InputEvent::Press(JoyPadKey::Start) => { gb.mmu.joypad.start = true; }
-                InputEvent::Release(JoyPadKey::Start) => { gb.mmu.joypad.start = false; }
-                InputEvent::Press(JoyPadKey::Select) => {  gb.mmu.joypad.select = true; }
-                InputEvent::Release(JoyPadKey::Select) => { gb.mmu.joypad.select = false;  }
-                InputEvent::Press(JoyPadKey::Left) => {   gb.mmu.joypad.left = true;   }
-                InputEvent::Release(JoyPadKey::Left) => { gb.mmu.joypad.left = false;  }
-                InputEvent::Press(JoyPadKey::Right) => {  gb.mmu.joypad.right = true;  }
-                InputEvent::Release(JoyPadKey::Right) => { gb.mmu.joypad.right = false; }
-                InputEvent::Press(JoyPadKey::Up) => {      gb.mmu.joypad.up = true;     }
-                InputEvent::Release(JoyPadKey::Up) => {    gb.mmu.joypad.up = false;    }
-                InputEvent::Press(JoyPadKey::Down) => {    gb.mmu.joypad.down = true;   }
-                InputEvent::Release(JoyPadKey::Down) => {  gb.mmu.joypad.down = false;  }
-                // InputEvent::JumpNextVBlank() => {
-                //     if ctx.interactive {
-                //         println!("got a jump next vblank");
-                //         ctx.jump_to_next_vblank(&mut term, &mut ss1).unwrap();
-                //     }
-                // }
-                InputEvent::Stop() => {
-                    println!("emu stopping. current status is");
-                    gb.dump_current_state();
-                    break;
-                },
-                _ => {
-                    println!("unhandled event {:?}", evt);
-                }
-            }
-        }
-    }
     Ok(())
 }
 

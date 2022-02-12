@@ -1,5 +1,5 @@
 use crate::common::{get_bit_as_bool, set_bit};
-use crate::optest::R16;
+use crate::ops::R16;
 use std::collections::VecDeque;
 
 pub struct Flags {

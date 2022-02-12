@@ -5,3 +5,4 @@ pub mod optest;
 pub mod ppu2;
 pub mod screen;
 mod hardware;
+pub mod ops;
