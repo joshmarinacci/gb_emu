@@ -4,15 +4,6 @@ use log::info;
 use std::fs;
 use crate::hardware::{IORegister, Joypad, JoypadReadMode, LCDCRegister, STATRegister};
 
-/*
-IO registers
-- [ ] print when read or written to
-- [ ] pretty print the names when matching their addresses
-- [ ] be able to dump them all easily as a group in a loop (array of HW vec enums?) (func on the Hardware object?)
-- [ ] make all access to the HW registers through functions, not direct sets.
-- [ ] then test loading tetris again to see if it works.
-
- */
 pub struct MMU2 {
     cart_rom: Vec<u8>,
     boot_rom: Vec<u8>,

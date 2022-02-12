@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use crate::common::{get_bit, get_bit_as_bool, load_romfile, MBC};
-use crate::cpu::{CPU, CPUR16, CPUR8};
+use crate::cpu::{CPU, R16, R8};
 use crate::hardware::IORegister;
 use crate::mmu::MMU2;
 use crate::ops::{execute_op, make_op_table, Op, OpTable};
@@ -14,7 +14,6 @@ pub struct GBState {
     pub clock: u32,
     pub count: u32,
     pub(crate) ops: OpTable,
-    pub debug: bool,
 }
 
 impl GBState {
@@ -50,7 +49,6 @@ impl GBState {
             clock: 0,
             count: 0,
             ops: make_op_table(),
-            debug: false,
         };
         gb.set_pc(0);
         return gb;
@@ -63,24 +61,7 @@ impl GBState {
             self.clock,
             self.count,
         );
-        println!(
-            "A:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X}  ",
-            self.cpu.get_r8(CPUR8::R8A),
-            self.cpu.get_r8(CPUR8::R8B),
-            self.cpu.get_r8(CPUR8::R8C),
-            self.cpu.get_r8(CPUR8::R8D),
-            self.cpu.get_r8(CPUR8::R8E),
-            self.cpu.get_r8(CPUR8::R8H),
-            self.cpu.get_r8(CPUR8::R8L),
-        );
-
-        println!(
-            "BC:{:04X} DE:{:04X} HL:{:04X}   ",
-            self.cpu.get_r16(CPUR16::BC),
-            self.cpu.get_r16(CPUR16::DE),
-            self.cpu.get_r16(CPUR16::HL),
-        );
-
+        println!("{}",self.cpu.reg_to_str());
 
         //IO status bits
         println!(
@@ -177,17 +158,6 @@ impl GBState {
         let code = self.fetch_next_opcode();
         if let Some(opx) = self.ops.ops.get(&code) {
             let op: Op = (*opx).clone();
-            if self.debug {
-                let pc = self.cpu.get_pc();
-                println!("BEFORE: PC:{:04x} SP:{:04x}  op:{:04x} {:?}  reg:{}   next mem = {:02x}  {:02x}  {:02x}",
-                         pc,
-                         self.cpu.get_sp(),
-                         code,
-                         op.to_asm(),
-                         self.cpu.reg_to_str(),
-                         self.mmu.read8(pc + 0), self.mmu.read8(pc + 1), self.mmu.read8(pc + 2)
-                );
-            }
 
             // perform the actual operation
             if !self.cpu.halt {
@@ -238,13 +208,6 @@ impl GBState {
                 }
             }
 
-            // if self.debug {
-            //     println!("AFTER:  PC {:04x}  op:{:04x} {:?}  reg:{}",
-            //              self.cpu.get_pc(),
-            //              code,
-            //              op.to_asm(),
-            //              self.cpu.reg_to_str());
-            // }
             self.clock += op.cycles as u32;
             self.count += 1;
         } else {
@@ -370,7 +333,6 @@ pub fn make_core_from_rom(fname: &str) -> Option<GBState> {
                 clock: 0,
                 count: 0,
                 ops: make_op_table(),
-                debug: false,
             };
             gb.set_pc(0x100);
             gb.mmu.write8_IO_raw(IORegister::IF,0);
@@ -429,30 +391,8 @@ fn test_hellogithub() {
             println!("got to the end loop. horrray!");
             break;
         }
-        if debug {
-            println!("==========");
-            println!(
-                "PC {:04x}    clock = {}   count = {}",
-                gb.cpu.get_pc(),
-                gb.clock,
-                gb.count
-            );
-        }
         let prev_pc = gb.cpu.get_pc();
         gb.execute();
-        if debug {
-            println!(
-                "after A:{:02x} B:{:02x} C:{:02x}     BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
-                gb.cpu.get_r8(CPUR8::R8A),
-                gb.cpu.get_r8(CPUR8::R8B),
-                gb.cpu.get_r8(CPUR8::R8C),
-                gb.cpu.get_r16(CPUR16::BC),
-                gb.cpu.get_r16(CPUR16::DE),
-                gb.cpu.get_r16(CPUR16::HL),
-                gb.cpu.r.zero,
-                gb.cpu.r.carry,
-            );
-        }
         // println!("BC {:04x}",gb.cpu.r.get_bc());
         if gb.cpu.get_pc() == prev_pc {
             println!("stuck in an infinite loop. pc = {:04x}", gb.cpu.get_pc());
@@ -493,7 +433,6 @@ fn test_bootrom() {
         clock: 0,
         count: 0,
         ops: make_op_table(),
-        debug: false,
     };
     gb.mmu.enable_bootrom();
 
@@ -502,16 +441,6 @@ fn test_bootrom() {
 
     let debug = false;
     loop {
-        if debug {
-            println!("==========");
-            println!(
-                "PC {:04x}    clock = {}   count = {}",
-                gb.cpu.get_pc(),
-                gb.clock,
-                gb.count
-            );
-            println!("LY = {:02x}", gb.mmu.read8(0xFF44))
-        }
         let opcode = fetch_opcode_from_memory(&gb);
         if let None = op_table.lookup(&opcode) {
             println!("failed to lookup op for code {:04x}", opcode);
@@ -531,19 +460,6 @@ fn test_bootrom() {
         }
         let prev_pc = gb.cpu.get_pc();
         gb.execute();
-        if debug {
-            println!("after A:{:02x} B:{:02x} C:{:02x}  H:{:02x}    BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
-                     gb.cpu.get_r8(CPUR8::R8A),
-                     gb.cpu.get_r8(CPUR8::R8B),
-                     gb.cpu.get_r8(CPUR8::R8C),
-                     gb.cpu.get_r8(CPUR8::R8H),
-                     gb.cpu.get_r16(CPUR16::BC),
-                     gb.cpu.get_r16(CPUR16::DE),
-                     gb.cpu.get_r16(CPUR16::HL),
-                     gb.cpu.r.zero,
-                     gb.cpu.r.carry,
-            );
-        }
         if gb.cpu.get_pc() == prev_pc {
             println!("stuck in an infinite loop. pc = {:04x}", gb.cpu.get_pc());
             gb.dump_current_state();
@@ -557,7 +473,7 @@ fn test_bootrom() {
             0x0021 => println!("Loading the logo"),
             0x0034 => println!("adding extra bits"),
             0x0040 => println!("setup background tilemap"),
-            0x0055 => println!("setting scroll count to {:02x}", gb.cpu.get_r8(CPUR8::R8H)),
+            0x0055 => println!("setting scroll count to {:02x}", gb.cpu.get_r8(R8::H)),
             0x0059 => println!("setting vertical register to {:02x} ", gb.mmu.read8(0xFF42)),
             // 0x005f => println!("set b to {:02x}",gb.cpu.r.b),
             // 0x006a => println!("dec c to {:02x}",gb.cpu.r.c),
@@ -616,7 +532,6 @@ fn test_tetris() {
         clock: 0,
         count: 0,
         ops: make_op_table(),
-        debug: false,
     };
     // gb.mmu.enable_bootrom();
 
@@ -641,7 +556,7 @@ fn test_tetris() {
             }
             0x279e => {
                 // println!("bc is {:04x}",gb.cpu.r.get_bc());
-                if gb.cpu.get_r16(CPUR16::BC) == 1 {
+                if gb.cpu.get_r16(R16::BC) == 1 {
                     // debug = true;
                 }
             }
@@ -678,7 +593,7 @@ fn test_tetris() {
             gb.dump_current_state();
             println!(
                 "got to 33, jump to contents of HL {:04x}",
-                gb.cpu.get_r16(CPUR16::HL)
+                gb.cpu.get_r16(R16::HL)
             );
             debug = true;
         }
@@ -702,19 +617,6 @@ fn test_tetris() {
 
         let prev_pc = gb.cpu.get_pc();
         gb.execute();
-        if debug {
-            println!("after A:{:02x} B:{:02x} C:{:02x}  H:{:02x}    BC:{:04x} DE:{:04x} HL:{:04x}  Z={}  C={}",
-                     gb.cpu.get_r8(CPUR8::R8A),
-                     gb.cpu.get_r8(CPUR8::R8B),
-                     gb.cpu.get_r8(CPUR8::R8C),
-                     gb.cpu.get_r8(CPUR8::R8H),
-                     gb.cpu.get_r16(CPUR16::BC),
-                     gb.cpu.get_r16(CPUR16::DE),
-                     gb.cpu.get_r16(CPUR16::HL),
-                     gb.cpu.r.zero,
-                     gb.cpu.r.carry,
-            );
-        }
         if gb.cpu.get_pc() == prev_pc {
             println!("stuck in an infinite loop. pc = {:04x}", gb.cpu.get_pc());
             gb.dump_current_state();
@@ -776,7 +678,7 @@ fn test_write_register_A() {
     let mut gb: GBState = GBState::make_test_context(&rom.to_vec());
     gb.execute();
     // println!("op is {:?}", op);
-    assert_eq!(gb.cpu.get_r8(CPUR8::R8A), 0x05);
+    assert_eq!(gb.cpu.get_r8(R8::A), 0x05);
 }
 
 #[test]
@@ -786,7 +688,7 @@ fn test_write_register_D() {
     gb.execute();
     // let code = gb.fetch_next_opcode();
     // let op = gb.ops.lookup(&code).unwrap();
-    assert_eq!(gb.cpu.get_r8(CPUR8::R8D), 0x05);
+    assert_eq!(gb.cpu.get_r8(R8::D), 0x05);
 }
 
 #[test]
@@ -794,55 +696,5 @@ fn test_write_register_DE() {
     let rom: [u8; 2] = [0x16, 0x05]; // LD D, 0x05
     let mut gb: GBState = GBState::make_test_context(&rom.to_vec());
     gb.execute();
-    assert_eq!(gb.cpu.get_r8(CPUR8::R8D), 0x05);
+    assert_eq!(gb.cpu.get_r8(R8::D), 0x05);
 }
-// #[test]
-// fn test_push_pop() {
-//     let rom:[u8;10] = [
-//         0x31, 0xfe, 0xff, // LD SP u16, set the stack pointer to fffe
-//         0x06, 0x04, // LD B, 04
-//         0xC5, // PUSH BC
-//         0xCB, 0x11, // RL C
-//         0x17,// RLA
-//         0xC1, // POP BC
-//     ];
-//     let mut gb:GBState = GBState::make_test_context(&rom.to_vec());
-//     let op_table = make_op_table();
-//     let code = fetch_opcode_from_memory(&gb);
-//     let op = op_table.lookup(&code).unwrap();
-//
-//     println!("stack {:?} ",gb.mmu.get_stack_16());
-//     ctx.execute_test(); // set SP to fffe
-//     ctx.execute_test(); // LD B, 04
-//     println!("stack {:?} ",ctx.mmu.get_stack_16());
-//     assert_eq!(ctx.cpu.r.sp,0xfffe);
-//     println!("BC {:04x}",ctx.cpu.r.get_u16reg(&BC));
-//     println!("B {:02x}",ctx.cpu.r.get_u8reg(&B));
-//     println!("C {:02x}",ctx.cpu.r.get_u8reg(&C));
-//     assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
-//     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
-//     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
-//     // println!("stack {:?} ",ctx.mmu.get_stack_16());
-//     println!("B {:02x} C {:02x} BC {:04x}",ctx.cpu.r.get_u8reg(&B), ctx.cpu.r.get_u8reg(&C), ctx.cpu.r.get_u16reg(&BC));
-//
-//     println!("pushing BC");
-//     ctx.execute_test(); // PUSH BC
-//     assert_eq!(ctx.cpu.r.sp,0xfffe-2);
-//     assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
-//     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
-//     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
-//     println!("stack {:?} ",ctx.mmu.get_stack_16());
-//
-//     ctx.execute_test(); // RL C
-//     ctx.execute_test(); // RLA
-//
-//     println!("POPPING BC");
-//     ctx.execute_test(); // POP BC
-//     println!("stack {:?} ",ctx.mmu.get_stack_16());
-//     println!("B {:02x} C {:02x} BC {:04x}",ctx.cpu.r.get_u8reg(&B), ctx.cpu.r.get_u8reg(&C), ctx.cpu.r.get_u16reg(&BC));
-//     assert_eq!(ctx.cpu.r.sp,0xfffe);
-//     assert_eq!(ctx.cpu.r.get_u16reg(&BC),0x0400);
-//     assert_eq!(ctx.cpu.r.get_u8reg(&B),0x04);
-//     assert_eq!(ctx.cpu.r.get_u8reg(&C),0x00);
-//
-// }

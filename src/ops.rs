@@ -1,8 +1,13 @@
 use std::collections::HashMap;
 use crate::common::{get_bit_as_bool, set_bit, u8_as_i8};
-use crate::cpu::{CPU, CPUR16};
-use crate::cpu::CPUR8::{R8A, R8B, R8C, R8D, R8E, R8H, R8L};
+use crate::cpu::{CPU, R16, R8};
+use crate::cpu::R16::{AF, BC, DE, HL, SP};
+use crate::cpu::R8::{A, B, C, D, E, H, L};
 use crate::mmu::MMU2;
+use crate::gbstate::GBState;
+use crate::hardware::IORegister;
+use crate::ppu::PPU2;
+
 use crate::ops::BinOp::{ADC, Add, And, Or, SBC, SUB, Xor};
 use crate::ops::BinOp16::Add16;
 use crate::ops::BitOps::{BIT, CCF, CPL, DAA, RES, RL, RLA, RLC, RLCA, RR, RRA, RRC, RRCA, SCF, SET, SLA, SRA, SRL, SWAP};
@@ -12,34 +17,10 @@ use crate::ops::Dst16::DstR16;
 use crate::ops::Dst8::{AddrDst, DstR8};
 use crate::ops::JumpType::{Absolute, AbsoluteCond, Relative, RelativeCond, Restart};
 use crate::ops::OpType::{AddSP, BitOp, Call, Compare, Dec8, DisableInterrupts, EnableInterrupts, Halt, Inc8, Jump, Load16, Load8, Math, Math16, Math16u, Noop};
-use crate::ops::R16::{AF, BC, DE, HL, SP};
-use crate::ops::R8::{A, B, C, D, E, H, L};
 use crate::ops::Src16::SrcR16;
 use crate::ops::Src8::{Im8, Mem, SrcR8};
 use crate::ops::UnOp16::{Dec16, Inc16};
-use crate::gbstate::GBState;
-use crate::hardware::IORegister;
-use crate::ppu::PPU2;
 
-#[derive(Debug, Copy, Clone)]
-pub enum R8 {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum R16 {
-    BC,
-    HL,
-    DE,
-    SP,
-    AF,
-}
 
 #[derive(Debug, Copy, Clone)]
 pub enum Src8 {
@@ -182,72 +163,6 @@ pub struct Op {
     pub len: u16,
     pub cycles: u16,
     pub typ: OpType,
-}
-
-impl R8 {
-    fn get_value(&self, gb: &GBState) -> u8 {
-        match self {
-            R8::A => gb.cpu.get_r8(R8A),
-            R8::B => gb.cpu.get_r8(R8B),
-            R8::C => gb.cpu.get_r8(R8C),
-            R8::D => gb.cpu.get_r8(R8D),
-            R8::E => gb.cpu.get_r8(R8E),
-            R8::H => gb.cpu.get_r8(R8H),
-            R8::L => gb.cpu.get_r8(R8L),
-        }
-    }
-    fn set_value(&self, gb: &mut GBState, value: u8) {
-        match self {
-            R8::A => gb.cpu.set_r8(R8A, value),
-            R8::B => gb.cpu.set_r8(R8B, value),
-            R8::C => gb.cpu.set_r8(R8C, value),
-            R8::D => gb.cpu.set_r8(R8D, value),
-            R8::E => gb.cpu.set_r8(R8E, value),
-            R8::H => gb.cpu.set_r8(R8H, value),
-            R8::L => gb.cpu.set_r8(R8L, value),
-        }
-    }
-    fn name(&self) -> &'static str {
-        match self {
-            R8::A => "A",
-            R8::B => "B",
-            R8::C => "C",
-            R8::D => "D",
-            R8::E => "E",
-            R8::H => "H",
-            R8::L => "L",
-        }
-    }
-}
-
-impl R16 {
-    fn get_value(&self, gb: &GBState) -> u16 {
-        match self {
-            BC => gb.cpu.get_r16(CPUR16::BC),
-            HL => gb.cpu.get_r16(CPUR16::HL),
-            DE => gb.cpu.get_r16(CPUR16::DE),
-            SP => gb.cpu.get_r16(CPUR16::SP),
-            AF => gb.cpu.get_r16(CPUR16::AF),
-        }
-    }
-    fn set_value(&self, gb: &mut GBState, val: u16) {
-        match self {
-            BC => gb.cpu.set_r16(CPUR16::BC, val),
-            HL => gb.cpu.set_r16(CPUR16::HL, val),
-            DE => gb.cpu.set_r16(CPUR16::DE, val),
-            SP => gb.cpu.set_r16(CPUR16::SP, val),
-            AF => gb.cpu.set_r16(CPUR16::AF, val),
-        }
-    }
-    fn name(&self) -> &'static str {
-        match self {
-            BC => "BC",
-            HL => "HL",
-            DE => "DE",
-            SP => "SP",
-            AF => "AF",
-        }
-    }
 }
 
 impl AddrSrc {
@@ -727,7 +642,6 @@ fn op_tests() {
         ops: make_op_table(),
         clock: 0,
         count: 0,
-        debug: false,
     };
     let op_table = make_op_table();
     if let Some(op) = op_table.lookup(&0x36) {
@@ -747,7 +661,7 @@ fn op_tests() {
         gb.mmu.write8(pc + 1, payload);
 
         //set HL to x8000
-        gb.cpu.set_r16(CPUR16::HL, addr);
+        gb.cpu.set_r16(HL, addr);
 
         //confirm x8000 has xDE in it
         assert_eq!(gb.mmu.read8(addr), 0xDE);
@@ -789,9 +703,9 @@ fn test_op_f8() {
     let mut gb: GBState = GBState::make_test_context(&rom.to_vec());
     gb.set_pc(0);
     gb.cpu.real_set_sp(0x40);
-    assert_eq!(gb.cpu.get_r16(CPUR16::HL),0);
+    assert_eq!(gb.cpu.get_r16(HL),0);
     gb.execute();
-    assert_eq!(gb.cpu.get_r16(CPUR16::HL),0x42);
+    assert_eq!(gb.cpu.get_r16(HL),0x42);
 
 }
 

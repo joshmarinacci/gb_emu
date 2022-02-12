@@ -1,6 +1,6 @@
 use crate::common::{get_bit_as_bool, set_bit};
-use crate::ops::R16;
 use std::collections::VecDeque;
+use crate::gbstate::GBState;
 
 pub struct Flags {
     pub zero: bool,
@@ -27,54 +27,95 @@ pub struct CPU {
 impl CPU {
     pub fn reg_to_str(&self) -> String {
         format!("A:{:02x}  B:{:02x}  C:{:02x}  D:{:02x}  E:{:02x}  H:{:02x}  L:{:02x}    BC:{:04x}  DE:{:04x}  HL:{:04x} ",
-                self.get_r8(CPUR8::R8A),
-                self.get_r8(CPUR8::R8B),
-                self.get_r8(CPUR8::R8C),
-                self.get_r8(CPUR8::R8D),
-                self.get_r8(CPUR8::R8E),
-                self.get_r8(CPUR8::R8H),
-                self.get_r8(CPUR8::R8L),
-                self.get_r16(CPUR16::BC),
-                self.get_r16(CPUR16::DE),
-                self.get_r16(CPUR16::HL),
+                self.get_r8(R8::A),
+                self.get_r8(R8::B),
+                self.get_r8(R8::C),
+                self.get_r8(R8::D),
+                self.get_r8(R8::E),
+                self.get_r8(R8::H),
+                self.get_r8(R8::L),
+                self.get_r16(R16::BC),
+                self.get_r16(R16::DE),
+                self.get_r16(R16::HL),
         )
     }
 }
 
-pub enum CPUR8 {
-    R8A,
-    R8B,
-    R8C,
-    R8D,
-    R8E,
-    R8H,
-    R8L,
-    R8F,
-}
-pub enum CPUR16 {
-    BC,
-    PC,
-    SP,
-    DE,
-    HL,
-    AF,
-}
-pub enum CPURegister {
-    CpuR8(CPUR8),
-    R16(CPUR16),
+#[derive(Debug, Copy, Clone)]
+pub enum R8 {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    F,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum R16 {
+    BC,
+    HL,
+    DE,
+    SP,
+    PC,
+    AF,
+}
+
+
+impl R8 {
+    pub(crate) fn get_value(&self, gb: &GBState) -> u8 {
+        gb.cpu.get_r8(*self)
+    }
+    pub(crate) fn set_value(&self, gb: &mut GBState, value: u8) {
+        gb.cpu.set_r8(*self, value)
+    }
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            R8::A => "A",
+            R8::B => "B",
+            R8::C => "C",
+            R8::D => "D",
+            R8::E => "E",
+            R8::H => "H",
+            R8::L => "L",
+            R8::F => "F",
+        }
+    }
+}
+
+impl R16 {
+    pub(crate) fn get_value(&self, gb: &GBState) -> u16 {
+        gb.cpu.get_r16(*self)
+    }
+    pub(crate) fn set_value(&self, gb: &mut GBState, val: u16) {
+        gb.cpu.set_r16(*self,val)
+    }
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            R16::BC => "BC",
+            R16::HL => "HL",
+            R16::DE => "DE",
+            R16::SP => "SP",
+            R16::AF => "AF",
+            R16::PC => "PC",
+        }
+    }
+}
+
+
 impl CPU {
-    pub(crate) fn get_r8(&self, reg: CPUR8) -> u8 {
+    pub(crate) fn get_r8(&self, reg: R8) -> u8 {
         match reg {
-            CPUR8::R8A => self.a,
-            CPUR8::R8B => self.b,
-            CPUR8::R8C => self.c,
-            CPUR8::R8D => self.d,
-            CPUR8::R8E => self.e,
-            CPUR8::R8H => self.h,
-            CPUR8::R8L => self.l,
-            CPUR8::R8F => {
+            R8::A => self.a,
+            R8::B => self.b,
+            R8::C => self.c,
+            R8::D => self.d,
+            R8::E => self.e,
+            R8::H => self.h,
+            R8::L => self.l,
+            R8::F => {
                 let mut v = 0x00;
                 v = set_bit(v, 7, self.r.zero);
                 v = set_bit(v, 6, self.r.subn);
@@ -84,57 +125,57 @@ impl CPU {
             }
         }
     }
-    pub(crate) fn set_r8(&mut self, reg: CPUR8, val: u8) {
+    pub(crate) fn set_r8(&mut self, reg: R8, val: u8) {
         match reg {
-            CPUR8::R8A => self.a = val,
-            CPUR8::R8B => self.b = val,
-            CPUR8::R8C => self.c = val,
-            CPUR8::R8D => self.d = val,
-            CPUR8::R8E => self.e = val,
-            CPUR8::R8H => self.h = val,
-            CPUR8::R8L => self.l = val,
-            CPUR8::R8F => {
+            R8::A => self.a = val,
+            R8::B => self.b = val,
+            R8::C => self.c = val,
+            R8::D => self.d = val,
+            R8::E => self.e = val,
+            R8::H => self.h = val,
+            R8::L => self.l = val,
+            R8::F => {
                 self.r.zero = get_bit_as_bool(val, 7);
                 self.r.subn = get_bit_as_bool(val, 6);
                 self.r.half = get_bit_as_bool(val, 5);
-                self.r.carry = get_bit_as_bool(val, 4);
+                self.r.carry =get_bit_as_bool(val, 4);
             }
         }
     }
 
-    pub(crate) fn get_r16(&self, reg: CPUR16) -> u16 {
+    pub(crate) fn get_r16(&self, reg: R16) -> u16 {
         match reg {
-            CPUR16::PC => self.pc,
-            CPUR16::SP => self.sp,
-            CPUR16::BC => (self.c as u16) + ((self.b as u16) << 8),
-            CPUR16::DE => (self.e as u16) + ((self.d as u16) << 8),
-            CPUR16::HL => (self.l as u16) + ((self.h as u16) << 8),
-            CPUR16::AF => {
-                let a = self.get_r8(CPUR8::R8A);
-                let f = self.get_r8(CPUR8::R8F);
+            R16::PC => self.pc,
+            R16::SP => self.sp,
+            R16::BC => (self.c as u16) + ((self.b as u16) << 8),
+            R16::HL => (self.l as u16) + ((self.h as u16) << 8),
+            R16::DE => (self.e as u16) + ((self.d as u16) << 8),
+            R16::AF => {
+                let a = self.get_r8(R8::A);
+                let f = self.get_r8(R8::F);
                 (f as u16) + ((a as u16) << 8)
             }
         }
     }
-    pub(crate) fn set_r16(&mut self, reg: CPUR16, val: u16) {
+    pub(crate) fn set_r16(&mut self, reg: R16, val: u16) {
         match reg {
-            CPUR16::PC => self.pc = val,
-            CPUR16::SP => self.sp = val,
-            CPUR16::BC => {
+            R16::PC => self.pc = val,
+            R16::SP => self.sp = val,
+            R16::BC => {
                 self.b = (val >> 8) as u8;
                 self.c = (0x00FF & val) as u8;
             }
-            CPUR16::DE => {
+            R16::DE => {
                 self.d = (val >> 8) as u8;
                 self.e = (0x00FF & val) as u8;
             }
-            CPUR16::HL => {
+            R16::HL => {
                 self.h = (val >> 8) as u8;
                 self.l = (0x00FF & val) as u8;
             }
-            CPUR16::AF => {
-                self.set_r8(CPUR8::R8A, (val >> 8) as u8);
-                self.set_r8(CPUR8::R8F, (0x00ff & val) as u8);
+            R16::AF => {
+                self.set_r8(R8::A, (val >> 8) as u8);
+                self.set_r8(R8::F, (0x00ff & val) as u8);
             }
         }
     }
