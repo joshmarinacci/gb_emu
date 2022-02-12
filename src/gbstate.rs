@@ -27,28 +27,6 @@ impl GBState {
         self.cpu.get_pc()
     }
     pub fn set_pc(&mut self, pc: u16) {
-        // if pc == 0x29b3 {
-        //     self.debug = true;
-        // }
-        // if pc == 0xbec3 {
-        //     println!("error error erro. bad new pc. current pc is {:04x}",self.cpu.pc);
-        //     println!("curren regs are: {}", self.cpu.reg_to_str());
-        //     self.dump_current_state();
-        //
-        //     let str:String = self.cpu.recent_pcs.iter().map(|b|format!("{:04x} ",b)).collect();
-        //     println!("previous pcs are {:?}",str);
-        //
-        //     for p in self.cpu.recent_pcs.iter() {
-        //         let opcode = self.fetch_opcode_at(*p);
-        //         if let Some(op) = self.ops.lookup(&opcode) {
-        //             println!("PC:{:04x}  op:{:02x} {:?}", p, opcode, op);
-        //         } else {
-        //             println!("PC:{:04x}  op:{:02x} unknown opcode", p, opcode);
-        //         }
-        //     }
-        //
-        //     panic!("jumpoing to no mans land");
-        // }
         self.cpu.real_set_pc(pc);
     }
     pub fn fetch_opcode_at(&self, pc: u16) -> u16 {
@@ -369,9 +347,6 @@ const SERIAL_HANDLER_ADDRESS:u16 = 0x58;
 const JOYPAD_HANDLER_ADDRESS:u16 = 0x60;
 
 
-
-impl GBState {
-}
 
 fn fetch_opcode_from_memory(gb: &GBState) -> u16 {
     let pc = gb.cpu.get_pc();

@@ -122,57 +122,6 @@ impl Bitmap {
     }
 }
 
-pub struct HWReg {
-    pub(crate) addr: u16,
-    pub(crate) name: &'static str,
-    pub(crate) value: u8,
-}
-pub const LCDC: HWReg = HWReg {
-    addr: 0xFF40,
-    name: "LCDC",
-    value: 0,
-};
-pub const STAT: HWReg = HWReg {
-    addr: 0xFF41,
-    name: "STAT",
-    value: 0,
-};
-pub const LY: HWReg = HWReg {
-    addr: 0xFF44,
-    name: "LY",
-    value: 0,
-};
-pub const SCY: HWReg = HWReg {
-    addr: 0xFF42,
-    name: "SCY",
-    value: 0,
-};
-pub const SCX: HWReg = HWReg {
-    addr: 0xFF43,
-    name: "SCX",
-    value: 0,
-};
-
-impl HWReg {
-    pub fn register_from_addr(addr: u16) -> Option<HWReg> {
-        if addr == LCDC.addr {
-            return Some(LCDC);
-        }
-        if addr == STAT.addr {
-            return Some(STAT);
-        }
-        if addr == LY.addr {
-            return Some(LY);
-        }
-        if addr == SCX.addr {
-            return Some(SCX);
-        }
-        if addr == SCY.addr {
-            return Some(SCY);
-        }
-        return None;
-    }
-}
 
 #[derive(Debug)]
 pub enum MBC {
@@ -250,4 +199,40 @@ pub fn print_ram(base:u16, ram: &Vec<u8>)  {
 
 pub fn u8_as_i8(v: u8) -> i8 {
     v as i8
+}
+
+#[derive(Debug)]
+pub struct MemRange {
+    pub(crate) start:u16,
+    pub(crate) end:u16,
+}
+
+pub fn is_bit_set(byte:u8, n:u8) -> bool {
+    get_bit_as_bool(byte,n)
+}
+
+pub struct VerboseByte {
+    pub(crate) b0:bool,
+    pub(crate) b1:bool,
+    pub(crate) b2:bool,
+    pub(crate) b3:bool,
+    pub(crate) b4:bool,
+    pub(crate) b5:bool,
+    pub(crate) b6:bool,
+    pub(crate) b7:bool,
+}
+
+impl VerboseByte {
+    pub(crate) fn to_u8(&self) -> u8 {
+        let mut byte = 0;
+        byte = set_bit(byte,0,self.b0);
+        byte = set_bit(byte,1,self.b1);
+        byte = set_bit(byte,2,self.b2);
+        byte = set_bit(byte,3,self.b3);
+        byte = set_bit(byte,4,self.b4);
+        byte = set_bit(byte,5,self.b5);
+        byte = set_bit(byte,6,self.b6);
+        byte = set_bit(byte,7,self.b7);
+        return byte;
+    }
 }

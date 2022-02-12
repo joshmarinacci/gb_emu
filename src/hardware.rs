@@ -1,10 +1,4 @@
-use crate::common::{get_bit_as_bool, set_bit};
-
-#[derive(Debug)]
-pub struct MemRange {
-    pub(crate) start:u16,
-    pub(crate) end:u16,
-}
+use crate::common::{is_bit_set, MemRange, get_bit, get_bit_as_bool, VerboseByte};
 
 #[derive(Debug)]
 pub struct LCDCRegister {
@@ -20,9 +14,6 @@ pub struct LCDCRegister {
     pub bg_enabled: bool, // bit 0
 }
 
-fn is_bit_set(byte:u8, n:u8) -> bool {
-    get_bit_as_bool(byte,n)
-}
 impl LCDCRegister {
     pub(crate) fn init() -> LCDCRegister {
         let mut lcd = LCDCRegister {
@@ -63,8 +54,8 @@ impl LCDCRegister {
             false => MemRange{start:0x8800, end: 0x9800},
         };
         self.signed_addressing = !is_bit_set(byte, 4);
-        self.window_display_enable = is_bit_set(byte,5);
-        self.window_tilemap_select = match is_bit_set(byte,6) {
+        self.window_display_enable = is_bit_set(byte, 5);
+        self.window_tilemap_select = match is_bit_set(byte, 6) {
             true  => MemRange{ start: 0x9C00, end: 0x9FFF },
             false => MemRange{ start: 0x9800, end: 0x8BFF },
         };
@@ -112,21 +103,21 @@ impl STATRegister {
         //mode bits cannot be set by programs.
         //bits 0 and 1 represent the current mode. set by the PPU
         //bit 2 is for the LYC=LY. it is read only
-        if is_bit_set(byte,3) != self.hblank_interrupt_enabled {
-            println!("STAT: changed hblank interrupt to {}",is_bit_set(byte,3));
-            self.hblank_interrupt_enabled = is_bit_set(byte,3);
+        if is_bit_set(byte, 3) != self.hblank_interrupt_enabled {
+            println!("STAT: changed hblank interrupt to {}", is_bit_set(byte, 3));
+            self.hblank_interrupt_enabled = is_bit_set(byte, 3);
         }
-        if is_bit_set(byte,4) != self.hblank_interrupt_enabled {
-            println!("STAT: changed hblank interrupt to {}",is_bit_set(byte,4));
-            self.vblank_interrupt_enabled = is_bit_set(byte,4);
+        if is_bit_set(byte, 4) != self.hblank_interrupt_enabled {
+            println!("STAT: changed hblank interrupt to {}", is_bit_set(byte, 4));
+            self.vblank_interrupt_enabled = is_bit_set(byte, 4);
         }
-        if is_bit_set(byte,5) != self.hblank_interrupt_enabled {
-            println!("STAT: changed sprite interrupt to {}",is_bit_set(byte,5));
-            self.vblank_interrupt_enabled = is_bit_set(byte,5);
+        if is_bit_set(byte, 5) != self.hblank_interrupt_enabled {
+            println!("STAT: changed sprite interrupt to {}", is_bit_set(byte, 5));
+            self.vblank_interrupt_enabled = is_bit_set(byte, 5);
         }
-        if is_bit_set(byte,6) != self.hblank_interrupt_enabled {
-            println!("STAT: changed coincidence interrupt to {}",is_bit_set(byte,6));
-            self.vblank_interrupt_enabled = is_bit_set(byte,6);
+        if is_bit_set(byte, 6) != self.hblank_interrupt_enabled {
+            println!("STAT: changed coincidence interrupt to {}", is_bit_set(byte, 6));
+            self.vblank_interrupt_enabled = is_bit_set(byte, 6);
         }
     }
     pub(crate) fn reset(&mut self) {
@@ -154,31 +145,5 @@ impl STATRegister {
             b6: false,
             b7: false
         }.to_u8()
-    }
-}
-
-struct VerboseByte {
-    b0:bool,
-    b1:bool,
-    b2:bool,
-    b3:bool,
-    b4:bool,
-    b5:bool,
-    b6:bool,
-    b7:bool,
-}
-
-impl VerboseByte {
-    pub(crate) fn to_u8(&self) -> u8 {
-        let mut byte = 0;
-        byte = set_bit(byte,0,self.b0);
-        byte = set_bit(byte,1,self.b1);
-        byte = set_bit(byte,2,self.b2);
-        byte = set_bit(byte,3,self.b3);
-        byte = set_bit(byte,4,self.b4);
-        byte = set_bit(byte,5,self.b5);
-        byte = set_bit(byte,6,self.b6);
-        byte = set_bit(byte,7,self.b7);
-        return byte;
     }
 }

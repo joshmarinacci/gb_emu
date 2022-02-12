@@ -1,8 +1,8 @@
 use std::collections::HashSet;
-use crate::common::{get_bit_as_bool, MBC, set_bit};
+use crate::common::{get_bit_as_bool, MBC, MemRange, set_bit};
 use log::info;
 use std::fs;
-use crate::hardware::{LCDCRegister, MemRange, STATRegister};
+use crate::hardware::{LCDCRegister, STATRegister};
 use crate::mmu::IORegister::{SCX, SCY};
 
 /*

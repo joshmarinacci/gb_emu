@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
-use sdl2::libc::sleep;
 use serde_json::to_string;
 use structopt::StructOpt;
 use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
