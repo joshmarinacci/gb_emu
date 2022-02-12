@@ -15,7 +15,7 @@ use std::time::Duration;
 use serde_json::to_string;
 use structopt::StructOpt;
 use gb_emu::common::{get_bit, get_bit_as_bool, InputEvent, JoyPadKey};
-use gb_emu::mmu::IORegister;
+use gb_emu::hardware::IORegister;
 use gb_emu::ops::Op;
 use gb_emu::screen::{Screen, ScreenSettings};
 

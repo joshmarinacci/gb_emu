@@ -2,7 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use crate::common::{get_bit, get_bit_as_bool, load_romfile, MBC};
 use crate::cpu::{CPU, CPUR16, CPUR8};
-use crate::mmu::{IORegister, MMU2};
+use crate::hardware::IORegister;
+use crate::mmu::MMU2;
 use crate::ops::{execute_op, make_op_table, Op, OpTable};
 use crate::ppu::PPU2;
 

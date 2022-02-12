@@ -1,10 +1,10 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use crate::common::{get_bit, get_bit_as_bool, Bitmap, print_ram, set_bit};
-use crate::hardware::LCDMode;
+use crate::common::{Bitmap, get_bit, get_bit_as_bool, print_ram, set_bit};
+use crate::hardware::{IORegister, LCDMode};
 use crate::hardware::LCDMode::VBlank_1;
-use crate::mmu::{IORegister, MMU2};
+use crate::mmu::MMU2;
 use crate::gbstate::GBState;
 
 pub struct SSS {
